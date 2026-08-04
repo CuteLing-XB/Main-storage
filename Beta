@@ -4,37 +4,64 @@ local LocalPlayer = Players.LocalPlayer
 
 ------------------ 你的配置 ------------------
 local FIREBASE_URL = "https://bbakll-default-rtdb.firebaseio.com"
-local USER_KEY = "VIP666" -- 用户的卡密
+local USER_KEY = "VIP666" -- 你们都在用的通用卡密
 local SCRIPT_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/通用磁铁"
 ----------------------------------------------
 
-local function checkAuth()
+local function checkSecurity()
+    -- 1. 检查黑名单（通过玩家名字精准拦截指定人员）
+    local blacklistUrl = FIREBASE_URL .. "/Blacklist/" .. LocalPlayer.Name .. ".json"
+    local bSuccess, bResponse = pcall(function() 
+        return game:HttpGet(blacklistUrl) 
+    end)
+    
+    if bSuccess and bResponse and bResponse ~= "null" and bResponse ~= "" then
+        LocalPlayer:Kick("\n[验证失败] 你已被开发者单独列入黑名单，无法使用此脚本！")
+        return false
+    end
+
+    -- 2. 检查通用卡密状态
     local keyUrl = FIREBASE_URL .. "/Keys/" .. USER_KEY .. "/Status.json"
-    local success, response = pcall(function() 
+    local kSuccess, kResponse = pcall(function() 
         return game:HttpGet(keyUrl) 
     end)
 
     local status = "null"
-    if success and response then
-        -- 超强去符号逻辑：去掉所有单双引号、空格、换行
-        status = response:gsub('"', ''):gsub("'", ''):gsub('%s+', '')
+    if kSuccess and kResponse then
+        status = kResponse:gsub('[^a-zA-Z]', '')
     end
 
-    -- 如果状态不是 active（不管你后台写 active 还是 "active" 都能识别）
-    if status ~= "active" then
-        LocalPlayer:Kick("\n[验证失败] 卡密无效或已被开发者远程封禁！")
+    if string.lower(status) ~= "active" then
+        LocalPlayer:Kick("\n[验证失败] 通用卡密已失效或被关闭！")
         return false
     end
 
     return true
 end
 
--- 1. 先验证
-if not checkAuth() then return end
-print("✅ 验证成功！正在加载核心脚本...")
+-- 1. 启动时先安全检查
+if not checkSecurity() then return end
+print("✅ 验证通过！正在加载核心脚本...")
 
--- 2. 验证通过，加载你的脚本
+-- 2. 验证通过，加载你的核心脚本
 local loadSuccess, scriptFunc = pcall(function()
+    return loadstring(game:HttpGet(SCRIPT_URL))
+end)
+
+if loadSuccess and type(scriptFunc) == "function" then
+    task.spawn(scriptFunc)
+    
+    -- 3. 后台心跳轮询（每 10 秒检查一次。如果你在后台把他加进 Blacklist，10秒内他就会被踢）
+    task.spawn(function()
+        while task.wait(10) do
+            if not checkSecurity() then
+                break 
+            end
+        end
+    end)
+else
+    warn("[错误] 无法加载远程核心脚本！")
+endlocal loadSuccess, scriptFunc = pcall(function()
     return loadstring(game:HttpGet(SCRIPT_URL))
 end)
 
