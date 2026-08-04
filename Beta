@@ -1,0 +1,54 @@
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+------------------ 你的配置 ------------------
+local FIREBASE_URL = "https://bbakll-default-rtdb.firebaseio.com"
+local USER_KEY = "VIP666" -- 用户的卡密
+local SCRIPT_URL = "https://raw.githubusercontent.com/Lakers-noob/Second-revision/refs/heads/main/通用磁铁"
+----------------------------------------------
+
+local function checkAuth()
+    local keyUrl = FIREBASE_URL .. "/Keys/" .. USER_KEY .. "/Status.json"
+    local success, response = pcall(function() 
+        return game:HttpGet(keyUrl) 
+    end)
+
+    local status = "null"
+    if success and response then
+        -- 超强去符号逻辑：去掉所有单双引号、空格、换行
+        status = response:gsub('"', ''):gsub("'", ''):gsub('%s+', '')
+    end
+
+    -- 如果状态不是 active（不管你后台写 active 还是 "active" 都能识别）
+    if status ~= "active" then
+        LocalPlayer:Kick("\n[验证失败] 卡密无效或已被开发者远程封禁！")
+        return false
+    end
+
+    return true
+end
+
+-- 1. 先验证
+if not checkAuth() then return end
+print("✅ 验证成功！正在加载核心脚本...")
+
+-- 2. 验证通过，加载你的脚本
+local loadSuccess, scriptFunc = pcall(function()
+    return loadstring(game:HttpGet(SCRIPT_URL))
+end)
+
+if loadSuccess and type(scriptFunc) == "function" then
+    task.spawn(scriptFunc)
+    
+    -- 3. 后台心跳轮询（10 秒检测一次）
+    task.spawn(function()
+        while task.wait(10) do
+            if not checkAuth() then
+                break 
+            end
+        end
+    end)
+else
+    warn("[错误] 无法加载远程核心脚本！")
+end
