@@ -1,0 +1,187 @@
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+if not LocalPlayer then
+    LocalPlayer = Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+end
+
+local MY_NAMESPACE = "FastTranslator_Ultimate_" .. tostring(math.random(10000, 99999))
+if not _G[MY_NAMESPACE] then
+    _G[MY_NAMESPACE] = {
+        textData = {},
+        translatedElements = {},
+        translatedTools = {},
+        translateQueue = {},
+        queuedSet = {},
+        isRunning = false
+    }
+end
+
+local Engine = _G[MY_NAMESPACE]
+
+local RUNTIME = {
+    translationsPerSecond = 120,
+    batchSize = 20,
+    scanInterval = 0.2,
+}
+
+local function stripRichText(str)
+    if not str then return "" end
+    return str:gsub("<[^>]+>", "")
+end
+
+local function shouldFilterText(text)
+    if not text or text:gsub("%s+", "") == "" then return true end
+    local cleanText = stripRichText(text)
+    if cleanText:gsub("%s+", "") == "" then return true end
+    if cleanText:match("^[%p%s]+$") then return true end
+    if #cleanText < 1 or #cleanText > 150 then return true end
+    return false
+end
+
+-- 高速翻译引擎
+local function translateText(orig)
+    if not orig or orig == "" then return "" end
+    local clean = stripRichText(orig)
+    
+    if Engine.textData[clean] and Engine.textData[clean].translation then
+        return Engine.textData[clean].translation
+    end
+
+    local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=" .. HttpService:UrlEncode(clean)
+    local ok, result = pcall(function() return game:HttpGet(url) end)
+    
+    local trans = ""
+    if ok and result then
+        local parsedOk, parsed = pcall(function() return HttpService:JSONDecode(result) end)
+        if parsedOk and type(parsed) == "table" and type(parsed[1]) == "table" then
+            local parts = {}
+            for _, seg in ipairs(parsed[1]) do
+                if type(seg) == "table" and seg[1] then table.insert(parts, tostring(seg[1])) end
+            end
+            trans = table.concat(parts)
+        end
+    end
+
+    if trans ~= "" and trans ~= clean then
+        Engine.textData[clean] = { translation = trans }
+        return trans
+    else
+        Engine.textData[clean] = { translation = clean }
+        return clean
+    end
+end
+
+local function enqueueText(text)
+    local clean = stripRichText(text)
+    if shouldFilterText(clean) or Engine.queuedSet[clean] then return end
+    if Engine.textData[clean] and Engine.textData[clean].translation then return end
+    
+    table.insert(Engine.translateQueue, clean)
+    Engine.queuedSet[clean] = true
+end
+
+-- 队列翻译线程
+task.spawn(function()
+    while true do
+        if #Engine.translateQueue > 0 then
+            local batch = {}
+            for i = 1, math.min(RUNTIME.batchSize, #Engine.translateQueue) do
+                local text = table.remove(Engine.translateQueue, 1)
+                if text then
+                    table.insert(batch, text)
+                    Engine.queuedSet[text] = nil
+                end
+            end
+            for _, text in ipairs(batch) do
+                task.spawn(function() translateText(text) end)
+            end
+            task.wait(1.0 / RUNTIME.translationsPerSecond)
+        else
+            task.wait(0.05)
+        end
+    end
+end)
+
+-- 针对背包道具（Tool.Name）的专项汉化
+local function scanAndTranslateBackpack()
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    local character = LocalPlayer.Character
+    
+    local containers = {}
+    if backpack then table.insert(containers, backpack) end
+    if character then table.insert(containers, character) end
+
+    for _, container in ipairs(containers) do
+        for _, item in ipairs(container:GetChildren()) do
+            if item:IsA("Tool") then
+                local rawName = item.Name
+                if not shouldFilterText(rawName) then
+                    if Engine.textData[rawName] and Engine.textData[rawName].translation then
+                        if item.Name ~= Engine.textData[rawName].translation then
+                            pcall(function() item.Name = Engine.textData[rawName].translation end)
+                        end
+                    else
+                        enqueueText(rawName)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- 针对普通 UI & 聊天 UI 文本汉化
+local function scanAllGuis()
+    local guis = {}
+    pcall(function()
+        if type(gethui) == "function" then table.insert(guis, gethui()) end
+    end)
+    pcall(function() table.insert(guis, game:GetService("CoreGui")) end)
+    if LocalPlayer:FindFirstChildOfClass("PlayerGui") then
+        table.insert(guis, LocalPlayer:FindFirstChildOfClass("PlayerGui"))
+    end
+
+    for _, container in ipairs(guis) do
+        if not container then continue end
+        local descendants = {}
+        pcall(function() descendants = container:GetDescendants() end)
+        
+        for _, desc in ipairs(descendants) do
+            if desc and (desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox")) then
+                local ok, txt = pcall(function() return desc.Text end)
+                if ok and txt and not shouldFilterText(txt) then
+                    local clean = stripRichText(txt)
+                    if Engine.textData[clean] and Engine.textData[clean].translation then
+                        if desc.Text ~= Engine.textData[clean].translation then
+                            pcall(function() desc.Text = Engine.textData[clean].translation end)
+                        end
+                    else
+                        enqueueText(clean)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- 高频循环替换
+if not Engine.isRunning then
+    Engine.isRunning = true
+    
+    task.spawn(function()
+        while true do
+            pcall(scanAllGuis)
+            pcall(scanAndTranslateBackpack)
+            task.wait(RUNTIME.scanInterval)
+        end
+    end)
+
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "汉化系统",
+            Text = "启动成功！",
+            Duration = 3
+        })
+    end)
+end
