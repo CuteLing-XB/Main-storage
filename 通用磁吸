@@ -1,1 +1,54 @@
-loadstring(game:HttpGet("https://pastefy.app/jZBqvRS7/raw"))()
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+------------------ 你的配置 ------------------
+local FIREBASE_URL = "https://bbakll-default-rtdb.firebaseio.com"
+local USER_KEY = "VIP666" -- 用户的卡密
+-- 你的云端核心脚本链接（比如你 GitHub 上的脚本）
+local SCRIPT_URL = "https://raw.githubusercontent.com/Lakers-noob/Second-revision/refs/heads/main/通用磁铁"
+----------------------------------------------
+
+local function checkAuth()
+    local keyUrl = FIREBASE_URL .. "/Keys/" .. USER_KEY .. "/Status.json"
+    local success, response = pcall(function() 
+        return game:HttpGet(keyUrl) 
+    end)
+
+    local status = "null"
+    if success and response then
+        status = response:gsub('"', ''):gsub('%s+', '')
+    end
+
+    if status ~= "active" then
+        LocalPlayer:Kick("\n[验证失败] 卡密无效或已被开发者远程封禁！")
+        return false
+    end
+
+    return true
+end
+
+-- 1. 先验证卡密和黑名单
+if not checkAuth() then return end
+print("✅ 验证成功！正在加载核心脚本...")
+
+-- 2. 验证通过后，才通过 loadstring 执行你的核心功能脚本
+local loadSuccess, scriptFunc = pcall(function()
+    return loadstring(game:HttpGet(SCRIPT_URL))
+end)
+
+if loadSuccess and type(scriptFunc) == "function" then
+    -- 执行核心脚本
+    task.spawn(scriptFunc)
+    
+    -- 3. 开启后台心跳轮询（每 10 秒检查一次状态，一旦你在后台改成 banned，就会立刻踢人）
+    task.spawn(function()
+        while task.wait(10) do
+            if not checkAuth() then
+                break 
+            end
+        end
+    end)
+else
+    warn("[错误] 无法加载远程核心脚本！")
+end
