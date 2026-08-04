@@ -1,5 +1,4 @@
---// ================= 实时汉化系统（原版核心 1:1 移植 + 原生轻量UI） =================
---// 默认批量翻译数已调整为 10 | 汉化核心逻辑无任何改动 | 包含拉条 | 悬浮球收缩 | 彻底销毁UI
+
 
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
