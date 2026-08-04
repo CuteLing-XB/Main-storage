@@ -5,7 +5,7 @@ local LocalPlayer = Players.LocalPlayer
 ------------------ 你的配置 ------------------
 local FIREBASE_URL = "https://bbakll-default-rtdb.firebaseio.com"
 local USER_KEY = "VIP666" -- 用户的卡密
-local SCRIPT_URL = "https://raw.githubusercontent.com/Lakers-noob/Second-revision/refs/heads/main/通用磁铁"
+local SCRIPT_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/通用磁铁"
 ----------------------------------------------
 
 local function checkAuth()
