@@ -1,6 +1,3 @@
---// ================= 实时汉化系统（配置保存版 + 原版核心 1:1 移植 + 原生轻量UI） =================
---// 新增: 防重复运行旧UI销毁 | 自动创建"汉化配置"文件夹保存/读取拉条和开关配置
-
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
