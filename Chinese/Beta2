@@ -1,0 +1,3255 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local LP = Players.LocalPlayer
+local Cam = workspace.CurrentCamera
+local Mouse = LP:GetMouse()
+
+local UI_SCALE = 1/1.4
+local AUTO_RADIUS = 30
+local MOVE_SNAP = 1
+local ROT_SNAP = 15
+
+local holdDistance = 20
+local throwForce = 200
+
+local grabbed = {}
+local frozen = { }
+local selected = {}
+local highlights = {}
+local handles = {}
+
+local autoGrabNPC = false
+local autoGrabPart = false
+local autoFreeze = false
+local autoThrow = false
+local highlightOn = true
+
+local currentTool = "NONE"
+
+local initialCFrames = {}
+local initialPositions = {}
+
+local function isPlayer(obj)
+    if not obj then return false end
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model then
+        if Players:GetPlayerFromCharacter(model) then
+            return true
+        end
+        if model.Name == LP.Name then return true end
+    end
+    return false
+end
+
+local function isValidPart(p)
+    if not p or not p:IsA("BasePart") then return false end
+    if p.Anchored then return false end 
+    if isPlayer(p) then return false end
+    return true
+end
+
+local gui = Instance.new("ScreenGui")
+pcall(function() gui.Parent = CoreGui end)
+if gui.Parent ~= CoreGui then gui.Parent = LP.PlayerGui end
+gui.Name = "TelekinesisUI_F3X_Pro"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local cross = Instance.new("Frame", gui)
+cross.Size = UDim2.fromOffset(6,6)
+cross.Position = UDim2.fromScale(0.5,0.5)
+cross.AnchorPoint = Vector2.new(0.5,0.5)
+cross.BackgroundColor3 = Color3.new(1,1,1)
+Instance.new("UICorner",cross).CornerRadius = UDim.new(1,0)
+
+local targetHL = Instance.new("Highlight", gui)
+targetHL.FillTransparency = 0.6
+targetHL.OutlineColor = Color3.fromRGB(0,255,200)
+
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.fromScale(0.32*UI_SCALE, 0.76*UI_SCALE)
+main.Position = UDim2.fromScale(0.03, 0.18)
+main.BackgroundColor3 = Color3.fromRGB(5, 6, 9)
+main.Active = true
+main.Draggable = true
+main.BorderSizePixel = 0
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 18)
+local mainStroke = Instance.new("UIStroke", main)
+mainStroke.Color = Color3.fromRGB(0, 230, 170)
+mainStroke.Thickness = 1.5
+mainStroke.Transparency = 0.2
+
+local hdr = Instance.new("Frame", main)
+hdr.Size = UDim2.new(1, 0, 0, 52)
+hdr.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+hdr.BackgroundTransparency = 0.3
+hdr.BorderSizePixel = 0
+Instance.new("UICorner", hdr).CornerRadius = UDim.new(0, 18)
+local hdrFix = Instance.new("Frame", hdr)
+hdrFix.Size = UDim2.new(1, 0, 0.5, 0)
+hdrFix.Position = UDim2.new(0, 0, 0.5, 0)
+hdrFix.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+hdrFix.BackgroundTransparency = 0.3
+hdrFix.BorderSizePixel = 0
+
+local hdrGrad = Instance.new("Frame", hdr)
+hdrGrad.Size = UDim2.fromScale(1,1)
+hdrGrad.BackgroundColor3 = Color3.fromRGB(0, 180, 130)
+hdrGrad.BackgroundTransparency = 0.88
+hdrGrad.BorderSizePixel = 0
+Instance.new("UICorner", hdrGrad).CornerRadius = UDim.new(0, 18)
+
+local badge = Instance.new("Frame", hdr)
+badge.Size = UDim2.fromOffset(38, 38)
+badge.Position = UDim2.new(0, 8, 0.5, -19)
+badge.BackgroundColor3 = Color3.fromRGB(0, 200, 145)
+badge.BorderSizePixel = 0
+Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 10)
+local badgeGrad = Instance.new("UIGradient", badge)
+badgeGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 185)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 120, 90)),
+})
+badgeGrad.Rotation = 135
+local badgeIcon = Instance.new("TextLabel", badge)
+badgeIcon.Size = UDim2.fromScale(1,1)
+badgeIcon.BackgroundTransparency = 1
+badgeIcon.Text = "TK"
+badgeIcon.Font = Enum.Font.GothamBlack
+badgeIcon.TextSize = 14
+badgeIcon.TextColor3 = Color3.new(1,1,1)
+
+local title = Instance.new("TextLabel", hdr)
+title.Size = UDim2.new(1, -58, 0, 20)
+title.Position = UDim2.new(0, 54, 0, 8)
+title.BackgroundTransparency = 1
+title.Text = "TELEKINESIS UI"
+title.Font = Enum.Font.GothamBlack
+title.TextSize = 14
+title.TextColor3 = Color3.fromRGB(245, 255, 252)
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local titleSub = Instance.new("TextLabel", hdr)
+titleSub.Size = UDim2.new(1, -58, 0, 13)
+titleSub.Position = UDim2.new(0, 54, 0, 30)
+titleSub.BackgroundTransparency = 1
+titleSub.Text = "2.0  •  EXECUTOR SCRIPT"
+titleSub.Font = Enum.Font.GothamMedium
+titleSub.TextSize = 9
+titleSub.TextColor3 = Color3.fromRGB(0, 215, 160)
+titleSub.TextXAlignment = Enum.TextXAlignment.Left
+
+local divLine = Instance.new("Frame", hdr)
+divLine.Size = UDim2.new(0.85, 0, 0, 1)
+divLine.Position = UDim2.new(0.075, 0, 1, -1)
+divLine.BackgroundColor3 = Color3.fromRGB(0, 215, 160)
+divLine.BackgroundTransparency = 0.4
+divLine.BorderSizePixel = 0
+Instance.new("UICorner", divLine).CornerRadius = UDim.new(1,0)
+local divGrad = Instance.new("UIGradient", divLine)
+divGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.new(0,0,0)),
+    ColorSequenceKeypoint.new(0.15, Color3.new(1,1,1)),
+    ColorSequenceKeypoint.new(0.85, Color3.new(1,1,1)),
+    ColorSequenceKeypoint.new(1, Color3.new(0,0,0)),
+})
+
+local pages = {}
+local function createPage()
+    local f = Instance.new("ScrollingFrame", main)
+    f.Position = UDim2.new(0, 6, 0, 56)
+    f.Size = UDim2.new(1, -12, 1, -62)
+    f.ScrollBarThickness = 3
+    f.ScrollBarImageColor3 = Color3.fromRGB(0, 200, 160)
+    f.Visible = false
+    f.BackgroundTransparency = 1
+    f.BorderSizePixel = 0
+    local layout = Instance.new("UIListLayout", f)
+    layout.Padding = UDim.new(0, 4)
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        f.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y+10)
+    end)
+    local pad = Instance.new("UIPadding", f)
+    pad.PaddingTop = UDim.new(0, 4)
+    pad.PaddingBottom = UDim.new(0, 4)
+    return f
+end
+
+local _tutPages = {} 
+pages.main = createPage()
+pages.move = createPage()
+_tutPages[pages.main] = true
+_tutPages[pages.move] = true
+
+local function showPage(name)
+    for k,v in pairs(pages) do v.Visible = (k == name) end
+end
+showPage("main")
+
+local function getTarget()
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    rp.FilterDescendantsInstances = {LP.Character, Cam}
+    local r = workspace:Raycast(Cam.CFrame.Position, Cam.CFrame.LookVector * 500, rp)
+    if r and r.Instance and isValidPart(r.Instance) then return r.Instance end
+    return nil
+end
+
+local function grabPart(p)
+    if not isValidPart(p) or grabbed[p] then return end
+    local bp = Instance.new("BodyPosition", p)
+    bp.MaxForce = Vector3.new(1e6,1e6,1e6)
+    bp.P = 10000
+    bp.Position = p.Position
+    local bg = Instance.new("BodyGyro", p)
+    bg.MaxTorque = Vector3.new(1e6,1e6,1e6)
+    bg.P = 10000
+    bg.CFrame = p.CFrame
+    grabbed[p] = {bp = bp, bg = bg}
+    
+    if autoFreeze then frozen[p] = true end
+    if autoThrow then
+        task.wait(0.1)
+        p.AssemblyLinearVelocity = Cam.CFrame.LookVector * throwForce
+        bp:Destroy() bg:Destroy() grabbed[p] = nil
+    end
+end
+
+local function clearAllHandles()
+    for p, hSet in pairs(handles) do
+        if hSet.move then hSet.move:Destroy() end
+        if hSet.rot then hSet.rot:Destroy() end
+    end
+    handles = {}
+end
+
+local function createHandles(p)
+    clearAllHandles()
+    if not p or not isValidPart(p) then return end
+    
+    local mh = Instance.new("Handles", gui)
+    mh.Adornee = p
+    mh.Style = Enum.HandlesStyle.Resize
+    mh.Color3 = Color3.fromRGB(255,255,100)
+    mh.Visible = (currentTool == "MOVE")
+
+    local ah = Instance.new("ArcHandles", gui)
+    ah.Adornee = p
+    ah.Parent = gui
+    ah.Visible = (currentTool == "ROTATE")
+
+    mh.MouseButton1Down:Connect(function()
+        initialPositions = {}
+        for part in pairs(selected) do if grabbed[part] then initialPositions[part] = grabbed[part].bp.Position end end
+    end)
+
+    mh.MouseDrag:Connect(function(face, dist)
+        local axisVec = Vector3.FromNormalId(face)
+        local snappedDist = math.round(dist / MOVE_SNAP) * MOVE_SNAP
+        for part in pairs(selected) do
+            if grabbed[part] and initialPositions[part] then
+                grabbed[part].bp.Position = initialPositions[part] + (p.CFrame:VectorToWorldSpace(axisVec) * snappedDist)
+            end
+        end
+    end)
+
+    ah.MouseButton1Down:Connect(function()
+        initialCFrames = {}
+        for part in pairs(selected) do if grabbed[part] then initialCFrames[part] = grabbed[part].bg.CFrame end end
+    end)
+
+    ah.MouseDrag:Connect(function(axis, angle)
+        local snappedDeg = math.round(math.deg(angle) / ROT_SNAP) * ROT_SNAP
+        local rotationCFrame = CFrame.fromAxisAngle(Vector3.FromAxis(axis), math.rad(snappedDeg))
+        for part in pairs(selected) do
+            if grabbed[part] and initialCFrames[part] then
+                grabbed[part].bg.CFrame = initialCFrames[p] * rotationCFrame * (initialCFrames[p]:Inverse() * initialCFrames[part])
+            end
+        end
+    end)
+    handles[p] = {move = mh, rot = ah}
+end
+
+local function setHighlight(p, state)
+    if state then
+        if not highlights[p] and isValidPart(p) then
+            local hl = Instance.new("Highlight", gui)
+            hl.Adornee = p
+            hl.FillTransparency = 0.4
+            hl.OutlineColor = Color3.fromRGB(255,255,0)
+            highlights[p] = hl
+        end
+    else
+        if highlights[p] then highlights[p]:Destroy() highlights[p] = nil end
+    end
+end
+
+local _TUT = {
+    ["GRAB (LOOK)"]={t="How To Grab",d="Look at any part then press GRAB.\nIt floats in front of you.\nMove camera to move the part."},
+    ["DROP (LOOK)"]={t="How To Drop",d="Look at a held part\nand press DROP to release it."},
+    ["DROP ALL"]={t="How To Drop All",d="Releases every part\nyou are currently holding."},
+    ["FREEZE (LOOK)"]={t="How To Freeze",d="Grab a part first, look at it\nthen FREEZE to lock it in place."},
+    ["UNFREEZE (LOOK)"]={t="How To Unfreeze",d="Look at a frozen part\nand press UNFREEZE to free it."},
+    ["UNFREEZE ALL"]={t="Unfreeze All",d="Unfreezes every frozen part at once."},
+    ["THROW (LOOK)"]={t="How To Throw",d="Look at a held part and press THROW.\nIt launches forward at high speed."},
+    ["DELETE PART(LOOK)"]={t="How To Delete",d="Look at any part and press DELETE.\nIt launches at extreme speed."},
+    ["HIGHLIGHT : ON"]={t="About Highlight",d="Parts you look at will glow.\nPress to toggle OFF."},
+    ["HIGHLIGHT : OFF"]={t="About Highlight",d="Highlight is OFF.\nPress to turn back ON."},
+    ["▶ MOVE / ROTATE MODE"]={t="Move/Rotate Mode",d="Freeze parts first, then go here\nto precisely move or rotate them."},
+    ["DESTROY UI"]={t="Close UI",d="Removes the entire UI.\nRe-run the script to get it back."},
+    ["OPEN PUPPET MASTER"]={t="Puppet Master",d="Add NPCs then press START CONTROL\nto move them with your character."},
+    ["BUILDER MODE (3D)"]={t="3D Builder",d="Draw a pattern on the grid.\nNearby parts form that shape in 3D."},
+    ["AUTO GRAB NPC : OFF"]={t="Auto Grab NPC",d="When ON, NPCs that enter\nyour radius are grabbed automatically."},
+    ["AUTO GRAB PART : OFF"]={t="Auto Grab Part",d="When ON, loose parts that enter\nyour radius are grabbed automatically."},
+    ["AUTO FREEZE : OFF"]={t="Auto Freeze",d="When ON, every part you grab\nis frozen immediately."},
+    ["AUTO THROW : OFF"]={t="Auto Throw",d="When ON, every part you grab\nis thrown immediately."},
+    ["AUTO DELETE : OFF"]={t="Auto Delete",d="When ON, all nearby parts\nare launched into the sky."},
+    ["🛡️ AUTO SHIELD : OFF"]={t="Auto Shield",d="When ON, parts flying toward you\nare grabbed automatically."},
+    ["FOLLOW OWNER : OFF"]={t="Follow Owner",d="When ON, grabbed parts float\nbehind you as you walk."},
+    ["ENABLE CAR MODE: OFF"]={t="Car Mode",d="Turn ON then tap any part\nto drive it. W/S=Fwd, A/D=Turn."},
+    ["REFRESH LIST"]={t="Refresh List",d="Reloads the list of frozen parts\nso you can select them."},
+    ["SELECT ALL"]={t="Select All",d="Selects all frozen parts\nfor multi-part editing."},
+    ["UNSELECT ALL"]={t="Deselect All",d="Deselects all selected parts."},
+    ["TELEPORT PART(SELECT FIRST)"]={t="Teleport Part",d="Select parts first then press this\nto teleport them in front of you."},
+    ["GET TELEKINESIS TOOL"]={t="Classic Tool",d="Gives you the classic telekinesis tool\nin your backpack to use directly."},
+}
+
+local function _getTdata(txt)
+    if _TUT[txt] then return _TUT[txt] end
+    for k,v in pairs(_TUT) do
+        local a = k:gsub(" : ON",""):gsub(" : OFF",""):gsub(": ON",""):gsub(": OFF","")
+        local b = txt:gsub(" : ON",""):gsub(" : OFF",""):gsub(": ON",""):gsub(": OFF","")
+        if a == b then return v end
+    end
+end
+
+local _pf, _pt, _pd = nil, nil, nil
+
+local function _initPopup()
+    if _pf then return end
+    local _tutGui = Instance.new("ScreenGui")
+    _tutGui.ResetOnSpawn = false
+    _tutGui.Name = "TutPopup"
+    _tutGui.DisplayOrder = 999
+    pcall(function() _tutGui.Parent = game:GetService("CoreGui") end)
+    if _tutGui.Parent ~= game:GetService("CoreGui") then
+        _tutGui.Parent = LP.PlayerGui
+    end
+    _pf = Instance.new("Frame", _tutGui)
+    _pf.Size = UDim2.fromOffset(220, 80)
+    _pf.BackgroundColor3 = Color3.fromRGB(12,12,22)
+    _pf.BorderSizePixel = 0
+    _pf.Visible = false
+    _pf.Active = true
+    _pf.Draggable = true
+    _pf.ZIndex = 100
+    Instance.new("UICorner",_pf).CornerRadius = UDim.new(0,10)
+    local _st = Instance.new("UIStroke",_pf)
+    _st.Color = Color3.fromRGB(80,80,200); _st.Thickness = 1.5
+    _pt = Instance.new("TextLabel",_pf)
+    _pt.Size = UDim2.new(1,-30,0,22)
+    _pt.Position = UDim2.new(0,8,0,5)
+    _pt.BackgroundTransparency = 1
+    _pt.Font = Enum.Font.GothamBold
+    _pt.TextSize = 13
+    _pt.TextColor3 = Color3.fromRGB(160,200,255)
+    _pt.TextXAlignment = Enum.TextXAlignment.Left
+    _pt.ZIndex = 101
+    _pd = Instance.new("TextLabel",_pf)
+    _pd.Size = UDim2.new(1,-16,0,0)
+    _pd.Position = UDim2.new(0,8,0,30)
+    _pd.AutomaticSize = Enum.AutomaticSize.Y
+    _pd.BackgroundTransparency = 1
+    _pd.Font = Enum.Font.Gotham
+    _pd.TextSize = 11
+    _pd.TextColor3 = Color3.fromRGB(200,200,210)
+    _pd.TextXAlignment = Enum.TextXAlignment.Left
+    _pd.TextWrapped = true
+    _pd.ZIndex = 101
+    local _xb = Instance.new("TextButton",_pf)
+    _xb.Size = UDim2.fromOffset(20,20)
+    _xb.Position = UDim2.new(1,-24,0,4)
+    _xb.BackgroundColor3 = Color3.fromRGB(160,30,30)
+    _xb.Text = "X"
+    _xb.Font = Enum.Font.GothamBold
+    _xb.TextSize = 10
+    _xb.TextColor3 = Color3.new(1,1,1)
+    _xb.BorderSizePixel = 0
+    _xb.ZIndex = 102
+    Instance.new("UICorner",_xb).CornerRadius = UDim.new(0,4)
+    _xb.MouseButton1Click:Connect(function() _pf.Visible = false end)
+end
+
+local function _showTut(tdata, srcBtn)
+    _initPopup()
+    _pt.Text = tdata.t
+    _pd.Text = tdata.d
+    _pf.Visible = true
+    task.defer(function()
+        local h = 34 + _pd.AbsoluteSize.Y + 10
+        _pf.Size = UDim2.fromOffset(220, h)
+        local sw, sh = 800, 600
+        pcall(function()
+            sw = workspace.CurrentCamera.ViewportSize.X
+            sh = workspace.CurrentCamera.ViewportSize.Y
+        end)
+        local ap = srcBtn.AbsolutePosition
+        local px = ap.X - 225
+        if px < 5 then px = ap.X + srcBtn.AbsoluteSize.X + 5 end
+        _pf.Position = UDim2.fromOffset(
+            math.clamp(px, 5, sw - 225),
+            math.clamp(ap.Y, 5, sh - h - 5)
+        )
+    end)
+end
+
+local function _addTutBtn(b)
+    local _td = _getTdata(b.Text)
+    if not _td then return end
+    local qb = Instance.new("TextButton", b)
+    qb.Size = UDim2.fromOffset(20, 20)
+    qb.AnchorPoint = Vector2.new(1, 0.5)
+    qb.Position = UDim2.new(1, -4, 0.5, 0)
+    qb.BackgroundColor3 = Color3.fromRGB(40, 40, 110)
+    qb.Text = "?"
+    qb.Font = Enum.Font.GothamBold
+    qb.TextSize = 10
+    qb.TextColor3 = Color3.fromRGB(160, 180, 255)
+    qb.BorderSizePixel = 0
+    qb.ZIndex = b.ZIndex + 2
+    Instance.new("UICorner", qb).CornerRadius = UDim.new(1, 0)
+    qb.Active = true
+    qb.MouseButton1Click:Connect(function()
+        _showTut(_getTdata(b.Text) or _td, qb)
+    end)
+end
+
+local function btn(page, text, cb)
+    local hasTut = _tutPages[page] and (_getTdata(text) ~= nil)
+    local container = nil
+    if hasTut then
+        container = Instance.new("Frame", page)
+        container.Size = UDim2.new(1, 0, 0, 34)
+        container.BackgroundTransparency = 1
+        container.BorderSizePixel = 0
+    end
+    local parent = container or page
+    local b = Instance.new("TextButton", parent)
+    b.Size = hasTut and UDim2.new(1, -38, 0, 34) or UDim2.new(1, 0, 0, 34)
+    b.Position = UDim2.new(0, 0, 0, 0)
+    b.Text = text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 12
+    b.TextColor3 = Color3.fromRGB(215, 238, 230)
+    b.BackgroundColor3 = Color3.fromRGB(0, 38, 28)
+    b.BorderSizePixel = 0
+    b.AutoButtonColor = false
+    b.TextXAlignment = Enum.TextXAlignment.Center
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10)
+    local bar = Instance.new("Frame", b)
+    bar.Size = UDim2.fromOffset(3, 16)
+    bar.Position = UDim2.new(0, 5, 0.5, -8)
+    bar.BackgroundColor3 = Color3.fromRGB(0, 215, 160)
+    bar.BorderSizePixel = 0
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(1,0)
+    b.MouseButton1Down:Connect(function()
+        b.BackgroundColor3 = Color3.fromRGB(0, 100, 75)
+        bar.BackgroundColor3 = Color3.fromRGB(0, 255, 190)
+    end)
+    b.MouseButton1Up:Connect(function()
+        b.BackgroundColor3 = Color3.fromRGB(0, 38, 28)
+        bar.BackgroundColor3 = Color3.fromRGB(0, 215, 160)
+    end)
+    b.MouseLeave:Connect(function()
+        b.BackgroundColor3 = Color3.fromRGB(0, 38, 28)
+        bar.BackgroundColor3 = Color3.fromRGB(0, 215, 160)
+    end)
+    b.MouseButton1Click:Connect(function() cb(b) end)
+    if hasTut then
+        local _td = _getTdata(text)
+        local qb = Instance.new("TextButton", container)
+        qb.Size = UDim2.fromOffset(34, 34)
+        qb.AnchorPoint = Vector2.new(1, 0.5)
+        qb.Position = UDim2.new(1, 0, 0.5, 0)
+        qb.BackgroundColor3 = Color3.fromRGB(10, 18, 15)
+        qb.Text = "?"
+        qb.Font = Enum.Font.GothamBlack
+        qb.TextSize = 14
+        qb.TextColor3 = Color3.fromRGB(0, 215, 160)
+        qb.BorderSizePixel = 0
+        qb.AutoButtonColor = false
+        Instance.new("UICorner", qb).CornerRadius = UDim.new(0, 10)
+        local qStroke = Instance.new("UIStroke", qb)
+        qStroke.Color = Color3.fromRGB(0, 185, 138)
+        qStroke.Thickness = 1.2
+        qb.MouseButton1Down:Connect(function()
+            qb.BackgroundColor3 = Color3.fromRGB(0, 90, 68)
+        end)
+        qb.MouseButton1Up:Connect(function()
+            qb.BackgroundColor3 = Color3.fromRGB(10, 18, 15)
+        end)
+        qb.MouseLeave:Connect(function()
+            qb.BackgroundColor3 = Color3.fromRGB(10, 18, 15)
+        end)
+        qb.MouseButton1Click:Connect(function()
+            _showTut(_getTdata(b.Text) or _td, qb)
+        end)
+    end
+    return b
+end
+
+local function label(page, text)
+    local lf = Instance.new("Frame", page)
+    lf.Size = UDim2.new(1, 0, 0, 20)
+    lf.BackgroundTransparency = 1
+    lf.BorderSizePixel = 0
+    local tick = Instance.new("Frame", lf)
+    tick.Size = UDim2.fromOffset(3, 12)
+    tick.Position = UDim2.new(0, 4, 0.5, -6)
+    tick.BackgroundColor3 = Color3.fromRGB(0, 200, 150)
+    tick.BorderSizePixel = 0
+    Instance.new("UICorner", tick).CornerRadius = UDim.new(1,0)
+    local l = Instance.new("TextLabel", lf)
+    l.Size = UDim2.new(1, -16, 1, 0)
+    l.Position = UDim2.new(0, 14, 0, 0)
+    l.BackgroundTransparency = 1
+    l.Text = text:upper()
+    l.Font = Enum.Font.GothamBold
+    l.TextColor3 = Color3.fromRGB(0, 195, 148)
+    l.TextSize = 9
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    return lf
+end
+
+-- =====================================
+-- DECLARE THE GIVE TOOL FUNCTION HERE
+-- =====================================
+local function giveTelekinesisTool()
+    local Range = "Min" 
+
+    local BP = Instance.new("BodyPosition")
+    BP.maxForce = Vector3.new(math.huge * math.huge, math.huge * math.huge, math.huge * math.huge)
+    BP.P = BP.P * 1.1
+
+    local BP2 = Instance.new("BodyPosition")
+    BP2.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    BP2.Position = BP2.Position + Vector3.new(0, 0.1, 0)
+
+    task.spawn(function()
+        game:GetService("RunService").RenderStepped:Connect(function()
+            if Range == "Max" then
+                sethiddenproperty(game.Players.LocalPlayer, "SimulationRadius", 0)
+            elseif Range == "Min" then
+                sethiddenproperty(game.Players.LocalPlayer, "SimulationRadius", 500)
+            end
+        end)
+    end)
+
+    local function a(b, c)
+        local d = getfenv(c)
+        local e = setmetatable({}, {__index = function(self, f)
+            if f == "script" then return b else return d[f] end
+        end})
+        setfenv(c, e)
+        return c
+    end
+    
+    local power = 1000
+    local usrinput = game:GetService("UserInputService")
+    local g = {}
+    local h = Instance.new("Model", game:GetService("Lighting"))
+    local i = Instance.new("Tool")
+    local j = Instance.new("Part")
+    local k = Instance.new("Script")
+    local l = Instance.new("LocalScript")
+    local m = sethiddenproperty or set_hidden_property
+    
+    i.Name = "Telekinesis"
+    i.Parent = h
+    i.Grip = CFrame.new(0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+    i.GripForward = Vector3.new(-0, -1, -0)
+    i.GripRight = Vector3.new(0, 0, 1)
+    i.GripUp = Vector3.new(1, 0, 0)
+    
+    j.Name = "Handle"
+    j.Parent = i
+    j.CFrame = CFrame.new(-17.2635937, 15.4915619, 46, 0, 1, 0, 1, 0, 0, 0, 0, -1)
+    j.Orientation = Vector3.new(0, 180, 90)
+    j.Position = Vector3.new(-17.2635937, 15.4915619, 46)
+    j.Rotation = Vector3.new(-180, 0, -90)
+    j.Color = Color3.new(0.0666667, 0.0666667, 0.0666667)
+    j.Transparency = 1
+    j.Size = Vector3.new(1, 1.20000005, 1)
+    j.BottomSurface = Enum.SurfaceType.Weld
+    j.BrickColor = BrickColor.new("Really black")
+    j.Material = Enum.Material.Metal
+    j.TopSurface = Enum.SurfaceType.Smooth
+    j.brickColor = BrickColor.new("Really black")
+    
+    k.Name = "LineConnect"
+    k.Parent = i
+    table.insert(g, a(k, function()
+        wait()
+        local n = script.Part2
+        local o = script.Part1.Value
+        local p = script.Part2.Value
+        local q = script.Par.Value
+        local color = script.Color
+        local r = Instance.new("Part")
+        r.TopSurface = 0
+        r.BottomSurface = 0
+        r.Reflectance = .5
+        r.Name = "Laser"
+        r.Locked = true
+        r.CanCollide = false
+        r.Anchored = true
+        r.formFactor = 0
+        r.Size = Vector3.new(1, 1, 1)
+        local s = Instance.new("BlockMesh")
+        s.Parent = r
+        while true do
+            if n.Value == nil then break end
+            if o == nil or p == nil or q == nil then break end
+            if o.Parent == nil or p.Parent == nil then break end
+            if q.Parent == nil then break end
+            local t = CFrame.new(o.Position, p.Position)
+            local dist = (o.Position - p.Position).magnitude
+            r.Parent = q
+            r.BrickColor = color.Value.BrickColor
+            r.Reflectance = color.Value.Reflectance
+            r.Transparency = color.Value.Transparency
+            r.CFrame = CFrame.new(o.Position + t.lookVector * dist / 2)
+            r.CFrame = CFrame.new(r.Position, p.Position)
+            s.Scale = Vector3.new(.25, .25, dist)
+            wait()
+        end
+        r:remove()
+        script:remove()
+    end))
+    k.Disabled = true
+    
+    l.Name = "MainScript"
+    l.Parent = i
+    table.insert(g, a(l, function()
+        wait()
+        tool = script.Parent
+        lineconnect = tool.LineConnect
+        object = nil
+        mousedown = false
+        found = false
+        BP = Instance.new("BodyPosition")
+        BP.maxForce = Vector3.new(math.huge * math.huge, math.huge * math.huge, math.huge * math.huge)
+        BP.P = BP.P * 2
+        dist = nil
+        point = Instance.new("Part")
+        point.Locked = true
+        point.Anchored = true
+        point.formFactor = 0
+        point.Shape = 0
+        point.BrickColor = BrickColor.Black()
+        point.Size = Vector3.new(1, 1, 1)
+        point.CanCollide = false
+        local s = Instance.new("SpecialMesh")
+        s.MeshType = "Sphere"
+        s.Scale = Vector3.new(.7, .7, .7)
+        s.Parent = point
+        handle = tool.Handle
+        front = tool.Handle
+        color = tool.Handle
+        objval = nil
+        local u = false
+        local v = BP:clone()
+        v.maxForce = Vector3.new(30000, 30000, 30000)
+        
+        function LineConnect(o, p, q)
+            local w = Instance.new("ObjectValue")
+            w.Value = o
+            w.Name = "Part1"
+            local x = Instance.new("ObjectValue")
+            x.Value = p
+            x.Name = "Part2"
+            local y = Instance.new("ObjectValue")
+            y.Value = q
+            y.Name = "Par"
+            local z = Instance.new("ObjectValue")
+            z.Value = color
+            z.Name = "Color"
+            local A = lineconnect:clone()
+            A.Disabled = false
+            w.Parent = A
+            x.Parent = A
+            y.Parent = A
+            z.Parent = A
+            A.Parent = workspace
+            if p == object then objval = x end
+        end
+        
+        function onButton1Down(B)
+            if mousedown == true then return end
+            mousedown = true
+            coroutine.resume(coroutine.create(function()
+                local C = point:clone()
+                C.Parent = tool
+                LineConnect(front, C, workspace)
+                while mousedown == true do
+                    C.Parent = tool
+                    if object == nil then
+                        if B.Target == nil then
+                            local t = CFrame.new(front.Position, B.Hit.p)
+                            C.CFrame = CFrame.new(front.Position + t.lookVector * 1000)
+                        else
+                            C.CFrame = CFrame.new(B.Hit.p)
+                        end
+                    else
+                        LineConnect(front, object, workspace)
+                        break
+                    end
+                    wait()
+                end
+                C:remove()
+            end))
+            while mousedown == true do
+                if B.Target ~= nil then
+                    local D = B.Target
+                    if D.Anchored == false then
+                        object = D
+                        dist = (object.Position - front.Position).magnitude
+                        break
+                    end
+                end
+                wait()
+            end
+            while mousedown == true do
+                if object.Parent == nil then break end
+                local t = CFrame.new(front.Position, B.Hit.p)
+                BP.Parent = object
+                BP.position = front.Position + t.lookVector * dist
+                wait()
+            end
+            BP:remove()
+            object = nil
+            objval.Value = nil
+        end
+        
+        function onKeyDown(E, B)
+            local E = E:lower()
+            local F = false
+            if E == "q" then if dist >= 5 then dist = dist - 10 end end
+            if E == "r" then
+                if object == nil then return end
+                for G, H in pairs(object:children()) do
+                    if H.className == "BodyGyro" then return nil end
+                end
+                BG = Instance.new("BodyGyro")
+                BG.maxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                BG.cframe = CFrame.new(object.CFrame.p)
+                BG.Parent = object
+                repeat wait() until object.CFrame == CFrame.new(object.CFrame.p)
+                BG.Parent = nil
+                if object == nil then return end
+                for G, H in pairs(object:children()) do
+                    if H.className == "BodyGyro" then H.Parent = nil end
+                end
+                object.Velocity = Vector3.new(0, 0, 0)
+                object.RotVelocity = Vector3.new(0, 0, 0)
+                object.Orientation = Vector3.new(0, 0, 0)
+            end
+            if E == "e" then dist = dist + 10 end
+            if E == "t" then if dist ~= 10 then dist = 10 end end
+            if E == "y" then if dist ~= 200 then dist = 200 end end
+            if E == "=" then BP.P = BP.P * 1.5 end
+            if E == "-" then BP.P = BP.P * 0.5 end
+        end
+        
+        function onEquipped(B)
+            touched = false
+            uneq = false
+            keymouse = B
+            local I = tool.Parent
+            human = I.Humanoid
+            human.Changed:connect(function()
+                if human.Health == 0 then
+                    mousedown = false
+                    uneq = true
+                    touched = false
+                    BP:remove()
+                    point:remove()
+                    tool:remove()
+                end
+            end)
+            usrinput.TouchTapInWorld:connect(function()
+                if uneq == false then
+                    if touched == false then
+                        onButton1Down(B)
+                        touched = true
+                    elseif touched == true then
+                        touched = false
+                    end
+                end
+            end)
+            usrinput.TouchLongPress:connect(function()
+                if uneq == false then
+                    if dist ~= power then dist = power end
+                end
+            end)
+            B.KeyDown:connect(function(E) onKeyDown(E, B) end)
+            B.Icon = "rbxasset://textures\\GunCursor.png"
+        end
+        
+        tool.Equipped:connect(onEquipped)
+        tool.Unequipped:connect(function() uneq = true touched = false mousedown = false end)
+    end))
+
+    for J, H in pairs(h:GetChildren()) do
+        H.Parent = game:GetService("Players").LocalPlayer.Backpack
+        pcall(function() H:MakeJoints() end)
+    end
+    h:Destroy()
+    
+    for J, H in pairs(g) do
+        spawn(function() pcall(H) end)
+    end
+end
+
+-- =====================================
+
+btn(pages.main, "GRAB (LOOK)", function() grabPart(getTarget()) end)
+btn(pages.main, "DROP (LOOK)", function()
+    local t=getTarget()
+    if t and grabbed[t] then
+        grabbed[t].bp:Destroy() grabbed[t].bg:Destroy()
+        grabbed[t]=nil frozen[t]=nil selected[t]=nil
+        setHighlight(t,false) clearAllHandles()
+    end
+end)
+btn(pages.main, "DROP ALL", function()
+    for p, objs in pairs(grabbed) do objs.bp:Destroy() objs.bg:Destroy() end
+    grabbed={} frozen={} selected={}
+    for p in pairs(highlights) do setHighlight(p,false) end
+    clearAllHandles()
+end)
+btn(pages.main, "FREEZE (LOOK)", function() local t=getTarget() if t and grabbed[t] then frozen[t]=true end end)
+btn(pages.main, "UNFREEZE (LOOK)", function()
+    local t=getTarget()
+    if t then frozen[t]=nil setHighlight(t,false) end
+end)
+btn(pages.main, "UNFREEZE ALL", function() frozen={} selected={} for p in pairs(highlights) do setHighlight(p,false) end clearAllHandles() end)
+
+label(pages.main, "--- AUTO SETTINGS ---")
+btn(pages.main, "AUTO GRAB NPC : OFF", function(b) autoGrabNPC = not autoGrabNPC b.Text = "AUTO GRAB NPC : "..(autoGrabNPC and "ON" or "OFF") end)
+btn(pages.main, "AUTO GRAB PART : OFF", function(b) autoGrabPart = not autoGrabPart b.Text = "AUTO GRAB PART : "..(autoGrabPart and "ON" or "OFF") end)
+btn(pages.main, "AUTO FREEZE : OFF", function(b) autoFreeze = not autoFreeze b.Text = "AUTO FREEZE : "..(autoFreeze and "ON" or "OFF") end)
+btn(pages.main, "AUTO THROW : OFF", function(b) autoThrow = not autoThrow b.Text = "AUTO THROW : "..(autoThrow and "ON" or "OFF") end)
+
+label(pages.main, "--- ACTIONS ---")
+btn(pages.main, "THROW (LOOK)", function()
+    local t = getTarget()
+    if t and grabbed[t] then
+        t.AssemblyLinearVelocity = Cam.CFrame.LookVector * throwForce
+        grabbed[t].bp:Destroy() grabbed[t].bg:Destroy()
+        grabbed[t]=nil frozen[t]=nil setHighlight(t,false)
+    end
+end)
+
+local distLabel = btn(pages.main, "DISTANCE : "..holdDistance, function() end)
+btn(pages.main, "+ DIST", function() holdDistance+=5 distLabel.Text = "DISTANCE : "..holdDistance end)
+btn(pages.main, "- DIST", function() holdDistance = math.max(1, holdDistance-5) distLabel.Text = "DISTANCE : "..holdDistance end)
+btn(pages.main, "HIGHLIGHT : ON", function(b) highlightOn = not highlightOn b.Text = "HIGHLIGHT : "..(highlightOn and "ON" or "OFF") end)
+btn(pages.main, "▶ MOVE / ROTATE MODE", function() showPage("move") end)
+
+-- ADD GET TOOL BUTTON TO UI
+local getToolBtn = btn(pages.main, "GET TELEKINESIS TOOL", function() 
+    giveTelekinesisTool()
+end)
+getToolBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 150)
+getToolBtn.Font = Enum.Font.GothamBold
+
+btn(pages.main, "DESTROY UI", function() for p,o in pairs(grabbed) do o.bp:Destroy() o.bg:Destroy() end gui:Destroy() end)
+
+do
+    local TEST_PLACE_ID = 90218315607797
+    local confirmGui = Instance.new("ScreenGui")
+    confirmGui.ResetOnSpawn = false
+    confirmGui.Name = "TestPlaceConfirm"
+    confirmGui.DisplayOrder = 998
+    pcall(function() confirmGui.Parent = game:GetService("CoreGui") end)
+    if confirmGui.Parent ~= game:GetService("CoreGui") then
+        confirmGui.Parent = game:GetService("Players").LocalPlayer.PlayerGui
+    end
+    local cf = Instance.new("Frame", confirmGui)
+    cf.Size = UDim2.fromOffset(260, 130)
+    cf.AnchorPoint = Vector2.new(0.5, 0.5)
+    cf.Position = UDim2.fromScale(0.5, 0.5)
+    cf.BackgroundColor3 = Color3.fromRGB(5, 8, 6)
+    cf.BorderSizePixel = 0
+    cf.Active = true
+    cf.Draggable = true
+    cf.Visible = false
+    Instance.new("UICorner", cf).CornerRadius = UDim.new(0, 16)
+    local cfStroke = Instance.new("UIStroke", cf)
+    cfStroke.Color = Color3.fromRGB(0, 215, 160)
+    cfStroke.Thickness = 1.5
+    local cfHdr = Instance.new("Frame", cf)
+    cfHdr.Size = UDim2.new(1, 0, 0, 38)
+    cfHdr.BackgroundColor3 = Color3.fromRGB(0, 160, 115)
+    cfHdr.BorderSizePixel = 0
+    Instance.new("UICorner", cfHdr).CornerRadius = UDim.new(0, 16)
+    local cfFix = Instance.new("Frame", cfHdr)
+    cfFix.Size = UDim2.new(1, 0, 0.5, 0)
+    cfFix.Position = UDim2.new(0, 0, 0.5, 0)
+    cfFix.BackgroundColor3 = Color3.fromRGB(0, 160, 115)
+    cfFix.BorderSizePixel = 0
+    local cfGrad = Instance.new("UIGradient", cfHdr)
+    cfGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 220, 160)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 110, 82)),
+    })
+    cfGrad.Rotation = 90
+    local cfTitle = Instance.new("TextLabel", cfHdr)
+    cfTitle.Size = UDim2.new(1, -16, 1, 0)
+    cfTitle.Position = UDim2.new(0, 12, 0, 0)
+    cfTitle.BackgroundTransparency = 1
+    cfTitle.Text = "🚀  WARP TO TEST PLACE"
+    cfTitle.Font = Enum.Font.GothamBlack
+    cfTitle.TextSize = 12
+    cfTitle.TextColor3 = Color3.new(1, 1, 1)
+    cfTitle.TextXAlignment = Enum.TextXAlignment.Left
+    local cfDesc = Instance.new("TextLabel", cf)
+    cfDesc.Size = UDim2.new(1, -20, 0, 30)
+    cfDesc.Position = UDim2.new(0, 10, 0, 44)
+    cfDesc.BackgroundTransparency = 1
+    cfDesc.Text = "Teleport to Baseplate HD?"
+    cfDesc.Font = Enum.Font.GothamMedium
+    cfDesc.TextSize = 12
+    cfDesc.TextColor3 = Color3.fromRGB(180, 230, 215)
+    cfDesc.TextWrapped = true
+    local yesBtn = Instance.new("TextButton", cf)
+    yesBtn.Size = UDim2.fromOffset(108, 36)
+    yesBtn.Position = UDim2.new(0, 10, 0, 82)
+    yesBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 110)
+    yesBtn.Text = "✓  CONFIRM"
+    yesBtn.Font = Enum.Font.GothamBold
+    yesBtn.TextSize = 12
+    yesBtn.TextColor3 = Color3.new(1, 1, 1)
+    yesBtn.BorderSizePixel = 0
+    yesBtn.AutoButtonColor = false
+    Instance.new("UICorner", yesBtn).CornerRadius = UDim.new(0, 10)
+    local yGrad = Instance.new("UIGradient", yesBtn)
+    yGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 210, 155)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 120, 88)),
+    })
+    yGrad.Rotation = 90
+    yesBtn.MouseButton1Down:Connect(function()
+        yesBtn.BackgroundTransparency = 0.3
+    end)
+    yesBtn.MouseButton1Up:Connect(function()
+        yesBtn.BackgroundTransparency = 0
+    end)
+    yesBtn.MouseButton1Click:Connect(function()
+        cf.Visible = false
+        game:GetService("TeleportService"):Teleport(TEST_PLACE_ID, game:GetService("Players").LocalPlayer)
+    end)
+    local noBtn = Instance.new("TextButton", cf)
+    noBtn.Size = UDim2.fromOffset(108, 36)
+    noBtn.Position = UDim2.new(0, 132, 0, 82)
+    noBtn.BackgroundColor3 = Color3.fromRGB(14, 20, 16)
+    noBtn.Text = "✕  CANCEL"
+    noBtn.Font = Enum.Font.GothamBold
+    noBtn.TextSize = 12
+    noBtn.TextColor3 = Color3.fromRGB(200, 215, 210)
+    noBtn.BorderSizePixel = 0
+    noBtn.AutoButtonColor = false
+    Instance.new("UICorner", noBtn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UIStroke", noBtn).Color = Color3.fromRGB(0, 140, 100)
+    noBtn.MouseButton1Down:Connect(function()
+        noBtn.BackgroundColor3 = Color3.fromRGB(0, 60, 44)
+    end)
+    noBtn.MouseButton1Up:Connect(function()
+        noBtn.BackgroundColor3 = Color3.fromRGB(14, 20, 16)
+    end)
+    noBtn.MouseLeave:Connect(function()
+        noBtn.BackgroundColor3 = Color3.fromRGB(14, 20, 16)
+    end)
+    noBtn.MouseButton1Click:Connect(function()
+        cf.Visible = false
+    end)
+    local warpBtn = btn(pages.main, "🚀  WARP TO TEST PLACE", function()
+        cf.Visible = true
+    end)
+    warpBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 88)
+    local wGrad = Instance.new("UIGradient", warpBtn)
+    wGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 180, 130)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 90, 66)),
+    })
+    wGrad.Rotation = 90
+    warpBtn.TextColor3 = Color3.new(1,1,1)
+    warpBtn.Font = Enum.Font.GothamBold
+end
+
+local list = Instance.new("ScrollingFrame", pages.move)
+list.Size = UDim2.new(1,0,0,120); list.BackgroundColor3 = Color3.fromRGB(35,35,35); list.BorderSizePixel = 0
+local ll = Instance.new("UIListLayout", list); ll.Padding = UDim.new(0,4)
+local function refreshList()
+    for _,c in ipairs(list:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+    for p in pairs(frozen) do
+        if p and p.Parent then
+            local b = btn(list, p.Name, function()
+                selected[p] = not selected[p]
+                setHighlight(p, selected[p])
+                local last = nil; for part in pairs(selected) do last = part end
+                if last then createHandles(last) else clearAllHandles() end
+                refreshList()
+            end)
+            b.BackgroundColor3 = selected[p] and Color3.fromRGB(120,120,0) or Color3.fromRGB(70,70,70)
+        end
+    end
+end
+btn(pages.move, "REFRESH LIST", refreshList)
+btn(pages.move, "SELECT ALL", function()
+    local last = nil; for p in pairs(frozen) do selected[p] = true; setHighlight(p, true); last = p end
+    if last then createHandles(last) end refreshList()
+end)
+btn(pages.move, "UNSELECT ALL", function() for p in pairs(selected) do setHighlight(p, false) end selected = {}; clearAllHandles(); refreshList() end)
+label(pages.move, "--- TOOLS (MULTI-EDIT) ---")
+local toolBtn = btn(pages.move, "CURRENT TOOL: NONE", function(b)
+    if currentTool == "NONE" then currentTool = "MOVE" elseif currentTool == "MOVE" then currentTool = "ROTATE" else currentTool = "NONE" end
+    b.Text = "CURRENT TOOL: "..currentTool
+    local last = nil; for p in pairs(selected) do last = p end
+    if last then createHandles(last) end
+end)
+label(pages.move, "--- SETTINGS ---")
+btn(pages.move, "MOVE STEP (SNAP): "..MOVE_SNAP, function(b)
+    if MOVE_SNAP == 0.1 then MOVE_SNAP = 0.5 elseif MOVE_SNAP == 0.5 then MOVE_SNAP = 1 elseif MOVE_SNAP == 1 then MOVE_SNAP = 5 else MOVE_SNAP = 0.1 end
+    b.Text = "MOVE STEP (SNAP): "..MOVE_SNAP
+end)
+btn(pages.move, "ROTATE STEP (SNAP): "..ROT_SNAP, function(b)
+    if ROT_SNAP == 1 then ROT_SNAP = 15 elseif ROT_SNAP == 15 then ROT_SNAP = 45 elseif ROT_SNAP == 45 then ROT_SNAP = 90 else ROT_SNAP = 1 end
+    b.Text = "ROTATE STEP (SNAP): "..ROT_SNAP
+end)
+btn(pages.move, "◀ BACK", function() showPage("main") end)
+
+RunService.RenderStepped:Connect(function()
+    targetHL.Adornee = highlightOn and getTarget() or nil
+    if autoGrabPart or autoGrabNPC then
+        for _, p in pairs(workspace:GetPartBoundsInRadius(LP.Character.PrimaryPart.Position, AUTO_RADIUS)) do
+            if isValidPart(p) and not grabbed[p] then
+                local isNPC = p:FindFirstAncestorOfClass("Model") and p:FindFirstAncestorOfClass("Model"):FindFirstChild("Humanoid")
+                if (autoGrabNPC and isNPC) or (autoGrabPart and not isNPC) then
+                    grabPart(p)
+                end
+            end
+        end
+    end
+    for p, objs in pairs(grabbed) do
+        if not p or not p.Parent or p.Anchored then
+            if objs.bp then objs.bp:Destroy() end
+            if objs.bg then objs.bg:Destroy() end
+            grabbed[p] = nil; frozen[p] = nil; setHighlight(p, false)
+        elseif not frozen[p] then
+            objs.bp.Position = Cam.CFrame.Position + Cam.CFrame.LookVector * holdDistance
+            objs.bg.CFrame = p.CFrame
+        end
+    end
+end)
+
+local toggleBtn = Instance.new("TextButton", gui)
+toggleBtn.Size = UDim2.fromOffset(36, 36)
+toggleBtn.Position = UDim2.new(0.03, 0, 0.18, -46)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(9, 12, 10)
+toggleBtn.Text = "−"
+toggleBtn.Font = Enum.Font.GothamBlack
+toggleBtn.TextSize = 20
+toggleBtn.TextColor3 = Color3.fromRGB(0, 215, 160)
+toggleBtn.BorderSizePixel = 0
+toggleBtn.AutoButtonColor = false
+toggleBtn.Draggable = true
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 10)
+local tStroke = Instance.new("UIStroke", toggleBtn)
+tStroke.Color = Color3.fromRGB(0, 215, 160)
+tStroke.Thickness = 1.2
+local isMinimized = false
+toggleBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    main.Visible = not isMinimized
+    toggleBtn.Text = isMinimized and "+" or "−"
+    local c = isMinimized and Color3.fromRGB(80,80,80) or Color3.fromRGB(0,215,160)
+    toggleBtn.TextColor3 = c
+    tStroke.Color = c
+end)
+
+local UserInputService = game:GetService("UserInputService")
+local isPC = not (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled)
+local helpUI = Instance.new("Frame", gui)
+helpUI.Size = UDim2.fromOffset(280, 320)
+helpUI.Position = UDim2.new(0.7, 0, 0.3, 0)
+helpUI.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+helpUI.BackgroundTransparency = 0.2
+helpUI.Visible = isPC
+helpUI.Active = true
+helpUI.Draggable = true
+Instance.new("UICorner", helpUI).CornerRadius = UDim.new(0, 10)
+local helpTitle = Instance.new("TextLabel", helpUI)
+helpTitle.Size = UDim2.new(1, 0, 0, 40)
+helpTitle.Text = "💻 PC CONTROLS"
+helpTitle.TextColor3 = Color3.fromRGB(0, 255, 255)
+helpTitle.BackgroundTransparency = 1
+helpTitle.Font = Enum.Font.GothamBold
+helpTitle.TextSize = 22
+local helpText = Instance.new("TextLabel", helpUI)
+helpText.Size = UDim2.new(1, -20, 1, -50)
+helpText.Position = UDim2.fromOffset(10, 50)
+helpText.Text = "• [G] : Grab Mode (L-Click)\n• [F] : Freeze Mode (L-Click)\n• [T] : Throw (T x2 = Auto)\n• [N] : Unfreeze All\n\n🖱️ MOUSE ACTIONS:\n• L-Click: Grab/Freeze\n• R-Click: Drop Part\n• R-Click x2: Drop All\n\n⚠️ NOTE: Must turn OFF \nFreeze Mode to Drop parts!"
+helpText.TextColor3 = Color3.new(1, 1, 1)
+helpText.TextWrapped = true
+helpText.TextYAlignment = Enum.TextYAlignment.Top
+helpText.TextXAlignment = Enum.TextXAlignment.Left
+helpText.BackgroundTransparency = 1
+helpText.Font = Enum.Font.GothamMedium
+helpText.TextSize = 18
+helpText.LineHeight = 1.2
+local grabModeActive = false
+local freezeModeActive = false
+local lastTClick = 0
+local lastRClick = 0
+if isPC then cross.Visible = false end
+local function getMouseTarget()
+    local mousePos = UserInputService:GetMouseLocation()
+    local unitRay = Cam:ViewportPointToRay(mousePos.X, mousePos.Y)
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    rp.FilterDescendantsInstances = {LP.Character, Cam}
+    local r = workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, rp)
+    if r and r.Instance and isValidPart(r.Instance) then
+        return r.Instance
+    end
+    return nil
+end
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed or not isPC then return end
+    if input.KeyCode == Enum.KeyCode.G then
+        grabModeActive = not grabModeActive
+        freezeModeActive = false
+    elseif input.KeyCode == Enum.KeyCode.N then
+        frozen = {}
+        for p in pairs(highlights) do setHighlight(p, false) end
+    elseif input.KeyCode == Enum.KeyCode.T then
+        local now = tick()
+        if now - lastTClick < 0.3 then
+            autoThrow = not autoThrow
+        else
+            for p, o in pairs(grabbed) do
+                p.AssemblyLinearVelocity = Cam.CFrame.LookVector * throwForce
+                o.bp:Destroy() o.bg:Destroy()
+                grabbed[p] = nil
+            end
+        end
+        lastTClick = now
+    elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local target = getMouseTarget()
+        if target then
+            if grabModeActive then
+                grabPart(target)
+            elseif freezeModeActive then
+                grabPart(target)
+                frozen[target] = true
+                setHighlight(target, true)
+                if highlights[target] then
+                    highlights[target].OutlineColor = Color3.fromRGB(0, 170, 255)
+                end
+            end
+        end
+    elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+        local now = tick()
+        if now - lastRClick < 0.3 then
+            for p, o in pairs(grabbed) do
+                o.bp:Destroy() o.bg:Destroy()
+                grabbed[p] = nil
+            end
+        else
+            if not freezeModeActive then
+                local target = getMouseTarget()
+                if target and grabbed[target] then
+                    grabbed[target].bp:Destroy()
+                    grabbed[target].bg:Destroy()
+                    grabbed[target] = nil
+                end
+            end
+        end
+        lastRClick = now
+    end
+end)
+RunService.RenderStepped:Connect(function()
+    if not isPC then return end
+    local targetUnderMouse = getMouseTarget()
+    if targetUnderMouse then
+        targetHL.Adornee = targetUnderMouse
+        if grabModeActive then
+            targetHL.OutlineColor = Color3.fromRGB(0, 255, 0)
+        elseif freezeModeActive then
+            targetHL.OutlineColor = Color3.fromRGB(0, 170, 255)
+        else
+            targetHL.OutlineColor = Color3.new(1, 1, 1)
+        end
+    else
+        targetHL.Adornee = nil
+    end
+    for p, objs in pairs(grabbed) do
+        if not frozen[p] then
+            local mousePos = UserInputService:GetMouseLocation()
+            local unitRay = Cam:ViewportPointToRay(mousePos.X, mousePos.Y)
+            local targetPosition = unitRay.Origin + (unitRay.Direction * holdDistance)
+            objs.bp.Position = targetPosition
+            objs.bg.CFrame = p.CFrame
+        end
+    end
+end)
+local function teleportSelectedToFront()
+    local char = LP.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local rootCF = char.HumanoidRootPart.CFrame
+    local spawnPos = rootCF.Position + (rootCF.LookVector * 7)
+    for part in pairs(selected) do
+        if part and part.Parent and not part.Anchored then
+            if grabbed[part] then
+                grabbed[part].bp.Position = spawnPos
+                grabbed[part].bg.CFrame = rootCF
+            else
+                part.CFrame = CFrame.new(spawnPos)
+            end
+        end
+    end
+end
+if pages and pages.move then
+    label(pages.move, "--- POSITIONING ---")
+    local tpFrontBtn = btn(pages.move, "TELEPORT PART(SELECT FIRST)", function()
+        teleportSelectedToFront()
+    end)
+    tpFrontBtn.BackgroundColor3 = Color3.fromRGB(80, 50, 200)
+    tpFrontBtn.Font = Enum.Font.GothamBold
+end
+local deleteForce = 4500
+if pages and pages.main then
+    label(pages.main, "--- DESTRUCTION ---")
+    local delBtn = btn(pages.main, "DELETE PART(LOOK)", function()
+        local t = getTarget()
+        if t and isValidPart(t) then
+            t.AssemblyLinearVelocity = Cam.CFrame.LookVector * deleteForce
+            if grabbed[t] then
+                grabbed[t].bp:Destroy()
+                grabbed[t].bg:Destroy()
+                grabbed[t] = nil
+            end
+        end
+    end)
+    delBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+    delBtn.Font = Enum.Font.GothamBold
+end
+local deleteModeActive = false
+if isPC then
+    if helpText then
+        helpText.Text = helpText.Text .. "\n• [R] : Delete Mode (R-Click)"
+    end
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.R then
+            deleteModeActive = not deleteModeActive
+            grabModeActive = false
+            freezeModeActive = false
+            if helpTitle then
+                helpTitle.Text = "PC: "..(deleteModeActive and "DELETE MODE" or "IDLE")
+                helpTitle.TextColor3 = deleteModeActive and Color3.new(1, 0, 0) or Color3.new(0, 1, 1)
+            end
+        elseif input.UserInputType == Enum.UserInputType.MouseButton2 and deleteModeActive then
+            local target = getMouseTarget()
+            if target and isValidPart(target) then
+                local mousePos = UserInputService:GetMouseLocation()
+                local unitRay = Cam:ViewportPointToRay(mousePos.X, mousePos.Y)
+                target.AssemblyLinearVelocity = unitRay.Direction * deleteForce
+                if grabbed[target] then
+                    grabbed[target].bp:Destroy()
+                    grabbed[target].bg:Destroy()
+                    grabbed[target] = nil
+                end
+            end
+        end
+    end)
+end
+RunService.RenderStepped:Connect(function()
+    if isPC and deleteModeActive then
+        local t = getMouseTarget()
+        if t then
+            targetHL.Adornee = t
+            targetHL.OutlineColor = Color3.fromRGB(255, 0, 0)
+        end
+    end
+end)
+task.spawn(function()
+    while task.wait(0.1) do
+        for part, _ in pairs(grabbed) do
+            if part and part.Parent and not part.Anchored then
+                pcall(function()
+                    if part:GetNetworkOwner() ~= LP then
+                        part:SetNetworkOwner(LP)
+                    end
+                end)
+            end
+        end
+    end
+end)
+RunService.Heartbeat:Connect(function()
+    for part, objs in pairs(grabbed) do
+        if part and part.Parent and not frozen[part] then
+            pcall(function()
+                part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            end)
+        end
+    end
+end)
+local targetPosInput = "0, 0, 0"
+local customThrowPower = 1.5
+local function throwToTarget(part, targetVector)
+    if not part or not part.Parent then return end
+    local currentPos = part.Position
+    local direction = (targetVector - currentPos)
+    local distance = direction.Magnitude
+    part.AssemblyLinearVelocity = Vector3.new(0,0,0)
+    part.AssemblyAngularVelocity = Vector3.new(0,0,0)
+    local force = direction * customThrowPower
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.Velocity = force
+    bv.Parent = part
+    task.delay(0.2, function()
+        if bv.Parent then bv:Destroy() end
+    end)
+    if grabbed[part] then
+        grabbed[part].bp:Destroy()
+        grabbed[part].bg:Destroy()
+        grabbed[part] = nil
+    end
+end
+if pages and pages.main then
+    label(pages.main, "--- COORDINATE THROWER ---")
+    local inputBox = Instance.new("TextBox", pages.main)
+    inputBox.Size = UDim2.new(1, 0, 0, 30)
+    inputBox.PlaceholderText = "X, Y, Z (Like 100, 20, -50)"
+    inputBox.Text = targetPosInput
+    inputBox.Font = Enum.Font.Gotham
+    inputBox.TextSize = 14
+    inputBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    inputBox.TextColor3 = Color3.new(1, 1, 1)
+    Instance.new("UICorner", inputBox)
+    inputBox.FocusLost:Connect(function()
+        targetPosInput = inputBox.Text
+    end)
+    local throwFrame = Instance.new("Frame", pages.main)
+    throwFrame.Size = UDim2.new(1, 0, 0, 35)
+    throwFrame.BackgroundTransparency = 1
+    local l = Instance.new("UIListLayout", throwFrame)
+    l.FillDirection = Enum.FillDirection.Horizontal
+    l.Padding = UDim.new(0, 5)
+    local btnThrow = btn(throwFrame, "THROW TO POS", function()
+        local coords = {}
+        for s in string.gmatch(targetPosInput, "[%d%.%-]+") do
+            table.insert(coords, tonumber(s))
+        end
+        if #coords >= 3 then
+            local targetVec = Vector3.new(coords[1], coords[2], coords[3])
+            local t = getTarget()
+            if t then
+                throwToTarget(t, targetVec)
+            else
+                for p in pairs(selected) do
+                    throwToTarget(p, targetVec)
+                end
+            end
+        end
+    end)
+    btnThrow.Size = UDim2.new(0.6, -2, 1, 0)
+    btnThrow.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+    local btnPower = btn(throwFrame, "PWR: "..customThrowPower, function(b)
+        if customThrowPower >= 5 then customThrowPower = 0.5
+        else customThrowPower = customThrowPower + 0.5 end
+        b.Text = "PWR: "..customThrowPower
+    end)
+    btnPower.Size = UDim2.new(0.4, -3, 1, 0)
+end
+
+-- ===============================================
+-- 🔴 AUTO SHIELD AND FOLLOW OWNER FIXED HERE 🔴
+-- ===============================================
+do
+    local autoShield = false
+    local followOwner = false
+    local shieldSpeedThreshold = 50
+    local shieldRadius = 15
+
+    local function setupHoldButton(button, delta, callback)
+        local holding = false
+        button.MouseButton1Down:Connect(function()
+            holding = true
+            while holding do
+                callback(delta)
+                task.wait(0.1)
+            end
+        end)
+        button.MouseButton1Up:Connect(function() holding = false end)
+        button.MouseLeave:Connect(function() holding = false end)
+    end
+
+    if pages and pages.main then
+        local shieldFrame = Instance.new("Frame", pages.main)
+        shieldFrame.Size = UDim2.new(1, 0, 0, 70)
+        shieldFrame.BackgroundTransparency = 1
+        shieldFrame.LayoutOrder = -10
+        local sLayout = Instance.new("UIListLayout", shieldFrame)
+        sLayout.Padding = UDim.new(0, 2)
+
+        local btnShield = btn(shieldFrame, "🛡️ AUTO SHIELD : OFF", function(b)
+            autoShield = not autoShield
+            b.Text = "🛡️ AUTO SHIELD : " .. (autoShield and "ON" or "OFF")
+            b.BackgroundColor3 = autoShield and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(70, 70, 70)
+        end)
+        btnShield.Font = Enum.Font.GothamBold
+
+        local speedCtrlFrame = Instance.new("Frame", shieldFrame)
+        speedCtrlFrame.Size = UDim2.new(1, 0, 0, 30)
+        speedCtrlFrame.BackgroundTransparency = 1
+
+        local speedLabel = Instance.new("TextLabel", speedCtrlFrame)
+        speedLabel.Size = UDim2.new(0.5, 0, 1, 0)
+        speedLabel.Text = "DETECT SPEED: " .. shieldSpeedThreshold
+        speedLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        speedLabel.TextColor3 = Color3.new(1, 1, 1)
+        speedLabel.Font = Enum.Font.GothamMedium
+        speedLabel.TextSize = 12
+
+        local btnMinus = btn(speedCtrlFrame, "-", function() end)
+        btnMinus.Position = UDim2.new(0.55, 0, 0, 0)
+        btnMinus.Size = UDim2.new(0.2, -2, 1, 0)
+
+        local btnPlus = btn(speedCtrlFrame, "+", function() end)
+        btnPlus.Position = UDim2.new(0.75, 0, 0, 0)
+        btnPlus.Size = UDim2.new(0.2, -2, 1, 0)
+
+        setupHoldButton(btnPlus, 1, function(d)
+            shieldSpeedThreshold = shieldSpeedThreshold + d
+            speedLabel.Text = "DETECT SPEED: " .. shieldSpeedThreshold
+        end)
+        setupHoldButton(btnMinus, -1, function(d)
+            shieldSpeedThreshold = math.max(0, shieldSpeedThreshold + d)
+            speedLabel.Text = "DETECT SPEED: " .. shieldSpeedThreshold
+        end)
+
+        label(pages.main, "--- OWNER PHYSICS ---")
+        local btnFollow = btn(pages.main, "FOLLOW OWNER : OFF", function(b)
+            followOwner = not followOwner
+            b.Text = "FOLLOW OWNER : " .. (followOwner and "ON" or "OFF")
+            b.BackgroundColor3 = followOwner and Color3.fromRGB(100, 0, 150) or Color3.fromRGB(70, 70, 70)
+            if followOwner then
+                for p in pairs(grabbed) do
+                    frozen[p] = true
+                    setHighlight(p, true)
+                end
+            end
+        end)
+    end
+
+    RunService.Heartbeat:Connect(function()
+        local char = LP.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+        local root = char.HumanoidRootPart
+
+        if autoShield then
+            local foundParts = workspace:GetPartBoundsInRadius(root.Position, shieldRadius)
+            for _, p in ipairs(foundParts) do
+                if isValidPart(p) and not grabbed[p] then
+                    local vel = p.AssemblyLinearVelocity
+                    if vel.Magnitude >= shieldSpeedThreshold then
+                        local toPlayer = (root.Position - p.Position).Unit
+                        if vel.Unit:Dot(toPlayer) > 0.1 then
+                            grabPart(p)
+                            frozen[p] = true
+                            setHighlight(p, true)
+                            if highlights[p] then highlights[p].OutlineColor = Color3.fromRGB(255, 0, 0) end
+                        end
+                    end
+                end
+            end
+        end
+
+        if followOwner then
+            for p, objs in pairs(grabbed) do
+                if p and p.Parent and not p.Anchored then
+                    local targetCFrame = root.CFrame * CFrame.new(0, 0, holdDistance)
+                    objs.bp.Position = targetCFrame.Position
+                    objs.bg.CFrame = root.CFrame
+                end
+            end
+        end
+    end)
+end
+
+local autoDelete = false
+local deleteSpeed = 5000
+local deleteRadius = 20
+
+if pages and pages.main then
+    label(pages.main, "--- AUTO DESTRUCTION ---")
+    local btnAutoDel = btn(pages.main, "AUTO DELETE : OFF", function(b)
+        autoDelete = not autoDelete
+        b.Text = "AUTO DELETE : " .. (autoDelete and "ON" or "OFF")
+        b.BackgroundColor3 = autoDelete and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(70, 70, 70)
+        b.Font = Enum.Font.GothamBold
+    end)
+
+    local delRangeFrame = Instance.new("Frame", pages.main)
+    delRangeFrame.Size = UDim2.new(1, 0, 0, 30)
+    delRangeFrame.BackgroundTransparency = 1
+    local rangeLabel = Instance.new("TextLabel", delRangeFrame)
+    rangeLabel.Size = UDim2.new(0.5, 0, 1, 0)
+    rangeLabel.Text = "DEL RADIUS: " .. deleteRadius
+    rangeLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    rangeLabel.TextColor3 = Color3.new(1, 1, 1)
+    rangeLabel.Font = Enum.Font.GothamMedium
+    rangeLabel.TextSize = 12
+
+    local btnMinusR = btn(delRangeFrame, "-", function() end)
+    btnMinusR.Position = UDim2.new(0.55, 0, 0, 0)
+    btnMinusR.Size = UDim2.new(0.2, -2, 1, 0)
+
+    local btnPlusR = btn(delRangeFrame, "+", function() end)
+    btnPlusR.Position = UDim2.new(0.75, 0, 0, 0)
+    btnPlusR.Size = UDim2.new(0.2, -2, 1, 0)
+
+    local function setupHoldButton2(btn, val, func)
+        local holding = false
+        btn.MouseButton1Down:Connect(function() holding = true; while holding do func(val); task.wait(0.1) end end)
+        btn.MouseButton1Up:Connect(function() holding = false end)
+        btn.MouseLeave:Connect(function() holding = false end)
+    end
+    setupHoldButton2(btnPlusR, 5, function(d) deleteRadius = math.min(200, deleteRadius + d); rangeLabel.Text = "DEL RADIUS: " .. deleteRadius end)
+    setupHoldButton2(btnMinusR, -5, function(d) deleteRadius = math.max(5, deleteRadius + d); rangeLabel.Text = "DEL RADIUS: " .. deleteRadius end)
+end
+
+RunService.Stepped:Connect(function()
+    if not autoDelete then return end
+    local char = LP.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local myRoot = char.HumanoidRootPart
+    local parts = workspace:GetPartBoundsInRadius(myRoot.Position, deleteRadius)
+    for _, p in ipairs(parts) do
+        if p:IsA("BasePart") and not p.Anchored and not isPlayer(p) then
+            if grabbed[p] then
+                grabbed[p].bp:Destroy()
+                grabbed[p].bg:Destroy()
+                grabbed[p] = nil
+            end
+            p.AssemblyLinearVelocity = Vector3.new(math.random(-10, 10), deleteSpeed, math.random(-10, 10))
+            pcall(function() if p:GetNetworkOwner() ~= LP then p:SetNetworkOwner(LP) end end)
+        end
+    end
+end)
+
+local puppetList = {}
+local selectedForControl = {}
+local controlling = false
+local currentPuppet = nil
+local selectClickMode = false
+local autoAddNPC = false
+pages.puppet = createPage()
+
+btn(pages.main, "OPEN PUPPET MASTER", function() showPage("puppet") end)
+
+local function getPuppetModel(obj)
+    if not obj then return nil end
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model and model:FindFirstChildOfClass("Humanoid") then
+        if game.Players:GetPlayerFromCharacter(model) or model == LP.Character then return nil end
+        return model
+    end
+    return nil
+end
+
+label(pages.puppet, "PUPPET MASTER CONTROL")
+local dropDown = Instance.new("ScrollingFrame", pages.puppet)
+dropDown.Size = UDim2.new(1, 0, 0, 120)
+dropDown.CanvasSize = UDim2.new(0, 0, 0, 0)
+dropDown.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+dropDown.BorderSizePixel = 0
+local dropLayout = Instance.new("UIListLayout", dropDown)
+
+local function refreshPuppetList()
+    for _, v in ipairs(dropDown:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+    for i, model in ipairs(puppetList) do
+        if model and model.Parent and model:FindFirstChildOfClass("Humanoid") and model:FindFirstChildOfClass("Humanoid").Health > 0 then
+            local isActive = selectedForControl[model]
+            local prefix = (currentPuppet == model) and "[FOCUS] " or ""
+            local b = btn(dropDown, prefix .. model.Name .. (isActive and " (ON)" or " (OFF)"), function()
+                currentPuppet = model
+                selectedForControl[model] = not selectedForControl[model]
+                if controlling and currentPuppet:FindFirstChildOfClass("Humanoid") then
+                    Cam.CameraSubject = currentPuppet:FindFirstChildOfClass("Humanoid")
+                end
+                refreshPuppetList()
+            end)
+            b.BackgroundColor3 = isActive and Color3.fromRGB(50, 70, 100) or Color3.fromRGB(45, 45, 45)
+        else
+            selectedForControl[model] = nil
+            table.remove(puppetList, i)
+        end
+    end
+    dropDown.CanvasSize = UDim2.new(0, 0, 0, dropLayout.AbsoluteContentSize.Y)
+end
+
+local btnSelectMode = btn(pages.puppet, "CLICK TO ADD NPC: OFF", function(b)
+    selectClickMode = not selectClickMode
+    b.Text = "CLICK TO ADD NPC: " .. (selectClickMode and "ON" or "OFF")
+    b.BackgroundColor3 = selectClickMode and Color3.fromRGB(0, 100, 180) or Color3.fromRGB(70, 70, 70)
+end)
+
+local btnAutoMode = btn(pages.puppet, "AUTO ADD NEARBY: OFF", function(b)
+    autoAddNPC = not autoAddNPC
+    b.Text = "AUTO ADD NEARBY: " .. (autoAddNPC and "ON" or "OFF")
+    b.BackgroundColor3 = autoAddNPC and Color3.fromRGB(0, 100, 180) or Color3.fromRGB(70, 70, 70)
+end)
+
+local row = Instance.new("Frame", pages.puppet)
+row.Size = UDim2.new(1, 0, 0, 30); row.BackgroundTransparency = 1
+Instance.new("UIListLayout", row).FillDirection = Enum.FillDirection.Horizontal
+btn(row, "SELECT ALL", function() for _, m in ipairs(puppetList) do selectedForControl[m] = true end; refreshPuppetList() end).Size = UDim2.new(0.5, -2, 1, 0)
+btn(row, "UNSELECT ALL", function() for _, m in ipairs(puppetList) do selectedForControl[m] = false end; refreshPuppetList() end).Size = UDim2.new(0.5, -2, 1, 0)
+
+local btnControl = btn(pages.puppet, "START CONTROL", function(b)
+    controlling = not controlling
+    if controlling then
+        if not currentPuppet then for m, s in pairs(selectedForControl) do if s then currentPuppet = m break end end end
+        if not currentPuppet then controlling = false return end
+        b.Text = "STOP CONTROL"
+        b.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+        Cam.CameraSubject = currentPuppet:FindFirstChildOfClass("Humanoid")
+        if LP.Character then LP.Character.HumanoidRootPart.Anchored = true end
+    else
+        b.Text = "START CONTROL"
+        b.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+        Cam.CameraSubject = LP.Character:FindFirstChildOfClass("Humanoid")
+        if LP.Character then LP.Character.HumanoidRootPart.Anchored = false end
+    end
+end)
+btnControl.Size = UDim2.new(1, 0, 0, 40)
+btn(pages.puppet, "BACK TO MAIN", function() showPage("main") end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp or not selectClickMode then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local ray = Cam:ScreenPointToRay(input.Position.X, input.Position.Y)
+        local res = workspace:Raycast(ray.Origin, ray.Direction * 1000)
+        if res and res.Instance then
+            local m = getPuppetModel(res.Instance)
+            if m then
+                local root = m:FindFirstChild("HumanoidRootPart")
+                if root and (root.Position - LP.Character.HumanoidRootPart.Position).Magnitude <= holdDistance then
+                    if not table.find(puppetList, m) then
+                        table.insert(puppetList, m)
+                        selectedForControl[m] = true
+                        refreshPuppetList()
+                    end
+                end
+            end
+        end
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    local changed = false
+    for i = #puppetList, 1, -1 do
+        local m = puppetList[i]
+        if not m or not m.Parent or (m:FindFirstChildOfClass("Humanoid") and m:FindFirstChildOfClass("Humanoid").Health <= 0) then
+            table.remove(puppetList, i)
+            selectedForControl[m] = nil
+            if currentPuppet == m then currentPuppet = nil end
+            changed = true
+        end
+    end
+    if autoAddNPC and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+        local myPos = LP.Character.HumanoidRootPart.Position
+        local parts = workspace:GetPartBoundsInRadius(myPos, holdDistance)
+        for _, p in ipairs(parts) do
+            local m = getPuppetModel(p)
+            if m and not table.find(puppetList, m) then
+                table.insert(puppetList, m)
+                selectedForControl[m] = true
+                changed = true
+            end
+        end
+    end
+    if changed then refreshPuppetList() end
+    if controlling and LP.Character then
+        local moveDir = LP.Character:FindFirstChildOfClass("Humanoid").MoveDirection
+        for npc, isSelected in pairs(selectedForControl) do
+            if isSelected and npc:FindFirstChild("HumanoidRootPart") then
+                local root = npc.HumanoidRootPart
+                pcall(function() root:SetNetworkOwner(LP) end)
+                if moveDir.Magnitude > 0 then
+                    root.AssemblyLinearVelocity = Vector3.new(moveDir.X * 30, root.AssemblyLinearVelocity.Y, moveDir.Z * 30)
+                    root.CFrame = root.CFrame:Lerp(CFrame.lookAt(root.Position, root.Position + moveDir), 0.2)
+                else
+                    root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+                end
+            end
+        end
+    end
+end)
+
+local textMode = false
+local textFrozen = false
+local textString = "HELLO"
+local textPartsMap = {}
+local frozenAnchorPoints = {}
+local charMap = {
+    ["A"] = {0,1,0, 1,0,1, 1,1,1, 1,0,1, 1,0,1}, ["B"] = {1,1,0, 1,0,1, 1,1,0, 1,0,1, 1,1,0},
+    ["C"] = {0,1,1, 1,0,0, 1,0,0, 1,0,0, 0,1,1}, ["D"] = {1,1,0, 1,0,1, 1,0,1, 1,0,1, 1,1,0},
+    ["E"] = {1,1,1, 1,0,0, 1,1,0, 1,0,0, 1,1,1}, ["F"] = {1,1,1, 1,0,0, 1,1,0, 1,0,0, 1,0,0},
+    ["G"] = {0,1,1, 1,0,0, 1,0,1, 1,0,1, 0,1,1}, ["H"] = {1,0,1, 1,0,1, 1,1,1, 1,0,1, 1,0,1},
+    ["I"] = {1,1,1, 0,1,0, 0,1,0, 0,1,0, 1,1,1}, ["J"] = {0,0,1, 0,0,1, 0,0,1, 1,0,1, 0,1,0},
+    ["K"] = {1,0,1, 1,0,1, 1,1,0, 1,0,1, 1,0,1}, ["L"] = {1,0,0, 1,0,0, 1,0,0, 1,0,0, 1,1,1},
+    ["M"] = {1,0,1, 1,1,1, 1,1,1, 1,0,1, 1,0,1}, ["N"] = {1,1,1, 1,0,1, 1,0,1, 1,0,1, 1,0,1},
+    ["O"] = {0,1,0, 1,0,1, 1,0,1, 1,0,1, 0,1,0}, ["P"] = {1,1,0, 1,0,1, 1,1,0, 1,0,0, 1,0,0},
+    ["Q"] = {0,1,0, 1,0,1, 1,0,1, 1,1,1, 0,0,1}, ["R"] = {1,1,0, 1,0,1, 1,1,0, 1,0,1, 1,0,1},
+    ["S"] = {0,1,1, 1,0,0, 0,1,0, 0,0,1, 1,1,0}, ["T"] = {1,1,1, 0,1,0, 0,1,0, 0,1,0, 0,1,0},
+    ["U"] = {1,0,1, 1,0,1, 1,0,1, 1,0,1, 1,1,1}, ["V"] = {1,0,1, 1,0,1, 1,0,1, 0,1,0, 0,1,0},
+    ["W"] = {1,0,1, 1,0,1, 1,1,1, 1,1,1, 1,0,1}, ["X"] = {1,0,1, 1,0,1, 0,1,0, 1,0,1, 1,0,1},
+    ["Y"] = {1,0,1, 1,0,1, 0,1,0, 0,1,0, 0,1,0}, ["Z"] = {1,1,1, 0,0,1, 0,1,0, 1,0,0, 1,1,1},
+    [" "] = {0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0}, ["0"] = {1,1,1, 1,0,1, 1,0,1, 1,0,1, 1,1,1},
+    ["1"] = {0,1,0, 1,1,0, 0,1,0, 0,1,0, 1,1,1},
+}
+local function isValidTextPart(p)
+    if not p:IsA("BasePart") or p.Anchored then return false end
+    if p:FindFirstAncestorOfClass("Model") then
+        local m = p:FindFirstAncestorOfClass("Model")
+        if game.Players:GetPlayerFromCharacter(m) or m:FindFirstChildOfClass("Humanoid") then return false end
+    end
+    return true
+end
+
+if pages and pages.main then
+    label(pages.main, "TEXT PART CONTROL")
+    local editFrame = Instance.new("Frame", pages.main)
+    editFrame.Size = UDim2.new(1, 0, 0, 35); editFrame.BackgroundTransparency = 1
+    Instance.new("UIListLayout", editFrame).FillDirection = "Horizontal"
+    local textBox = Instance.new("TextBox", editFrame)
+    textBox.Size = UDim2.new(0.6, -5, 1, 0); textBox.Text = "HELLO"
+    textBox.BackgroundColor3 = Color3.fromRGB(40,40,40); textBox.TextColor3 = Color3.new(1,1,1)
+    
+    local btnToggle = btn(editFrame, "MODE: OFF", function(b)
+        textMode = not textMode
+        b.Text = "MODE: " .. (textMode and "ON" or "OFF")
+        b.BackgroundColor3 = textMode and Color3.fromRGB(0,120,200) or Color3.fromRGB(60,60,60)
+        if not textMode then
+            textFrozen = false
+            for p, _ in pairs(textPartsMap) do
+                p.Anchored = false
+                if p:FindFirstChild("BodyPosition") then p.BodyPosition:Destroy() end
+                if p:FindFirstChild("BodyGyro") then p.BodyGyro:Destroy() end
+            end
+            textPartsMap = {}
+        end
+    end)
+    btnToggle.Size = UDim2.new(0.4, 0, 1, 0)
+    
+    local btnFreeze = btn(pages.main, "FREEZE TEXT: OFF", function(b)
+        if not textMode then return end
+        textFrozen = not textFrozen
+        b.Text = "FREEZE TEXT: " .. (textFrozen and "ON" or "OFF")
+        b.BackgroundColor3 = textFrozen and Color3.fromRGB(200,100,0) or Color3.fromRGB(60,60,60)
+        for p, _ in pairs(textPartsMap) do
+            p.Anchored = textFrozen
+            if textFrozen then
+                if p:FindFirstChild("BodyPosition") then p.BodyPosition:Destroy() end
+                if p:FindFirstChild("BodyGyro") then p.BodyGyro:Destroy() end
+            end
+        end
+    end)
+    
+    textBox:GetPropertyChangedSignal("Text"):Connect(function()
+        textString = textBox.Text:upper()
+        if textFrozen then
+            textFrozen = false
+            btnFreeze.Text = "FREEZE TEXT: OFF"
+            btnFreeze.BackgroundColor3 = Color3.fromRGB(60,60,60)
+        end
+    end)
+end
+
+RunService.Heartbeat:Connect(function()
+    if not textMode or textFrozen then return end
+    if not LP.Character or not LP.Character:FindFirstChild("HumanoidRootPart") then return end
+    local root = LP.Character.HumanoidRootPart
+    local startCFrame = root.CFrame * CFrame.new(0, 5, -10)
+    local available = {}
+    for _, p in ipairs(workspace:GetPartBoundsInRadius(root.Position, 100)) do
+        if isValidTextPart(p) and not textPartsMap[p] then table.insert(available, p) end
+    end
+    local dots = {}
+    local cursorX = 0
+    for i = 1, #textString do
+        local char = string.sub(textString, i, i)
+        local matrix = charMap[char] or charMap[" "]
+        for row = 0, 4 do
+            for col = 0, 2 do
+                if matrix[(row * 3) + col + 1] == 1 then
+                    table.insert(dots, {x = cursorX + col, y = 4 - row})
+                end
+            end
+        end
+        cursorX = cursorX + 4
+    end
+    local usedThisFrame = {}
+    for i, dot in ipairs(dots) do
+        local part = nil
+        for p, idx in pairs(textPartsMap) do if idx == i then part = p break end end
+        if not part and #available > 0 then
+            part = table.remove(available, 1)
+            textPartsMap[part] = i
+        end
+        if part and part.Parent then
+            usedThisFrame[part] = true
+            local gap = (part.Size.X + part.Size.Z) / 2 * 1.1
+            local targetPos = startCFrame * CFrame.new((dot.x * gap) - (cursorX * gap / 2), dot.y * gap, 0)
+            pcall(function() part:SetNetworkOwner(LP) end)
+            part.CanCollide = false
+            part.Anchored = false
+            local bp = part:FindFirstChild("BodyPosition") or Instance.new("BodyPosition", part)
+            bp.MaxForce = Vector3.new(1,1,1) * 100000; bp.P = 15000; bp.Position = targetPos.Position
+            local bg = part:FindFirstChild("BodyGyro") or Instance.new("BodyGyro", part)
+            bg.MaxTorque = Vector3.new(1,1,1) * 100000; bg.CFrame = targetPos
+        end
+    end
+    for p, _ in pairs(textPartsMap) do
+        if not usedThisFrame[p] then
+            p.Anchored = false
+            p.CanCollide = true
+            if p:FindFirstChild("BodyPosition") then p.BodyPosition:Destroy() end
+            if p:FindFirstChild("BodyGyro") then p.BodyGyro:Destroy() end
+            textPartsMap[p] = nil
+        end
+    end
+end)
+
+local buildMode = false
+local buildFrozen = false
+local buildData = {}
+local buildPartsMap = {}
+local gridRes = 10
+pages.build = createPage()
+btn(pages.main, "BUILDER MODE (3D)", function() showPage("build") end)
+
+local function isUsable(p)
+    if not p:IsA("BasePart") or p.Anchored then return false end
+    if p:FindFirstAncestorOfClass("Model") then
+        local m = p:FindFirstAncestorOfClass("Model")
+        if game.Players:GetPlayerFromCharacter(m) or m:FindFirstChildOfClass("Humanoid") then return false end
+    end
+    if p:IsDescendantOf(LP.Character) then return false end
+    return true
+end
+
+label(pages.build, "--- 3D GRID BUILDER ---")
+local canvasFrame = Instance.new("Frame", pages.build)
+canvasFrame.Size = UDim2.new(1, 0, 0, 280)
+canvasFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+canvasFrame.BorderSizePixel = 0
+local gridLayout = Instance.new("UIGridLayout", canvasFrame)
+gridLayout.CellSize = UDim2.new(1/gridRes, -2, 1/gridRes, -2)
+gridLayout.CellPadding = UDim2.new(0, 2, 0, 2)
+local gridCells = {}
+
+for y = 1, gridRes do
+    for x = 1, gridRes do
+        local cell = Instance.new("TextButton", canvasFrame)
+        cell.Text = ""
+        cell.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        cell.BorderSizePixel = 0
+        local key = x .. "_" .. y
+        cell.MouseButton1Click:Connect(function()
+            if buildData[key] then
+                buildData[key] = nil
+                cell.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+            else
+                buildData[key] = true
+                cell.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+            end
+        end)
+        gridCells[key] = cell
+    end
+end
+
+local btnToggle = btn(pages.build, "BUILD MODE: OFF", function(b)
+    buildMode = not buildMode
+    b.Text = "BUILD MODE: " .. (buildMode and "ON" or "OFF")
+    b.BackgroundColor3 = buildMode and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
+    if not buildMode then
+        buildFrozen = false
+        for p, _ in pairs(buildPartsMap) do
+            p.Anchored = false
+            if p:FindFirstChild("BodyPosition") then p.BodyPosition:Destroy() end
+            if p:FindFirstChild("BodyGyro") then p.BodyGyro:Destroy() end
+        end
+        buildPartsMap = {}
+    end
+end)
+
+local btnFreeze = btn(pages.build, "FREEZE PICTURE: OFF", function(b)
+    if not buildMode then return end
+    buildFrozen = not buildFrozen
+    b.Text = "FREEZE PICTURE: " .. (buildFrozen and "ON" or "OFF")
+    b.BackgroundColor3 = buildFrozen and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(60, 60, 60)
+    for p, _ in pairs(buildPartsMap) do
+        p.Anchored = buildFrozen
+        if buildFrozen then
+            if p:FindFirstChild("BodyPosition") then p.BodyPosition:Destroy() end
+            if p:FindFirstChild("BodyGyro") then p.BodyGyro:Destroy() end
+        end
+    end
+end)
+
+btn(pages.build, "CLEAR ALL BLOCKS", function()
+    buildData = {}
+    for _, cell in pairs(gridCells) do cell.BackgroundColor3 = Color3.fromRGB(45, 45, 45) end
+end)
+btn(pages.build, "BACK TO MAIN", function() showPage("main") end)
+
+RunService.Heartbeat:Connect(function()
+    if not buildMode or buildFrozen then return end
+    if not LP.Character or not LP.Character.PrimaryPart then return end
+    local root = LP.Character.PrimaryPart
+    local basePos = root.Position
+    local baseCFrame = CFrame.new(basePos) * (root.CFrame - basePos)
+    local available = {}
+    for _, p in ipairs(workspace:GetPartBoundsInRadius(root.Position, 100)) do
+        if isUsable(p) and not buildPartsMap[p] then table.insert(available, p) end
+    end
+    local activePoints = {}
+    for key, _ in pairs(buildData) do
+        local coords = string.split(key, "_")
+        table.insert(activePoints, {x = tonumber(coords[1]), y = tonumber(coords[2]), key = key})
+    end
+    local usedThisFrame = {}
+    for _, pt in ipairs(activePoints) do
+        local part = nil
+        for p, k in pairs(buildPartsMap) do if k == pt.key then part = p break end end
+        if not part and #available > 0 then
+            part = table.remove(available, 1)
+            buildPartsMap[part] = pt.key
+        end
+        if part and part.Parent then
+            usedThisFrame[part] = true
+            local gap = (part.Size.X + part.Size.Y + part.Size.Z) / 3 * 1.4
+            local offsetX = (pt.x - (gridRes/2)) * gap
+            local offsetY = ((gridRes/2) - pt.y) * gap
+            local targetPos = baseCFrame * CFrame.new(offsetX, offsetY, -6)
+            pcall(function() part:SetNetworkOwner(LP) end)
+            part.CanCollide = false
+            part.Anchored = false
+            local bp = part:FindFirstChild("BodyPosition") or Instance.new("BodyPosition", part)
+            bp.MaxForce = Vector3.new(1,1,1) * 500000; bp.P = 30000; bp.Position = targetPos.Position
+            local bg = part:FindFirstChild("BodyGyro") or Instance.new("BodyGyro", part)
+            bg.MaxTorque = Vector3.new(1,1,1) * 500000; bg.CFrame = targetPos
+        end
+    end
+    for p, key in pairs(buildPartsMap) do
+        if not usedThisFrame[p] then
+            if p:FindFirstChild("BodyPosition") then p.BodyPosition:Destroy() end
+            if p:FindFirstChild("BodyGyro") then p.BodyGyro:Destroy() end
+            p.CanCollide = true
+            buildPartsMap[p] = nil
+        end
+    end
+end)
+
+local carModeEnabled = false
+local frozenCarOffsets = {}
+local isDriving = false
+local currentCarPart = nil
+local carBV = nil
+local carBG = nil
+local speed = 50
+local turnSpeed = 3
+local moveState = {forward = 0, side = 0, up = 0}
+
+local carGui = Instance.new("ScreenGui")
+carGui.Name = "RealCarUI_FE"
+carGui.ResetOnSpawn = false
+carGui.Enabled = false
+pcall(function() carGui.Parent = game:GetService("CoreGui") end)
+
+local function createPedal(parent, text, position, size, color)
+    local btn = Instance.new("TextButton", parent)
+    btn.Text = text; btn.Position = position; btn.Size = size
+    btn.BackgroundColor3 = color or Color3.fromRGB(20, 20, 20)
+    btn.BackgroundTransparency = 0.2; btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.GothamBold; btn.TextSize = 18
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+    local stroke = Instance.new("UIStroke", btn)
+    stroke.Color = Color3.fromRGB(200, 200, 200); stroke.Thickness = 2
+    return btn
+end
+
+local leftZone = Instance.new("Frame", carGui)
+leftZone.Size = UDim2.fromOffset(250, 150); leftZone.Position = UDim2.new(0, 20, 1, -180)
+leftZone.BackgroundTransparency = 1
+local btnLeft = createPedal(leftZone, "<", UDim2.new(0, 0, 0.3, 0), UDim2.new(0, 80, 0, 80))
+local btnRight = createPedal(leftZone, ">", UDim2.new(0, 100, 0.3, 0), UDim2.new(0, 80, 0, 80))
+
+local rightZone = Instance.new("Frame", carGui)
+rightZone.Size = UDim2.fromOffset(250, 250); rightZone.Position = UDim2.new(1, -270, 1, -280)
+rightZone.BackgroundTransparency = 1
+local btnGas = createPedal(rightZone, "GAS", UDim2.new(0.5, 0, 0.3, 0), UDim2.new(0, 70, 0, 120), Color3.fromRGB(0, 100, 0))
+local btnBrake = createPedal(rightZone, "BRAKE", UDim2.new(0.1, 0, 0.5, 0), UDim2.new(0, 80, 0, 60), Color3.fromRGB(100, 0, 0))
+local btnRise = createPedal(rightZone, "RISE", UDim2.new(0.1, 0, 0, 0), UDim2.new(0, 60, 0, 40), Color3.fromRGB(0, 150, 255))
+local btnSink = createPedal(rightZone, "SINK", UDim2.new(0.6, 0, 0, 0), UDim2.new(0, 60, 0, 40), Color3.fromRGB(0, 150, 255))
+
+local btnExit = createPedal(carGui, "EXIT CAR", UDim2.new(0.5, -60, 0.85, 0), UDim2.new(0, 120, 0, 40), Color3.fromRGB(200, 50, 50))
+
+local speedControlFrame = Instance.new("Frame", carGui)
+speedControlFrame.Size = UDim2.fromOffset(160, 60); speedControlFrame.Position = UDim2.new(0.5, -80, 0.76, 0)
+speedControlFrame.BackgroundTransparency = 1
+
+local speedDisplay = Instance.new("TextLabel", speedControlFrame)
+speedDisplay.Size = UDim2.new(1, 0, 0.4, 0); speedDisplay.BackgroundTransparency = 1
+speedDisplay.Text = "SPEED: " .. speed; speedDisplay.TextColor3 = Color3.fromRGB(255, 255, 0)
+speedDisplay.Font = Enum.Font.GothamBlack; speedDisplay.TextSize = 16
+
+local btnSpeedDown = createPedal(speedControlFrame, "-", UDim2.new(0.1, 0, 0.5, 0), UDim2.new(0.35, 0, 0, 30), Color3.fromRGB(60, 60, 60))
+local btnSpeedUp = createPedal(speedControlFrame, "+", UDim2.new(0.55, 0, 0.5, 0), UDim2.new(0.35, 0, 0, 30), Color3.fromRGB(60, 60, 60))
+btnSpeedDown.MouseButton1Click:Connect(function() speed = math.max(2, speed - 2); speedDisplay.Text = "SPEED: " .. speed end)
+btnSpeedUp.MouseButton1Click:Connect(function() speed = speed + 2; speedDisplay.Text = "SPEED: " .. speed end)
+
+if pages and pages.main then
+    label(pages.main, "--- CAR MODE (FE FIX) ---")
+    btn(pages.main, "ENABLE CAR MODE: OFF", function(b)
+        carModeEnabled = not carModeEnabled
+        b.Text = "ENABLE CAR MODE: " .. (carModeEnabled and "ON" or "OFF")
+        b.BackgroundColor3 = carModeEnabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(70, 70, 70)
+        if not carModeEnabled and isDriving then stopDriving() end
+    end)
+end
+
+function stopDriving()
+    isDriving = false
+    carGui.Enabled = false
+    if carBV then carBV:Destroy() carBV = nil end
+    if carBG then carBG:Destroy() carBG = nil end
+    frozenCarOffsets = {}
+    if currentCarPart then currentCarPart = nil end
+    if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+        local hum = LP.Character:FindFirstChild("Humanoid")
+        if hum then hum.PlatformStand = false; hum.Sit = false end
+        LP.Character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
+    end
+end
+
+function startDriving(part)
+    if not part or not part:IsA("BasePart") or part.Anchored then return end
+    currentCarPart = part; isDriving = true; carGui.Enabled = true
+    pcall(function() part:SetNetworkOwner(LP) end)
+    local char = LP.Character
+    if char and char:FindFirstChild("Humanoid") then char.Humanoid.PlatformStand = true end
+    carBV = Instance.new("BodyVelocity", part)
+    carBV.MaxForce = Vector3.new(1e6, 1e6, 1e6); carBV.Velocity = Vector3.new(0, 0, 0)
+    carBG = Instance.new("BodyGyro", part)
+    carBG.MaxTorque = Vector3.new(1e6, 1e6, 1e6); carBG.P = 10000; carBG.CFrame = part.CFrame
+    frozenCarOffsets = {}
+    for p in pairs(frozen) do
+        if p ~= part and p and p.Parent then frozenCarOffsets[p] = part.CFrame:ToObjectSpace(p.CFrame) end
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        if carModeEnabled and not isDriving then
+            local mousePos = UserInputService:GetMouseLocation()
+            local ray = Cam:ViewportPointToRay(mousePos.X, mousePos.Y)
+            local res = workspace:Raycast(ray.Origin, ray.Direction * 1000)
+            if res and res.Instance then
+                local p = res.Instance
+                local model = p:FindFirstAncestorOfClass("Model")
+                if not (model and model:FindFirstChild("Humanoid")) then startDriving(p) end
+            end
+        end
+    end
+end)
+
+local function linkBtn(btn, axis, val)
+    btn.MouseButton1Down:Connect(function() moveState[axis] = val end)
+    btn.MouseButton1Up:Connect(function() moveState[axis] = 0 end)
+    btn.MouseLeave:Connect(function() moveState[axis] = 0 end)
+end
+linkBtn(btnGas, "forward", 1)
+linkBtn(btnBrake, "forward", -1)
+linkBtn(btnLeft, "side", 1)
+linkBtn(btnRight, "side", -1)
+linkBtn(btnRise, "up", 1)
+linkBtn(btnSink, "up", -1)
+btnExit.MouseButton1Click:Connect(stopDriving)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp or not isDriving then return end
+    if input.KeyCode == Enum.KeyCode.W then moveState.forward = 1
+    elseif input.KeyCode == Enum.KeyCode.S then moveState.forward = -1
+    elseif input.KeyCode == Enum.KeyCode.A then moveState.side = 1
+    elseif input.KeyCode == Enum.KeyCode.D then moveState.side = -1
+    elseif input.KeyCode == Enum.KeyCode.E then moveState.up = 1
+    elseif input.KeyCode == Enum.KeyCode.Q then moveState.up = -1
+    elseif input.KeyCode == Enum.KeyCode.X then stopDriving() end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if not isDriving then return end
+    if input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.S then moveState.forward = 0
+    elseif input.KeyCode == Enum.KeyCode.A or input.KeyCode == Enum.KeyCode.D then moveState.side = 0
+    elseif input.KeyCode == Enum.KeyCode.E or input.KeyCode == Enum.KeyCode.Q then moveState.up = 0 end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if isDriving and currentCarPart and currentCarPart.Parent then
+        if not carBV or not carBG then return end
+        if moveState.side ~= 0 then carBG.CFrame = carBG.CFrame * CFrame.Angles(0, math.rad(moveState.side * turnSpeed), 0) end
+        local fwd = carBG.CFrame.LookVector * (moveState.forward * speed)
+        local up = Vector3.new(0, moveState.up * (speed * 0.8), 0)
+        carBV.Velocity = fwd + up
+        if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+            local root = LP.Character.HumanoidRootPart
+            local targetCFrame = currentCarPart.CFrame * CFrame.new(0, currentCarPart.Size.Y/2 + 3, 0)
+            root.CFrame = targetCFrame; root.Velocity = Vector3.new(0,0,0); root.RotVelocity = Vector3.new(0,0,0)
+        end
+        pcall(function() currentCarPart:SetNetworkOwner(LP) end)
+        for p, offset in pairs(frozenCarOffsets) do
+            if p and p.Parent then
+                local targetCF = currentCarPart.CFrame * offset
+                local bp = p:FindFirstChildOfClass("BodyPosition")
+                local bg = p:FindFirstChildOfClass("BodyGyro")
+                if bp and bg then bp.Position = targetCF.Position; bg.CFrame = targetCF else pcall(function() p.CFrame = targetCF end) end
+            else
+                frozenCarOffsets[p] = nil
+            end
+        end
+    elseif isDriving and (not currentCarPart or not currentCarPart.Parent) then
+        stopDriving()
+    end
+end)
+
+-- โค้ดแก้บัค Highlight ไม่แสดงผล 
+task.spawn(function()
+    if targetHL then
+        targetHL.Parent = workspace.CurrentCamera
+    end
+
+    setHighlight = function(p, state)
+        if state then
+            if not highlights[p] and isValidPart(p) then
+                local hl = Instance.new("Highlight")
+                hl.Adornee = p
+                hl.Parent = workspace.CurrentCamera 
+                hl.FillTransparency = 0.4
+                hl.OutlineColor = Color3.fromRGB(255, 255, 0)
+                highlights[p] = hl
+            end
+        else
+            if highlights[p] then 
+                highlights[p]:Destroy() 
+                highlights[p] = nil 
+            end
+        end
+    end
+
+    for part, hl in pairs(highlights) do
+        if hl then
+            hl.Parent = workspace.CurrentCamera
+        end
+    end
+end)
+
+-- ให้รันทันทีเมื่อ Execute
+giveTelekinesisTool()
+-- ══════════════════════════════════════════════════════════════
+--  GLOBAL CHAT v6.0 + ADMIN PANEL v4.0 (ADDON)
+--  วิธีใช้: นำโค้ดนี้ไปวางต่อท้ายสคริปต์หลักได้เลย
+-- ══════════════════════════════════════════════════════════════
+do
+    local HttpService2    = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local FIREBASE   = "https://global-chat-445de-default-rtdb.firebaseio.com"
+    local POLL_INT   = 2
+    local SPAM_COOL  = 2
+    local GlobalOwners = {
+        ["fteywa3"]   = true,
+        ["EmilyC522"] = true,
+        ["Dog_arm5"]  = true,
+        ["zacfr"]     = true,
+    }
+    local GOLD     = "#FFD700"
+    local OWNER_BG = Color3.fromRGB(50, 44, 18)
+
+    if not pages.chat then pages.chat = createPage() end
+    local chatPage = pages.chat
+    
+    label(pages.main, "--- GLOBAL CHAT ---")
+    local chatOpenBtn = btn(pages.main, "🌐 GLOBAL CHAT v6.0", function()
+        showPage("chat")
+    end)
+    chatOpenBtn.BackgroundColor3 = Color3.fromRGB(30, 60, 130)
+    chatOpenBtn.Font = Enum.Font.GothamBold
+
+    local chatTitle = Instance.new("TextLabel", chatPage)
+    chatTitle.Size               = UDim2.new(1, 0, 0, 22)
+    chatTitle.BackgroundColor3   = Color3.fromRGB(20, 30, 60)
+    chatTitle.Text               = "🌐  GLOBAL CHAT  v6.0"
+    chatTitle.Font               = Enum.Font.GothamBold
+    chatTitle.TextSize           = 13
+    chatTitle.TextColor3         = Color3.fromRGB(160, 180, 255)
+    chatTitle.BorderSizePixel    = 0
+    Instance.new("UICorner", chatTitle).CornerRadius = UDim.new(0, 6)
+
+    local scrollBg = Instance.new("Frame", chatPage)
+    scrollBg.Size             = UDim2.new(1, 0, 0, 180)
+    scrollBg.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+    scrollBg.BorderSizePixel  = 0
+    Instance.new("UICorner", scrollBg).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", scrollBg).Color = Color3.fromRGB(50, 50, 90)
+
+    local scroll = Instance.new("ScrollingFrame", scrollBg)
+    scroll.Size                  = UDim2.new(1, -4, 1, -4)
+    scroll.Position              = UDim2.new(0, 2, 0, 2)
+    scroll.BackgroundTransparency= 1
+    scroll.BorderSizePixel       = 0
+    scroll.ScrollBarThickness    = 3
+    scroll.ScrollBarImageColor3  = Color3.fromRGB(80, 80, 180)
+    scroll.AutomaticCanvasSize   = Enum.AutomaticSize.Y
+    scroll.CanvasSize            = UDim2.new(0,0,0,0)
+
+    local msgLayout = Instance.new("UIListLayout", scroll)
+    msgLayout.Padding   = UDim.new(0, 3)
+    msgLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    local msgPad = Instance.new("UIPadding", scroll)
+    msgPad.PaddingLeft   = UDim.new(0, 3)
+    msgPad.PaddingRight  = UDim.new(0, 3)
+    msgPad.PaddingTop    = UDim.new(0, 3)
+    msgPad.PaddingBottom = UDim.new(0, 3)
+
+    local inputBg = Instance.new("Frame", chatPage)
+    inputBg.Size             = UDim2.new(1, 0, 0, 30)
+    inputBg.BackgroundColor3 = Color3.fromRGB(28, 28, 44)
+    inputBg.BorderSizePixel  = 0
+    Instance.new("UICorner", inputBg).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", inputBg).Color = Color3.fromRGB(60, 60, 110)
+
+    local input = Instance.new("TextBox", inputBg)
+    input.Size               = UDim2.new(1, -70, 1, -6)
+    input.Position           = UDim2.new(0, 8, 0, 3)
+    input.BackgroundTransparency = 1
+    input.PlaceholderText    = "Chat Here"
+    input.PlaceholderColor3  = Color3.fromRGB(100, 100, 130)
+    input.Text               = ""
+    input.Font               = Enum.Font.Gotham
+    input.TextSize           = 12
+    input.TextColor3         = Color3.new(1,1,1)
+    input.ClearTextOnFocus   = false
+
+    local sendBtn2 = Instance.new("TextButton", inputBg)
+    sendBtn2.Size             = UDim2.fromOffset(56, 22)
+    sendBtn2.Position         = UDim2.new(1, -60, 0.5, -11)
+    sendBtn2.BackgroundColor3 = Color3.fromRGB(50, 80, 200)
+    sendBtn2.Text             = "SEND"
+    sendBtn2.Font             = Enum.Font.GothamBold
+    sendBtn2.TextSize         = 11
+    sendBtn2.TextColor3       = Color3.new(1,1,1)
+    sendBtn2.BorderSizePixel  = 0
+    Instance.new("UICorner", sendBtn2).CornerRadius = UDim.new(0, 6)
+
+    local qFrame = Instance.new("Frame", chatPage)
+    qFrame.Size             = UDim2.new(1, 0, 0, 24)
+    qFrame.BackgroundTransparency = 1
+    local qLayout = Instance.new("UIListLayout", qFrame)
+    qLayout.FillDirection = Enum.FillDirection.Horizontal
+    qLayout.Padding       = UDim.new(0, 4)
+
+    local PHRASES = {"Hello! 👋", "Nice!", "Ez 😎", "GG!", "Bruh 💀"}
+    for _, phrase in ipairs(PHRASES) do
+        local b = Instance.new("TextButton", qFrame)
+        b.Size             = UDim2.new(0, 56, 1, 0)
+        b.BackgroundColor3 = Color3.fromRGB(30, 30, 52)
+        b.Text             = phrase
+        b.Font             = Enum.Font.Gotham
+        b.TextSize         = 9
+        b.TextColor3       = Color3.fromRGB(160, 160, 255)
+        b.BorderSizePixel  = 0
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+        b.MouseButton1Click:Connect(function() input.Text = phrase end)
+    end
+
+    local statusLbl = Instance.new("TextLabel", chatPage)
+    statusLbl.Size               = UDim2.new(1, 0, 0, 14)
+    statusLbl.BackgroundTransparency = 1
+    statusLbl.Text               = "● Firebase connected"
+    statusLbl.Font               = Enum.Font.Gotham
+    statusLbl.TextSize           = 9
+    statusLbl.TextColor3         = Color3.fromRGB(70, 200, 90)
+    statusLbl.TextXAlignment     = Enum.TextXAlignment.Left
+
+    local bottomRow = Instance.new("Frame", chatPage)
+    bottomRow.Size             = UDim2.new(1, 0, 0, 26)
+    bottomRow.BackgroundTransparency = 1
+    local botLayout = Instance.new("UIListLayout", bottomRow)
+    botLayout.FillDirection = Enum.FillDirection.Horizontal
+    botLayout.Padding       = UDim.new(0, 5)
+
+    local function botBtn(txt, col)
+        local b = btn(bottomRow, txt, function() end)
+        b.Size             = UDim2.new(0.5, -2, 1, 0)
+        b.BackgroundColor3 = col
+        return b
+    end
+
+    local clearBtn2 = botBtn("🗑 CLEAR", Color3.fromRGB(130, 35, 35))
+    clearBtn2.MouseButton1Click:Connect(function()
+        for _, v in ipairs(scroll:GetChildren()) do
+            if v:IsA("Frame") then v:Destroy() end
+        end
+    end)
+
+    local backBtn = botBtn("◀ BACK", Color3.fromRGB(50, 50, 50))
+    backBtn.MouseButton1Click:Connect(function() showPage("main") end)
+
+    local msgCount = 0
+    local cache    = {}
+
+    local function addChatMsg(user, text, jobId, placeId)
+        msgCount += 1
+        local isOwner = GlobalOwners[user] == true
+
+        local f = Instance.new("Frame", scroll)
+        f.Size             = UDim2.new(1, 0, 0, 36)
+        f.BackgroundColor3 = isOwner and OWNER_BG or Color3.fromRGB(22, 22, 34)
+        f.BorderSizePixel  = 0
+        f.LayoutOrder = msgCount
+        Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+
+        if isOwner then
+            local accent = Instance.new("Frame", f)
+            accent.Size             = UDim2.new(0, 3, 1, -6)
+            accent.Position         = UDim2.new(0, 0, 0, 3)
+            accent.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+            accent.BorderSizePixel  = 0
+            Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 3)
+        end
+
+        local t = Instance.new("TextLabel", f)
+        t.Size               = UDim2.new(1, jobId and -54 or -10, 1, 0)
+        t.Position           = UDim2.new(0, isOwner and 8 or 6, 0, 0)
+        t.BackgroundTransparency = 1
+        t.RichText           = true
+        t.TextWrapped        = true
+        t.TextColor3         = Color3.new(1,1,1)
+        t.TextXAlignment     = Enum.TextXAlignment.Left
+        t.TextYAlignment     = Enum.TextYAlignment.Center
+        t.Font               = Enum.Font.GothamMedium
+        t.TextSize           = 11
+
+        local displayName
+        if isOwner then
+            displayName = string.format("<b><font color='%s'>👑[OWNER] %s</font></b>", GOLD, user)
+        else
+            displayName = string.format("<b><font color='#9999FF'>%s</font></b>", user)
+        end
+        t.Text = displayName .. "<font color='#CCCCCC'>: " .. text .. "</font>"
+
+        if jobId and jobId ~= "" and jobId ~= game.JobId then
+            local j = Instance.new("TextButton", f)
+            j.Size             = UDim2.fromOffset(42, 20)
+            j.Position         = UDim2.new(1, -46, 0.5, -10)
+            j.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+            j.Text             = "JOIN"
+            j.Font             = Enum.Font.GothamBold
+            j.TextSize         = 10
+            j.TextColor3       = Color3.new(1,1,1)
+            j.BorderSizePixel  = 0
+            Instance.new("UICorner", j).CornerRadius = UDim.new(0, 5)
+            j.MouseButton1Click:Connect(function()
+                j.Text = "..."
+                j.BackgroundColor3 = Color3.fromRGB(80,80,80)
+                pcall(function() game:GetService("CoreGui").RobloxPromptGui.promptOverlay.Visible = false end)
+                local pid2 = tonumber(placeId)
+                local targetPlace = (pid2 and pid2 > 0) and pid2 or game.PlaceId
+                if GlobalOwners[LP.Name] then
+                    task.spawn(function() pcall(function()
+                        fbReq("PUT", "/join_notify/" .. user, {owner=LP.Name, ts=os.time()})
+                    end) end)
+                end
+                TeleportService:TeleportToPlaceInstance(targetPlace, jobId, LP)
+                task.wait(0.5)
+                pcall(function()
+                    if game:GetService("CoreGui").RobloxPromptGui.promptOverlay:WaitForChild("ErrorPrompt", 2) then
+                        game:GetService("GuiService"):ClearError()
+                        j.Text = "FAIL"
+                        j.BackgroundColor3 = Color3.fromRGB(180,30,30)
+                        task.wait(2)
+                        j.Text = "JOIN"
+                        j.BackgroundColor3 = Color3.fromRGB(0,150,80)
+                    end
+                end)
+            end)
+        end
+
+        task.defer(function()
+            scroll.CanvasPosition = Vector2.new(0, scroll.AbsoluteCanvasSize.Y + 9999)
+        end)
+    end
+
+    function fbReq(method, path, data)
+        local req = (syn and syn.request) or (http and http.request) or request or http_request
+        if not req then
+            statusLbl.Text = "✕ HTTP not supported"
+            statusLbl.TextColor3 = Color3.fromRGB(220, 60, 60)
+            return nil
+        end
+        local ok, res = pcall(function()
+            return req({
+                Url = FIREBASE .. path .. ".json",
+                Method = method,
+                Headers = {["Content-Type"] = "application/json"},
+                Body = data and HttpService2:JSONEncode(data) or nil
+            })
+        end)
+        if not ok or not res then return nil end
+        local dok, decoded = pcall(HttpService2.JSONDecode, HttpService2, res.Body)
+        return dok and decoded or nil
+    end
+
+    local BANNED_WORDS = {
+        "fuck", "shit", "bitch", "asshole", "bastard", "cunt", "damn", "ass",
+        "dick", "cock", "pussy", "whore", "slut", "nigger", "nigga", "faggot",
+        "retard", "idiot", "moron", "stupid",
+        "ไอสัตว์", "ไอเหี้ย", "ควาย", "สัตว์", "เหี้ย", "หน้าหี", "หน้าสัด",
+        "เย็ด", "สาด", "ไอ้สัด", "แม่ง", "ชิบหาย", "อีดอก", "อีสัตว์"
+    }
+
+    local function containsBannedWord(text)
+        local lower = text:lower()
+        for _, word in ipairs(BANNED_WORDS) do
+            if lower:find(word, 1, true) then return true, word end
+        end
+        return false, nil
+    end
+
+    local MUTE_DURATION = 30 * 60
+    local WARNING_MESSAGES = {
+        [1] = "⚠️ Warning 1/3 — Stop! Don't use offensive language.",
+        [2] = "⚠️ Warning 2/3 — Stop! Last warning before mute.",
+        [3] = "🔇 Warning 3/3 — Alr, you're muted for 30 minutes."
+    }
+
+    local function isMuted(name)
+        local data = fbReq("GET", "/warnings/" .. name)
+        if not data then return false end
+        if data.muted_until then
+            if os.time() < data.muted_until then
+                return true, data.muted_until
+            else
+                fbReq("DELETE", "/warnings/" .. name, nil)
+                return false
+            end
+        end
+        return false
+    end
+
+    local function addWarning(name)
+        local data = fbReq("GET", "/warnings/" .. name)
+        local count = 0
+        if data then count = data.count or 0 end
+        count = count + 1
+        if count >= 3 then
+            fbReq("PUT", "/warnings/" .. name, {
+                count = count, muted_until = os.time() + MUTE_DURATION, muted_by = "system"
+            })
+            return count, true
+        else
+            fbReq("PUT", "/warnings/" .. name, { count = count })
+            return count, false
+        end
+    end
+
+    local lastSentMsg = ""
+    local lastSentAt = 0
+
+    local function setStatus(msg, col, resetSec)
+        statusLbl.Text = msg
+        statusLbl.TextColor3 = col
+        if resetSec then
+            task.delay(resetSec, function()
+                statusLbl.Text = "● Firebase connected"
+                statusLbl.TextColor3 = Color3.fromRGB(70, 200, 90)
+            end)
+        end
+    end
+
+    local function trySend()
+        local msg = input.Text:match("^%s*(.-)%s*$")
+        if msg == "" then return end
+
+        task.spawn(function()
+            local muted, muteUntil = isMuted(LP.Name)
+            if muted then
+                local remaining = math.ceil((muteUntil - os.time()) / 60)
+                setStatus("🔇 You are muted for " .. remaining .. " more min.", Color3.fromRGB(220, 60, 60), 4)
+                input.Text = ""
+                return
+            end
+
+            local hasBad, _ = containsBannedWord(msg)
+            if hasBad then
+                local count, muted2 = addWarning(LP.Name)
+                local warnMsg = WARNING_MESSAGES[math.min(count, 3)]
+                setStatus(warnMsg, Color3.fromRGB(255, 80, 80), 5)
+                input.Text = ""
+                if muted2 then return end
+                return
+            end
+
+            if msg == lastSentMsg then
+                setStatus("⚠ Duplicate message!", Color3.fromRGB(255, 180, 0), 2)
+                return
+            end
+            if (os.clock() - lastSentAt) < SPAM_COOL then
+                setStatus("⚠ Wait " .. SPAM_COOL .. "s before sending again", Color3.fromRGB(255, 180, 0), 2)
+                return
+            end
+            lastSentMsg = msg
+            lastSentAt = os.clock()
+            input.Text = ""
+
+            fbReq("POST", "/global", {
+                u = LP.Name,
+                t = msg,
+                job = game.JobId,
+                placeid = game.PlaceId,
+                ts = os.time()
+            })
+        end)
+    end
+
+    sendBtn2.MouseButton1Click:Connect(trySend)
+    input.FocusLost:Connect(function(enter) if enter then trySend() end end)
+
+    task.spawn(function()
+        while task.wait(POLL_INT) do
+            if pages.chat and pages.chat.Visible then
+                local data = fbReq("GET", "/global")
+                if data then
+                    local sorted = {}
+                    for id, msg in pairs(data) do
+                        if not cache[id] then
+                            table.insert(sorted, {id = id, msg = msg})
+                        end
+                    end
+                    table.sort(sorted, function(a, b)
+                        return (a.msg.ts or 0) < (b.msg.ts or 0)
+                    end)
+                    for _, entry in ipairs(sorted) do
+                        cache[entry.id] = true
+                        addChatMsg(entry.msg.u or "?", entry.msg.t or "", entry.msg.job, entry.msg.placeid)
+                    end
+                end
+            end
+        end
+    end)
+
+    -- ADMIN PANEL
+    local _adminIsOwner = GlobalOwners[LP.Name] == true
+    local _StarterGui = game:GetService("StarterGui")
+
+    task.spawn(function()
+        while task.wait(5) do
+            pcall(function()
+                fbReq("PUT", "/runners/" .. LP.Name, {
+                    name = LP.Name, job = game.JobId,
+                    placeid = game.PlaceId, ts = os.time()
+                })
+            end)
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(5) do
+            pcall(function()
+                local r = fbReq("GET", "/bring_request/" .. LP.Name)
+                if r and r.job and r.job ~= "" and os.time()-(r.ts or 0) < 30 then
+                    fbReq("DELETE", "/bring_request/" .. LP.Name, nil)
+                    if r.job ~= game.JobId then
+                        TeleportService:TeleportToPlaceInstance(r.placeid or game.PlaceId, r.job, LP)
+                    end
+                end
+            end)
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(5) do
+            pcall(function()
+                local r = fbReq("GET", "/kick_request/" .. LP.Name)
+                if r and r.from and os.time()-(r.ts or 0) < 30 then
+                    fbReq("DELETE", "/kick_request/" .. LP.Name, nil)
+                    TeleportService:Teleport(game.PlaceId, LP)
+                end
+            end)
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(3) do
+            pcall(function()
+                local r = fbReq("GET", "/bring_here/" .. LP.Name)
+                if r and r.from and os.time()-(r.ts or 0) < 15 then
+                    fbReq("DELETE", "/bring_here/" .. LP.Name, nil)
+                    if r.job == game.JobId then
+                        local op = Players:FindFirstChild(r.from)
+                        if op and op.Character and op.Character:FindFirstChild("HumanoidRootPart") then
+                            local cf = op.Character.HumanoidRootPart.CFrame
+                            if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+                                LP.Character.HumanoidRootPart.CFrame = cf * CFrame.new(0,0,-3)
+                            end
+                        end
+                    else
+                        TeleportService:TeleportToPlaceInstance(r.placeid or game.PlaceId, r.job, LP)
+                    end
+                end
+            end)
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(3) do
+            pcall(function()
+                local r = fbReq("GET", "/kill_request/" .. LP.Name)
+                if r and r.from and os.time()-(r.ts or 0) < 15 then
+                    fbReq("DELETE", "/kill_request/" .. LP.Name, nil)
+                    if LP.Character then
+                        local h = LP.Character:FindFirstChildOfClass("Humanoid")
+                        if h then h.Health = 0 end
+                    end
+                end
+            end)
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(4) do
+            pcall(function()
+                local d = fbReq("GET", "/join_notify/" .. LP.Name)
+                if d and d.owner and os.time()-(d.ts or 0) < 15 then
+                    fbReq("DELETE", "/join_notify/" .. LP.Name, nil)
+                    pcall(function()
+                        _StarterGui:SetCore("SendNotification",{
+                            Title="👑 Owner Joined",
+                            Text=d.owner.." has joined your server!",
+                            Duration=8,
+                        })
+                    end)
+                end
+            end)
+        end
+    end)
+
+    local function createChatUI(withName)
+        local old = game:GetService("CoreGui"):FindFirstChild("ChatUI_"..withName) or LP.PlayerGui:FindFirstChild("ChatUI_"..withName)
+        if old then old:Destroy() end
+
+        local cache2, mc = {}, 0
+        local names = {LP.Name, withName}; table.sort(names)
+        local roomId = names[1].."_"..names[2]
+
+        local cg = Instance.new("ScreenGui")
+        cg.ResetOnSpawn=false; cg.Name="ChatUI_"..withName
+        pcall(function() cg.Parent=game:GetService("CoreGui") end)
+        if cg.Parent~=game:GetService("CoreGui") then cg.Parent=LP.PlayerGui end
+
+        local cf=Instance.new("Frame",cg)
+        cf.Size=UDim2.fromOffset(260,310); cf.Position=UDim2.new(0.75,0,0.25,0)
+        cf.BackgroundColor3=Color3.fromRGB(14,14,22); cf.Active=true; cf.Draggable=true; cf.BorderSizePixel=0
+        Instance.new("UICorner",cf).CornerRadius=UDim.new(0,10)
+        Instance.new("UIStroke",cf).Color=Color3.fromRGB(60,60,120)
+
+        local hdr=Instance.new("Frame",cf)
+        hdr.Size=UDim2.new(1,0,0,30); hdr.BackgroundColor3=Color3.fromRGB(20,20,40); hdr.BorderSizePixel=0
+        Instance.new("UICorner",hdr).CornerRadius=UDim.new(0,10)
+
+        local ttl=Instance.new("TextLabel",hdr)
+        ttl.Size=UDim2.new(1,-34,1,0); ttl.Position=UDim2.new(0,8,0,0)
+        ttl.BackgroundTransparency=1; ttl.Text="💬 "..withName
+        ttl.Font=Enum.Font.GothamBold; ttl.TextSize=12
+        ttl.TextColor3=Color3.fromRGB(160,180,255); ttl.TextXAlignment=Enum.TextXAlignment.Left
+
+        local xBtn=Instance.new("TextButton",hdr)
+        xBtn.Size=UDim2.fromOffset(24,24); xBtn.Position=UDim2.new(1,-28,0.5,-12)
+        xBtn.BackgroundColor3=Color3.fromRGB(180,40,40); xBtn.Text="X"
+        xBtn.Font=Enum.Font.GothamBold; xBtn.TextSize=11; xBtn.TextColor3=Color3.new(1,1,1); xBtn.BorderSizePixel=0
+        Instance.new("UICorner",xBtn).CornerRadius=UDim.new(0,5)
+        xBtn.MouseButton1Click:Connect(function() cg:Destroy() end)
+
+        local sbg=Instance.new("Frame",cf)
+        sbg.Size=UDim2.new(1,-10,0,210); sbg.Position=UDim2.new(0,5,0,35)
+        sbg.BackgroundColor3=Color3.fromRGB(10,10,18); sbg.BorderSizePixel=0
+        Instance.new("UICorner",sbg).CornerRadius=UDim.new(0,6)
+
+        local scr=Instance.new("ScrollingFrame",sbg)
+        scr.Size=UDim2.new(1,-4,1,-4); scr.Position=UDim2.new(0,2,0,2)
+        scr.BackgroundTransparency=1; scr.BorderSizePixel=0; scr.ScrollBarThickness=3
+        scr.AutomaticCanvasSize=Enum.AutomaticSize.Y; scr.CanvasSize=UDim2.new(0,0,0,0)
+        local lay=Instance.new("UIListLayout",scr)
+        lay.Padding=UDim.new(0,3); lay.SortOrder=Enum.SortOrder.LayoutOrder
+
+        local ibg=Instance.new("Frame",cf)
+        ibg.Size=UDim2.new(1,-10,0,28); ibg.Position=UDim2.new(0,5,0,252)
+        ibg.BackgroundColor3=Color3.fromRGB(25,25,45); ibg.BorderSizePixel=0
+        Instance.new("UICorner",ibg).CornerRadius=UDim.new(0,6)
+
+        local ibox=Instance.new("TextBox",ibg)
+        ibox.Size=UDim2.new(1,-60,1,-6); ibox.Position=UDim2.new(0,6,0,3)
+        ibox.BackgroundTransparency=1; ibox.PlaceholderText="Type here..."
+        ibox.PlaceholderColor3=Color3.fromRGB(80,80,100); ibox.Text=""
+        ibox.Font=Enum.Font.Gotham; ibox.TextSize=11; ibox.TextColor3=Color3.new(1,1,1); ibox.ClearTextOnFocus=false
+
+        local snd=Instance.new("TextButton",ibg)
+        snd.Size=UDim2.fromOffset(50,22); snd.Position=UDim2.new(1,-54,0.5,-11)
+        snd.BackgroundColor3=Color3.fromRGB(50,80,200); snd.Text="SEND"
+        snd.Font=Enum.Font.GothamBold; snd.TextSize=10; snd.TextColor3=Color3.new(1,1,1); snd.BorderSizePixel=0
+        Instance.new("UICorner",snd).CornerRadius=UDim.new(0,5)
+
+        local function addMsg(sender,text)
+            mc=mc+1
+            local isSelf=sender==LP.Name
+            local r=Instance.new("Frame",scr)
+            r.Size=UDim2.new(1,0,0,0); r.AutomaticSize=Enum.AutomaticSize.Y
+            r.BackgroundColor3=isSelf and Color3.fromRGB(30,40,80) or Color3.fromRGB(22,22,34)
+            r.BorderSizePixel=0; r.LayoutOrder=mc
+            Instance.new("UICorner",r).CornerRadius=UDim.new(0,5)
+            
+            local l=Instance.new("TextLabel",r)
+            l.Size=UDim2.new(1,-8,0,0); l.Position=UDim2.new(0,4,0,3)
+            l.AutomaticSize=Enum.AutomaticSize.Y; l.BackgroundTransparency=1
+            l.RichText=true; l.TextWrapped=true; l.TextXAlignment=Enum.TextXAlignment.Left
+            l.Font=Enum.Font.GothamMedium; l.TextSize=11; l.TextColor3=Color3.new(1,1,1)
+            l.Text=string.format("<b><font color='%s'>%s</font></b>: %s", isSelf and "#88AAFF" or "#FFD700",sender,text)
+            task.defer(function() scr.CanvasPosition=Vector2.new(0,scr.AbsoluteCanvasSize.Y+9999) end)
+        end
+
+        local function doSend()
+            local msg=ibox.Text:match("^%s*(.-)%s*$")
+            if msg=="" then return end
+            ibox.Text=""
+            addMsg(LP.Name,msg)
+            task.spawn(function() pcall(function()
+                fbReq("POST","/private_chat/"..roomId,{sender=LP.Name,text=msg,ts=os.time()})
+            end) end)
+        end
+
+        snd.MouseButton1Click:Connect(doSend)
+        ibox.FocusLost:Connect(function(e) if e then doSend() end end)
+
+        task.spawn(function()
+            while cg and cg.Parent do
+                task.wait(2)
+                pcall(function()
+                    local d=fbReq("GET","/private_chat/"..roomId)
+                    if not d then return end
+                    local s={}
+                    for id,m in pairs(d) do if not cache2[id] then table.insert(s,{id=id,msg=m}) end end
+                    table.sort(s,function(a,b) return (a.msg.ts or 0)<(b.msg.ts or 0) end)
+                    for _,e in ipairs(s) do
+                        cache2[e.id]=true
+                        if e.msg.sender~=LP.Name then addMsg(e.msg.sender or "?",e.msg.text or "") end
+                    end
+                end)
+            end
+        end)
+    end
+
+    task.spawn(function()
+        while task.wait(2) do
+            pcall(function()
+                local r=fbReq("GET","/chat_open/"..LP.Name)
+                if r and r.from and os.time()-(r.ts or 0)<20 then
+                    fbReq("DELETE","/chat_open/"..LP.Name,nil)
+                    createChatUI(r.from)
+                end
+            end)
+        end
+    end)
+
+    if _adminIsOwner then
+        task.spawn(function()
+            if not pages.admin then pages.admin = createPage() end
+
+            label(pages.main,"--- ADMIN PANEL ---")
+            local adminOpenBtn=btn(pages.main,"👑 ADMIN PANEL",function() showPage("admin") end)
+            adminOpenBtn.BackgroundColor3=Color3.fromRGB(10,18,15)
+            adminOpenBtn.Font=Enum.Font.GothamBold
+            Instance.new("UIStroke",adminOpenBtn).Color=Color3.fromRGB(0,195,145)
+
+            local adminTitle=Instance.new("Frame",pages.admin)
+            adminTitle.Size=UDim2.new(1,0,0,28)
+            adminTitle.BackgroundColor3=Color3.fromRGB(12,16,14)
+            adminTitle.BorderSizePixel=0
+            Instance.new("UICorner",adminTitle).CornerRadius=UDim.new(0,8)
+            Instance.new("UIStroke",adminTitle).Color=Color3.fromRGB(0,200,150)
+            
+            local adminTitleLbl=Instance.new("TextLabel",adminTitle)
+            adminTitleLbl.Size=UDim2.new(1,-10,1,0)
+            adminTitleLbl.Position=UDim2.new(0,10,0,0)
+            adminTitleLbl.BackgroundTransparency=1
+            adminTitleLbl.Text="  ADMIN PANEL"
+            adminTitleLbl.Font=Enum.Font.GothamBlack; adminTitleLbl.TextSize=12
+            adminTitleLbl.TextColor3=Color3.fromRGB(0,215,160); adminTitleLbl.BorderSizePixel=0
+            adminTitleLbl.TextXAlignment=Enum.TextXAlignment.Left
+
+            label(pages.admin,"🌐 All Runners (Any Server):")
+
+            local runnerScroll=Instance.new("ScrollingFrame",pages.admin)
+            runnerScroll.Size=UDim2.new(1,0,0,120)
+            runnerScroll.BackgroundColor3=Color3.fromRGB(8,10,12); runnerScroll.BorderSizePixel=0
+            runnerScroll.AutomaticCanvasSize=Enum.AutomaticSize.Y; runnerScroll.ScrollBarThickness=3
+            runnerScroll.ScrollBarImageColor3=Color3.fromRGB(0,200,150)
+            Instance.new("UICorner",runnerScroll).CornerRadius=UDim.new(0,8)
+            Instance.new("UIStroke",runnerScroll).Color=Color3.fromRGB(30,45,40)
+            
+            local rLayout=Instance.new("UIListLayout",runnerScroll)
+            rLayout.Padding=UDim.new(0,3); rLayout.SortOrder=Enum.SortOrder.LayoutOrder
+            
+            local rPad=Instance.new("UIPadding",runnerScroll)
+            rPad.PaddingLeft=UDim.new(0,4); rPad.PaddingRight=UDim.new(0,4); rPad.PaddingTop=UDim.new(0,4)
+
+            local function mkB(parent,txt,xp,col)
+                local b=Instance.new("TextButton",parent)
+                b.Size=UDim2.fromOffset(38,26); b.Position=UDim2.new(xp,0,0.5,-13)
+                b.BackgroundColor3=col; b.Text=txt; b.Font=Enum.Font.GothamBold
+                b.TextSize=9; b.TextColor3=Color3.new(1,1,1); b.BorderSizePixel=0
+                b.AutoButtonColor=false
+                Instance.new("UICorner",b).CornerRadius=UDim.new(0,7)
+                b.MouseButton1Down:Connect(function() b.BackgroundTransparency=0.35 end)
+                b.MouseButton1Up:Connect(function() b.BackgroundTransparency=0 end)
+                b.MouseLeave:Connect(function() b.BackgroundTransparency=0 end)
+                return b
+            end
+
+            local function addRunnerRow(runnerScroll2, runner)
+                local same=runner.job==game.JobId
+                local row=Instance.new("Frame",runnerScroll2)
+                row.Size=UDim2.new(1,0,0,40)
+                row.BackgroundColor3=same and Color3.fromRGB(8,22,16) or Color3.fromRGB(12,14,18)
+                row.BorderSizePixel=0
+                Instance.new("UICorner",row).CornerRadius=UDim.new(0,8)
+                local rowStroke=Instance.new("UIStroke",row)
+                rowStroke.Color=same and Color3.fromRGB(0,180,130) or Color3.fromRGB(40,50,60)
+                rowStroke.Thickness=1
+                
+                local dot=Instance.new("Frame",row)
+                dot.Size=UDim2.fromOffset(6,6); dot.Position=UDim2.new(0,6,0.5,-3)
+                dot.BackgroundColor3=same and Color3.fromRGB(0,220,140) or Color3.fromRGB(80,120,255)
+                dot.BorderSizePixel=0
+                Instance.new("UICorner",dot).CornerRadius=UDim.new(1,0)
+                
+                local nl=Instance.new("TextLabel",row)
+                nl.Size=UDim2.new(0.38,0,1,0); nl.Position=UDim2.new(0,16,0,0)
+                nl.BackgroundTransparency=1
+                nl.Text=runner.name..(runner.agefmt and " ["..runner.agefmt.."]" or "")
+                nl.Font=Enum.Font.GothamBold; nl.TextSize=9; nl.TextColor3=Color3.fromRGB(220,240,235)
+                nl.TextXAlignment=Enum.TextXAlignment.Left; nl.TextTruncate=Enum.TextTruncate.AtEnd
+                
+                if (runner.country and runner.country~="") or (runner.localtime and runner.localtime~="") then
+                    local infoLbl=Instance.new("TextLabel",row)
+                    infoLbl.Size=UDim2.new(0.93,0,0,12); infoLbl.Position=UDim2.new(0,5,1,-13)
+                    infoLbl.BackgroundTransparency=1; infoLbl.Text=(runner.country or "").." "..(runner.localtime or "")
+                    infoLbl.Font=Enum.Font.Gotham; infoLbl.TextSize=8; infoLbl.TextColor3=Color3.fromRGB(160,160,180)
+                    infoLbl.TextXAlignment=Enum.TextXAlignment.Left; infoLbl.TextTruncate=Enum.TextTruncate.AtEnd
+                    row.Size=UDim2.new(1,0,0,46)
+                end
+                
+                local jBtn=mkB(row,"JOIN",0.34,Color3.fromRGB(0,140,80))
+                jBtn.MouseButton1Click:Connect(function()
+                    if same then setStatus("Already in same server!",Color3.fromRGB(255,180,0),3) return end
+                    if runner.job=="" then setStatus("No JobID!",Color3.fromRGB(255,180,0),3) return end
+                    jBtn.Text="..."
+                    pcall(function() game:GetService("CoreGui").RobloxPromptGui.promptOverlay.Visible=false end)
+                    task.spawn(function() pcall(function() fbReq("PUT","/join_notify/"..runner.name,{owner=LP.Name,ts=os.time()}) end) end)
+                    local pid = tonumber(runner.placeid)
+                    TeleportService:TeleportToPlaceInstance((pid and pid > 0) and pid or game.PlaceId, runner.job, LP)
+                end)
+                
+                mkB(row,"BRING",0.48,Color3.fromRGB(30,80,200)).MouseButton1Click:Connect(function()
+                    task.spawn(function() pcall(function() fbReq("PUT","/bring_request/"..runner.name,{from=LP.Name,job=game.JobId,placeid=game.PlaceId,ts=os.time()}) end) end)
+                    setStatus("Bring sent to "..runner.name,Color3.fromRGB(100,200,255),3)
+                end)
+                
+                mkB(row,"KICK",0.62,Color3.fromRGB(180,30,30)).MouseButton1Click:Connect(function()
+                    task.spawn(function() pcall(function() fbReq("PUT","/kick_request/"..runner.name,{from=LP.Name,ts=os.time()}) end) end)
+                    setStatus("Kick sent to "..runner.name,Color3.fromRGB(255,100,100),3)
+                end)
+            end
+
+            local function refreshRunners()
+                for _,v in ipairs(runnerScroll:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
+                local data=fbReq("GET","/runners")
+                if not data then return end
+                local now=os.time(); local list={}
+                for name,info in pairs(data) do
+                    if (now-(info.ts or 0))>15 then
+                        task.spawn(function() pcall(function() fbReq("DELETE","/runners/"..name,nil) end) end)
+                    else
+                        table.insert(list,{name=info.name or name,job=info.job or "",placeid=info.placeid or "",ts=info.ts or 0,agefmt=info.agefmt or "",country=info.country or "",localtime=info.localtime or ""})
+                    end
+                end
+                table.sort(list,function(a,b) return a.ts>b.ts end)
+                for _,runner in ipairs(list) do addRunnerRow(runnerScroll, runner) end
+            end
+            btn(pages.admin,"🔄 REFRESH ALL RUNNERS",function() task.spawn(refreshRunners) end).BackgroundColor3=Color3.fromRGB(40,80,40)
+
+            label(pages.admin,"🟢 In This Server:")
+
+            local srvScroll=Instance.new("ScrollingFrame",pages.admin)
+            srvScroll.Size=UDim2.new(1,0,0,120); srvScroll.BackgroundColor3=Color3.fromRGB(8,10,12); srvScroll.BorderSizePixel=0
+            srvScroll.AutomaticCanvasSize=Enum.AutomaticSize.Y; srvScroll.ScrollBarThickness=3; srvScroll.ScrollBarImageColor3=Color3.fromRGB(0,200,150)
+            Instance.new("UICorner",srvScroll).CornerRadius=UDim.new(0,8)
+            Instance.new("UIStroke",srvScroll).Color=Color3.fromRGB(30,45,40)
+            local sLayout=Instance.new("UIListLayout",srvScroll)
+            sLayout.Padding=UDim.new(0,3); sLayout.SortOrder=Enum.SortOrder.LayoutOrder
+            local sPad=Instance.new("UIPadding",srvScroll)
+            sPad.PaddingLeft=UDim.new(0,4); sPad.PaddingRight=UDim.new(0,4); sPad.PaddingTop=UDim.new(0,4)
+
+            local function addSrvRow(srvScroll2, name, agefmt, country, localtime)
+                local row=Instance.new("Frame",srvScroll2)
+                row.Size=UDim2.new(1,0,0,36); row.BackgroundColor3=Color3.fromRGB(18,28,18); row.BorderSizePixel=0
+                Instance.new("UICorner",row).CornerRadius=UDim.new(0,5)
+                
+                local nl=Instance.new("TextLabel",row)
+                nl.Size=UDim2.new(0.3,0,1,0); nl.Position=UDim2.new(0,5,0,0)
+                nl.BackgroundTransparency=1; nl.Text="\xF0\x9F\x9F\xA2 "..name..(agefmt~="" and " ["..agefmt.."]" or "")
+                nl.Font=Enum.Font.GothamBold; nl.TextSize=9; nl.TextColor3=Color3.new(1,1,1)
+                nl.TextXAlignment=Enum.TextXAlignment.Left; nl.TextTruncate=Enum.TextTruncate.AtEnd
+                
+                if country~="" or localtime~="" then
+                    local infoLbl2=Instance.new("TextLabel",row)
+                    infoLbl2.Size=UDim2.new(0.93,0,0,12); infoLbl2.Position=UDim2.new(0,5,1,-13)
+                    infoLbl2.BackgroundTransparency=1; infoLbl2.Text=country.." "..localtime
+                    infoLbl2.Font=Enum.Font.Gotham; infoLbl2.TextSize=8; infoLbl2.TextColor3=Color3.fromRGB(160,160,180)
+                    infoLbl2.TextXAlignment=Enum.TextXAlignment.Left; infoLbl2.TextTruncate=Enum.TextTruncate.AtEnd
+                    row.Size=UDim2.new(1,0,0,48)
+                end
+                
+                mkB(row,"CHAT",0.31,Color3.fromRGB(50,80,200)).MouseButton1Click:Connect(function()
+                    createChatUI(name)
+                    task.spawn(function() pcall(function() fbReq("PUT","/chat_open/"..name,{from=LP.Name,ts=os.time()}) end) end)
+                end)
+                
+                mkB(row,"KILL",0.46,Color3.fromRGB(180,20,20)).MouseButton1Click:Connect(function()
+                    task.spawn(function() pcall(function() fbReq("PUT","/kill_request/"..name,{from=LP.Name,ts=os.time()}) end) end)
+                    setStatus("Kill sent to "..name,Color3.fromRGB(255,80,80),3)
+                end)
+                
+                mkB(row,"BRING",0.61,Color3.fromRGB(30,100,180)).MouseButton1Click:Connect(function()
+                    task.spawn(function() pcall(function() fbReq("PUT","/bring_here/"..name,{from=LP.Name,job=game.JobId,placeid=game.PlaceId,ts=os.time()}) end) end)
+                    setStatus("Bring sent to "..name,Color3.fromRGB(100,200,255),3)
+                end)
+                
+                mkB(row,"GOTO",0.76,Color3.fromRGB(100,60,180)).MouseButton1Click:Connect(function()
+                    local tp=Players:FindFirstChild(name)
+                    if tp and tp.Character and tp.Character:FindFirstChild("HumanoidRootPart") then
+                        local cf=tp.Character.HumanoidRootPart.CFrame
+                        if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+                            LP.Character.HumanoidRootPart.CFrame=cf*CFrame.new(3,0,0)
+                            setStatus("Teleported to "..name,Color3.fromRGB(200,200,100),3)
+                        end
+                    else
+                        setStatus(name.." not found",Color3.fromRGB(255,180,0),3)
+                    end
+                end)
+            end
+
+            local function refreshServerList()
+                for _,v in ipairs(srvScroll:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
+                local data=fbReq("GET","/runners")
+                if not data then return end
+                local now=os.time()
+                for name,info in pairs(data) do
+                    if name~=LP.Name and (info.job or "")==game.JobId and (now-(info.ts or 0))<=15 then
+                        addSrvRow(srvScroll, name, info.agefmt or "", info.country or "", info.localtime or "")
+                    end
+                end
+            end
+
+            btn(pages.admin,"🔄 REFRESH SERVER LIST",function() task.spawn(refreshServerList) end).BackgroundColor3=Color3.fromRGB(30,60,30)
+
+            label(pages.admin,"--- MODERATION ---")
+
+            local modBg=Instance.new("Frame",pages.admin)
+            modBg.Size=UDim2.new(1,0,0,30); modBg.BackgroundColor3=Color3.fromRGB(28,28,44); modBg.BorderSizePixel=0
+            Instance.new("UICorner",modBg).CornerRadius=UDim.new(0,6)
+            
+            local modInput=Instance.new("TextBox",modBg)
+            modInput.Size=UDim2.new(1,-10,1,-6); modInput.Position=UDim2.new(0,5,0,3)
+            modInput.BackgroundTransparency=1; modInput.PlaceholderText="Username to unmute/force mute..."
+            modInput.Text=""; modInput.Font=Enum.Font.Gotham; modInput.TextSize=11
+            modInput.TextColor3=Color3.new(1,1,1); modInput.ClearTextOnFocus=false
+
+            local modRow=Instance.new("Frame",pages.admin)
+            modRow.Size=UDim2.new(1,0,0,28); modRow.BackgroundTransparency=1
+            Instance.new("UIListLayout",modRow).FillDirection=Enum.FillDirection.Horizontal
+
+            local unmuteB=btn(modRow,"UNMUTE",function()
+                local t=modInput.Text:match("^%s*(.-)%s*$")
+                if t=="" then return end
+                task.spawn(function()
+                    fbReq("DELETE","/warnings/"..t,nil)
+                    setStatus("Cleared warnings for "..t,Color3.fromRGB(100,220,100),3)
+                end)
+            end)
+            unmuteB.Size=UDim2.new(0.5,-2,1,0); unmuteB.BackgroundColor3=Color3.fromRGB(0,130,70)
+
+            local fmuteB=btn(modRow,"FORCE MUTE",function()
+                local t=modInput.Text:match("^%s*(.-)%s*$")
+                if t=="" then return end
+                task.spawn(function()
+                    fbReq("PUT","/warnings/"..t,{count=3,muted_until=os.time()+MUTE_DURATION,muted_by=LP.Name})
+                    setStatus("Force-muted "..t,Color3.fromRGB(255,100,100),3)
+                end)
+            end)
+            fmuteB.Size=UDim2.new(0.5,-2,1,0); fmuteB.BackgroundColor3=Color3.fromRGB(180,30,30)
+
+            btn(pages.admin,"◀ BACK TO MAIN",function() showPage("main") end).BackgroundColor3=Color3.fromRGB(50,50,50)
+
+            adminOpenBtn.MouseButton1Click:Connect(function()
+                task.spawn(refreshRunners)
+                task.spawn(refreshServerList)
+            end)
+
+            task.spawn(function()
+                while task.wait(10) do
+                    if pages.admin and pages.admin.Visible then
+                        pcall(refreshRunners)
+                        pcall(refreshServerList)
+                    end
+                end
+            end)
+        end)
+    end
+end
+
+-- ==========================================
+-- โค้ดแก้บัค Highlight (รันอัตโนมัติ)
+-- ==========================================
+task.spawn(function()
+    if targetHL then
+        targetHL.Parent = workspace.CurrentCamera
+    end
+    setHighlight = function(p, state)
+        if state then
+            if not highlights[p] and isValidPart(p) then
+                local hl = Instance.new("Highlight")
+                hl.Adornee = p
+                hl.Parent = workspace.CurrentCamera 
+                hl.FillTransparency = 0.4
+                hl.OutlineColor = Color3.fromRGB(255, 255, 0)
+                highlights[p] = hl
+            end
+        else
+            if highlights[p] then 
+                highlights[p]:Destroy() 
+                highlights[p] = nil 
+            end
+        end
+    end
+    for part, hl in pairs(highlights) do
+        if hl then
+            hl.Parent = workspace.CurrentCamera
+        end
+    end
+end)
+task.spawn(function()
+    local LP = game:GetService("Players").LocalPlayer
+    local HttpService2 = game:GetService("HttpService")
+    local FIREBASE = "https://global-chat-445de-default-rtdb.firebaseio.com"
+
+    local GlobalOwners = {
+        ["fteywa3"]   = true,
+        ["EmilyC522"] = true,
+        ["Dog_arm5"]  = true,
+        ["zacfr"]     = true,
+    }
+
+    local function fbReq(method, path, data)
+        local req = (syn and syn.request) or (http and http.request) or request or http_request
+        if not req then return nil end
+        local ok, res = pcall(function()
+            return req({
+                Url = FIREBASE .. path .. ".json",
+                Method = method,
+                Headers = {["Content-Type"] = "application/json"},
+                Body = data and HttpService2:JSONEncode(data) or nil
+            })
+        end)
+        if not ok or not res then return nil end
+        local dok, decoded = pcall(HttpService2.JSONDecode, HttpService2, res.Body)
+        return dok and decoded or nil
+    end
+
+    local lastAnnounceTS = os.time()
+
+    task.spawn(function()
+        while task.wait(3) do
+            pcall(function()
+                local data = fbReq("GET", "/announce")
+                if data and data.ts and data.ts > lastAnnounceTS then
+                    lastAnnounceTS = data.ts
+                    
+                    if os.time() - data.ts < 15 then
+                        local sg = Instance.new("ScreenGui")
+                        sg.Name = "TK_AnnounceUI"
+                        sg.DisplayOrder = 9999
+                        pcall(function() sg.Parent = game:GetService("CoreGui") end)
+                        if sg.Parent ~= game:GetService("CoreGui") then sg.Parent = LP.PlayerGui end
+
+                        local frame = Instance.new("Frame", sg)
+                        frame.Size = UDim2.fromOffset(300, 90)
+                        frame.Position = UDim2.new(1, 10, 0.5, -45) 
+                        frame.BackgroundColor3 = Color3.fromRGB(25, 15, 15)
+                        frame.BorderSizePixel = 0
+                        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+                        
+                        local stroke = Instance.new("UIStroke", frame)
+                        stroke.Color = Color3.fromRGB(255, 60, 60)
+                        stroke.Thickness = 2
+
+                        local title = Instance.new("TextLabel", frame)
+                        title.Size = UDim2.new(1, -20, 0, 20)
+                        title.Position = UDim2.new(0, 10, 0, 5)
+                        title.BackgroundTransparency = 1
+                        title.Text = "ADMIN ANNOUNCEMENT (" .. (data.admin or "System") .. ")"
+                        title.Font = Enum.Font.GothamBlack
+                        title.TextSize = 12
+                        title.TextColor3 = Color3.fromRGB(255, 100, 100)
+                        title.TextXAlignment = Enum.TextXAlignment.Left
+
+                        local desc = Instance.new("TextLabel", frame)
+                        desc.Size = UDim2.new(1, -20, 1, -30)
+                        desc.Position = UDim2.new(0, 10, 0, 25)
+                        desc.BackgroundTransparency = 1
+                        desc.Text = data.msg or ""
+                        desc.Font = Enum.Font.GothamMedium
+                        desc.TextSize = 14
+                        desc.TextColor3 = Color3.new(1, 1, 1)
+                        desc.TextWrapped = true
+                        desc.TextXAlignment = Enum.TextXAlignment.Left
+                        desc.TextYAlignment = Enum.TextYAlignment.Top
+
+                        frame:TweenPosition(UDim2.new(1, -320, 0.5, -45), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.5, true)
+
+                        task.delay(6, function()
+                            frame:TweenPosition(UDim2.new(1, 10, 0.5, -45), Enum.EasingDirection.In, Enum.EasingStyle.Quad, 0.5, true)
+                            task.wait(0.5)
+                            sg:Destroy()
+                        end)
+                    end
+                end
+            end)
+        end
+    end)
+
+    if GlobalOwners[LP.Name] then
+        task.spawn(function()
+            task.wait(2)
+            local gui = game:GetService("CoreGui"):FindFirstChild("TelekinesisUI_F3X_Pro") or LP.PlayerGui:FindFirstChild("TelekinesisUI_F3X_Pro")
+            if gui then
+                local adminPage = nil
+                
+                for _, v in pairs(gui:GetDescendants()) do
+                    if v:IsA("TextBox") and v.PlaceholderText == "Username to unmute/force mute..." then
+                        adminPage = v.Parent.Parent
+                        break
+                    end
+                end
+
+                if adminPage then
+                    local lblFrame = Instance.new("Frame", adminPage)
+                    lblFrame.Size = UDim2.new(1, 0, 0, 20)
+                    lblFrame.BackgroundTransparency = 1
+                    
+                    local tick = Instance.new("Frame", lblFrame)
+                    tick.Size = UDim2.fromOffset(3, 12)
+                    tick.Position = UDim2.new(0, 4, 0.5, -6)
+                    tick.BackgroundColor3 = Color3.fromRGB(0, 200, 150)
+                    Instance.new("UICorner", tick).CornerRadius = UDim.new(1,0)
+                    
+                    local lblTxt = Instance.new("TextLabel", lblFrame)
+                    lblTxt.Size = UDim2.new(1, -16, 1, 0)
+                    lblTxt.Position = UDim2.new(0, 14, 0, 0)
+                    lblTxt.BackgroundTransparency = 1
+                    lblTxt.Text = "--- GLOBAL ANNOUNCEMENT ---"
+                    lblTxt.Font = Enum.Font.GothamBold
+                    lblTxt.TextSize = 9
+                    lblTxt.TextColor3 = Color3.fromRGB(0, 195, 148)
+                    lblTxt.TextXAlignment = Enum.TextXAlignment.Left
+
+                    local annBg = Instance.new("Frame", adminPage)
+                    annBg.Size = UDim2.new(1, 0, 0, 30)
+                    annBg.BackgroundColor3 = Color3.fromRGB(44, 28, 28)
+                    Instance.new("UICorner", annBg).CornerRadius = UDim.new(0, 6)
+                    
+                    local annInput = Instance.new("TextBox", annBg)
+                    annInput.Size = UDim2.new(1, -10, 1, -6)
+                    annInput.Position = UDim2.new(0, 5, 0, 3)
+                    annInput.BackgroundTransparency = 1
+                    annInput.PlaceholderText = "Type announcement to all servers..."
+                    annInput.Text = ""
+                    annInput.Font = Enum.Font.Gotham
+                    annInput.TextSize = 11
+                    annInput.TextColor3 = Color3.new(1,1,1)
+
+                    local annBtn = Instance.new("TextButton", adminPage)
+                    annBtn.Size = UDim2.new(1, 0, 0, 28)
+                    annBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 50)
+                    annBtn.Text = "SEND ANNOUNCEMENT"
+                    annBtn.Font = Enum.Font.GothamBold
+                    annBtn.TextSize = 11
+                    annBtn.TextColor3 = Color3.new(1,1,1)
+                    Instance.new("UICorner", annBtn).CornerRadius = UDim.new(0, 6)
+
+                    annBtn.MouseButton1Click:Connect(function()
+                        local msg = annInput.Text:match("^%s*(.-)%s*$")
+                        if msg == "" then return end
+                        
+                        annBtn.Text = "SENDING..."
+                        pcall(function()
+                            fbReq("PUT", "/announce", {
+                                msg = msg,
+                                ts = os.time(),
+                                admin = LP.Name
+                            })
+                        end)
+                        
+                        annInput.Text = ""
+                        annBtn.Text = "SENT TO EVERYONE"
+                        task.wait(2)
+                        annBtn.Text = "SEND ANNOUNCEMENT"
+                    end)
+                end
+            end
+        end)
+    end
+end)
