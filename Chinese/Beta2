@@ -5,6 +5,10 @@ local CoreGui = game:GetService("CoreGui")
 
 local LP = Players.LocalPlayer
 local Cam = workspace.CurrentCamera
+-- 保持 Cam 引用更新
+RunService:BindToRenderStep("CamUpdate", Enum.RenderPriority.Camera.Value + 1, function()
+    Cam = workspace.CurrentCamera
+end)
 local Mouse = LP:GetMouse()
 
 local UI_SCALE = 1/1.4
@@ -27,7 +31,7 @@ local autoFreeze = false
 local autoThrow = false
 local highlightOn = true
 
-local currentTool = "NONE"
+local currentTool = "无"
 
 local initialCFrames = {}
 local initialPositions = {}
@@ -39,7 +43,6 @@ local function isPlayer(obj)
         if Players:GetPlayerFromCharacter(model) then
             return true
         end
-        if model.Name == LP.Name then return true end
     end
     return false
 end
@@ -126,7 +129,7 @@ local title = Instance.new("TextLabel", hdr)
 title.Size = UDim2.new(1, -58, 0, 20)
 title.Position = UDim2.new(0, 54, 0, 8)
 title.BackgroundTransparency = 1
-title.Text = "TELEKINESIS UI"
+title.Text = "念力操控 UI"
 title.Font = Enum.Font.GothamBlack
 title.TextSize = 14
 title.TextColor3 = Color3.fromRGB(245, 255, 252)
@@ -136,7 +139,7 @@ local titleSub = Instance.new("TextLabel", hdr)
 titleSub.Size = UDim2.new(1, -58, 0, 13)
 titleSub.Position = UDim2.new(0, 54, 0, 30)
 titleSub.BackgroundTransparency = 1
-titleSub.Text = "2.0  •  EXECUTOR SCRIPT"
+titleSub.Text = "2.0  •  执行脚本"
 titleSub.Font = Enum.Font.GothamMedium
 titleSub.TextSize = 9
 titleSub.TextColor3 = Color3.fromRGB(0, 215, 160)
@@ -212,9 +215,11 @@ local function grabPart(p)
     
     if autoFreeze then frozen[p] = true end
     if autoThrow then
-        task.wait(0.1)
-        p.AssemblyLinearVelocity = Cam.CFrame.LookVector * throwForce
-        bp:Destroy() bg:Destroy() grabbed[p] = nil
+        task.spawn(function()
+            task.wait(0.1)
+            p.AssemblyLinearVelocity = Cam.CFrame.LookVector * throwForce
+            bp:Destroy() bg:Destroy() grabbed[p] = nil
+        end)
     end
 end
 
@@ -234,12 +239,12 @@ local function createHandles(p)
     mh.Adornee = p
     mh.Style = Enum.HandlesStyle.Resize
     mh.Color3 = Color3.fromRGB(255,255,100)
-    mh.Visible = (currentTool == "MOVE")
+    mh.Visible = (currentTool == "移动")
 
     local ah = Instance.new("ArcHandles", gui)
     ah.Adornee = p
     ah.Parent = gui
-    ah.Visible = (currentTool == "ROTATE")
+    ah.Visible = (currentTool == "旋转")
 
     mh.MouseButton1Down:Connect(function()
         initialPositions = {}
@@ -266,7 +271,7 @@ local function createHandles(p)
         local rotationCFrame = CFrame.fromAxisAngle(Vector3.FromAxis(axis), math.rad(snappedDeg))
         for part in pairs(selected) do
             if grabbed[part] and initialCFrames[part] then
-                grabbed[part].bg.CFrame = initialCFrames[p] * rotationCFrame * (initialCFrames[p]:Inverse() * initialCFrames[part])
+                grabbed[part].bg.CFrame = initialCFrames[part] * rotationCFrame * (initialCFrames[part]:Inverse() * initialCFrames[part])
             end
         end
     end)
@@ -288,33 +293,33 @@ local function setHighlight(p, state)
 end
 
 local _TUT = {
-    ["GRAB (LOOK)"]={t="How To Grab",d="Look at any part then press GRAB.\nIt floats in front of you.\nMove camera to move the part."},
-    ["DROP (LOOK)"]={t="How To Drop",d="Look at a held part\nand press DROP to release it."},
-    ["DROP ALL"]={t="How To Drop All",d="Releases every part\nyou are currently holding."},
-    ["FREEZE (LOOK)"]={t="How To Freeze",d="Grab a part first, look at it\nthen FREEZE to lock it in place."},
-    ["UNFREEZE (LOOK)"]={t="How To Unfreeze",d="Look at a frozen part\nand press UNFREEZE to free it."},
-    ["UNFREEZE ALL"]={t="Unfreeze All",d="Unfreezes every frozen part at once."},
-    ["THROW (LOOK)"]={t="How To Throw",d="Look at a held part and press THROW.\nIt launches forward at high speed."},
-    ["DELETE PART(LOOK)"]={t="How To Delete",d="Look at any part and press DELETE.\nIt launches at extreme speed."},
-    ["HIGHLIGHT : ON"]={t="About Highlight",d="Parts you look at will glow.\nPress to toggle OFF."},
-    ["HIGHLIGHT : OFF"]={t="About Highlight",d="Highlight is OFF.\nPress to turn back ON."},
-    ["▶ MOVE / ROTATE MODE"]={t="Move/Rotate Mode",d="Freeze parts first, then go here\nto precisely move or rotate them."},
-    ["DESTROY UI"]={t="Close UI",d="Removes the entire UI.\nRe-run the script to get it back."},
-    ["OPEN PUPPET MASTER"]={t="Puppet Master",d="Add NPCs then press START CONTROL\nto move them with your character."},
-    ["BUILDER MODE (3D)"]={t="3D Builder",d="Draw a pattern on the grid.\nNearby parts form that shape in 3D."},
-    ["AUTO GRAB NPC : OFF"]={t="Auto Grab NPC",d="When ON, NPCs that enter\nyour radius are grabbed automatically."},
-    ["AUTO GRAB PART : OFF"]={t="Auto Grab Part",d="When ON, loose parts that enter\nyour radius are grabbed automatically."},
-    ["AUTO FREEZE : OFF"]={t="Auto Freeze",d="When ON, every part you grab\nis frozen immediately."},
-    ["AUTO THROW : OFF"]={t="Auto Throw",d="When ON, every part you grab\nis thrown immediately."},
-    ["AUTO DELETE : OFF"]={t="Auto Delete",d="When ON, all nearby parts\nare launched into the sky."},
-    ["🛡️ AUTO SHIELD : OFF"]={t="Auto Shield",d="When ON, parts flying toward you\nare grabbed automatically."},
-    ["FOLLOW OWNER : OFF"]={t="Follow Owner",d="When ON, grabbed parts float\nbehind you as you walk."},
-    ["ENABLE CAR MODE: OFF"]={t="Car Mode",d="Turn ON then tap any part\nto drive it. W/S=Fwd, A/D=Turn."},
-    ["REFRESH LIST"]={t="Refresh List",d="Reloads the list of frozen parts\nso you can select them."},
-    ["SELECT ALL"]={t="Select All",d="Selects all frozen parts\nfor multi-part editing."},
-    ["UNSELECT ALL"]={t="Deselect All",d="Deselects all selected parts."},
-    ["TELEPORT PART(SELECT FIRST)"]={t="Teleport Part",d="Select parts first then press this\nto teleport them in front of you."},
-    ["GET TELEKINESIS TOOL"]={t="Classic Tool",d="Gives you the classic telekinesis tool\nin your backpack to use directly."},
+    ["抓取 (注视)"]={t="如何抓取",d="注视任意部件然后按抓取。\n它会漂浮在你面前。\n移动视角来移动部件。"},
+    ["放下 (注视)"]={t="如何放下",d="注视一个被抓住的部件\n然后按放下释放它。"},
+    ["全部放下"]={t="全部放下",d="释放你当前持有的\n所有部件。"},
+    ["冻结 (注视)"]={t="如何冻结",d="先抓取一个部件，注视它\n然后按冻结将其固定。"},
+    ["解冻 (注视)"]={t="如何解冻",d="注视一个冻结的部件\n然后按解冻释放它。"},
+    ["全部解冻"]={t="全部解冻",d="一次性解冻所有被冻结的部件。"},
+    ["投掷 (注视)"]={t="如何投掷",d="注视一个被抓住的部件然后按投掷。\n它会高速向前飞出。"},
+    ["删除部件(注视)"]={t="如何删除",d="注视任意部件然后按删除。\n它会以极高速飞出。"},
+    ["高亮 : 开"]={t="关于高亮",d="你注视的部件会发光。\n点击关闭。"},
+    ["HIGHLIGHT : OFF"]={t="关于高亮",d="高亮已关闭。\n点击开启。"},
+    ["▶ 移动/旋转模式"]={t="移动/旋转模式",d="先冻结部件，然后到这里\n精确移动或旋转它们。"},
+    ["关闭界面"]={t="关闭界面",d="移除整个界面。\n重新运行脚本以恢复。"},
+    ["打开傀儡大师"]={t="傀儡大师",d="添加NPC然后按开始控制\n用你的角色操控它们。"},
+    ["3D建造模式"]={t="3D建造模式",d="在网格上绘制图案。\n附近的部件会组成3D形状。"},
+    ["自动抓取NPC : 关"]={t="自动抓取NPC",d="开启后，进入你范围的\nNPC会被自动抓取。"},
+    ["自动抓取部件 : 关"]={t="自动抓取部件",d="开启后，进入你范围的\n散落部件会被自动抓取。"},
+    ["自动冻结 : 关"]={t="自动冻结",d="开启后，你抓取的每个部件\n会立即被冻结。"},
+    ["自动投掷 : 关"]={t="自动投掷",d="开启后，你抓取的每个部件\n会立即被投掷出去。"},
+    ["自动删除 : 关"]={t="自动删除",d="开启后，附近所有部件\n会被发射到空中。"},
+    ["🛡️ 自动护盾 : 关"]={t="自动护盾",d="开启后，朝你飞来的部件\n会被自动抓取。"},
+    ["跟随主人 : 关"]={t="跟随主人",d="开启后，被抓住的部件会\n在你行走时跟在身后。"},
+    ["开启车辆模式: 关"]={t="车辆模式",d="开启后点击任意部件\n即可驾驶。W/S=前进后退，A/D=转向。"},
+    ["刷新列表"]={t="刷新列表",d="重新加载冻结部件列表\n以便你选择它们。"},
+    ["全选"]={t="全选",d="选择所有冻结的部件\n进行多部件编辑。"},
+    ["取消全选"]={t="取消全选",d="取消选择所有部件。"},
+    ["传送部件(请先选择)"]={t="传送部件(请先选择)",d="先选择部件然后按此键\n将它们传送到你面前。"},
+    ["获取念力工具"]={t="获取念力工具",d="给你经典的念力工具\n放在背包中直接使用。"},
 }
 
 local function _getTdata(txt)
@@ -531,7 +536,7 @@ local function giveTelekinesisTool()
     local Range = "Min" 
 
     local BP = Instance.new("BodyPosition")
-    BP.maxForce = Vector3.new(math.huge * math.huge, math.huge * math.huge, math.huge * math.huge)
+    BP.MaxForce = Vector3.new(math.huge * math.huge, math.huge * math.huge, math.huge * math.huge)
     BP.P = BP.P * 1.1
 
     local BP2 = Instance.new("BodyPosition")
@@ -587,12 +592,12 @@ local function giveTelekinesisTool()
     j.BrickColor = BrickColor.new("Really black")
     j.Material = Enum.Material.Metal
     j.TopSurface = Enum.SurfaceType.Smooth
-    j.brickColor = BrickColor.new("Really black")
+    j.BrickColor = BrickColor.new("Really black")
     
     k.Name = "LineConnect"
     k.Parent = i
     table.insert(g, a(k, function()
-        wait()
+        task.wait()
         local n = script.Part2
         local o = script.Part1.Value
         local p = script.Part2.Value
@@ -624,24 +629,24 @@ local function giveTelekinesisTool()
             r.CFrame = CFrame.new(o.Position + t.lookVector * dist / 2)
             r.CFrame = CFrame.new(r.Position, p.Position)
             s.Scale = Vector3.new(.25, .25, dist)
-            wait()
+            task.wait()
         end
-        r:remove()
-        script:remove()
+        r:Destroy()
+        script:Destroy()
     end))
     k.Disabled = true
     
     l.Name = "MainScript"
     l.Parent = i
     table.insert(g, a(l, function()
-        wait()
+        task.wait()
         tool = script.Parent
         lineconnect = tool.LineConnect
         object = nil
         mousedown = false
         found = false
         BP = Instance.new("BodyPosition")
-        BP.maxForce = Vector3.new(math.huge * math.huge, math.huge * math.huge, math.huge * math.huge)
+        BP.MaxForce = Vector3.new(math.huge * math.huge, math.huge * math.huge, math.huge * math.huge)
         BP.P = BP.P * 2
         dist = nil
         point = Instance.new("Part")
@@ -661,7 +666,7 @@ local function giveTelekinesisTool()
         color = tool.Handle
         objval = nil
         local u = false
-        local v = BP:clone()
+        local v = BP:Clone()
         v.maxForce = Vector3.new(30000, 30000, 30000)
         
         function LineConnect(o, p, q)
@@ -677,7 +682,7 @@ local function giveTelekinesisTool()
             local z = Instance.new("ObjectValue")
             z.Value = color
             z.Name = "Color"
-            local A = lineconnect:clone()
+            local A = lineconnect:Clone()
             A.Disabled = false
             w.Parent = A
             x.Parent = A
@@ -691,7 +696,7 @@ local function giveTelekinesisTool()
             if mousedown == true then return end
             mousedown = true
             coroutine.resume(coroutine.create(function()
-                local C = point:clone()
+                local C = point:Clone()
                 C.Parent = tool
                 LineConnect(front, C, workspace)
                 while mousedown == true do
@@ -707,9 +712,9 @@ local function giveTelekinesisTool()
                         LineConnect(front, object, workspace)
                         break
                     end
-                    wait()
+                    task.wait()
                 end
-                C:remove()
+                C:Destroy()
             end))
             while mousedown == true do
                 if B.Target ~= nil then
@@ -720,16 +725,16 @@ local function giveTelekinesisTool()
                         break
                     end
                 end
-                wait()
+                task.wait()
             end
             while mousedown == true do
                 if object.Parent == nil then break end
                 local t = CFrame.new(front.Position, B.Hit.p)
                 BP.Parent = object
-                BP.position = front.Position + t.lookVector * dist
-                wait()
+                BP.Position = front.Position + t.lookVector * dist
+                task.wait()
             end
-            BP:remove()
+            BP:Destroy()
             object = nil
             objval.Value = nil
         end
@@ -744,17 +749,17 @@ local function giveTelekinesisTool()
                     if H.className == "BodyGyro" then return nil end
                 end
                 BG = Instance.new("BodyGyro")
-                BG.maxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                BG.cframe = CFrame.new(object.CFrame.p)
+                BG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                BG.CFrame = CFrame.new(object.CFrame.p)
                 BG.Parent = object
-                repeat wait() until object.CFrame == CFrame.new(object.CFrame.p)
+                repeat task.wait() until object.CFrame == CFrame.new(object.CFrame.p)
                 BG.Parent = nil
                 if object == nil then return end
                 for G, H in pairs(object:children()) do
                     if H.className == "BodyGyro" then H.Parent = nil end
                 end
-                object.Velocity = Vector3.new(0, 0, 0)
-                object.RotVelocity = Vector3.new(0, 0, 0)
+                object.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                object.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                 object.Orientation = Vector3.new(0, 0, 0)
             end
             if E == "e" then dist = dist + 10 end
@@ -770,17 +775,16 @@ local function giveTelekinesisTool()
             keymouse = B
             local I = tool.Parent
             human = I.Humanoid
-            human.Changed:connect(function()
+            human.Changed:Connect(function()
                 if human.Health == 0 then
                     mousedown = false
                     uneq = true
                     touched = false
-                    BP:remove()
-                    point:remove()
-                    tool:remove()
+                    BP:Destroy()
+                    point:Destroy()
                 end
             end)
-            usrinput.TouchTapInWorld:connect(function()
+            usrinput.TouchTapInWorld:Connect(function()
                 if uneq == false then
                     if touched == false then
                         onButton1Down(B)
@@ -790,17 +794,17 @@ local function giveTelekinesisTool()
                     end
                 end
             end)
-            usrinput.TouchLongPress:connect(function()
+            usrinput.TouchLongPress:Connect(function()
                 if uneq == false then
                     if dist ~= power then dist = power end
                 end
             end)
-            B.KeyDown:connect(function(E) onKeyDown(E, B) end)
+            B.KeyDown:Connect(function(E) onKeyDown(E, B) end)
             B.Icon = "rbxasset://textures\\GunCursor.png"
         end
         
-        tool.Equipped:connect(onEquipped)
-        tool.Unequipped:connect(function() uneq = true touched = false mousedown = false end)
+        tool.Equipped:Connect(onEquipped)
+        tool.Unequipped:Connect(function() uneq = true touched = false mousedown = false end)
     end))
 
     for J, H in pairs(h:GetChildren()) do
@@ -810,14 +814,14 @@ local function giveTelekinesisTool()
     h:Destroy()
     
     for J, H in pairs(g) do
-        spawn(function() pcall(H) end)
+        task.spawn(function() pcall(H) end)
     end
 end
 
 -- =====================================
 
-btn(pages.main, "GRAB (LOOK)", function() grabPart(getTarget()) end)
-btn(pages.main, "DROP (LOOK)", function()
+btn(pages.main, "抓取 (注视)", function() grabPart(getTarget()) end)
+btn(pages.main, "放下 (注视)", function()
     local t=getTarget()
     if t and grabbed[t] then
         grabbed[t].bp:Destroy() grabbed[t].bg:Destroy()
@@ -825,27 +829,27 @@ btn(pages.main, "DROP (LOOK)", function()
         setHighlight(t,false) clearAllHandles()
     end
 end)
-btn(pages.main, "DROP ALL", function()
+btn(pages.main, "全部放下", function()
     for p, objs in pairs(grabbed) do objs.bp:Destroy() objs.bg:Destroy() end
     grabbed={} frozen={} selected={}
     for p in pairs(highlights) do setHighlight(p,false) end
     clearAllHandles()
 end)
-btn(pages.main, "FREEZE (LOOK)", function() local t=getTarget() if t and grabbed[t] then frozen[t]=true end end)
-btn(pages.main, "UNFREEZE (LOOK)", function()
+btn(pages.main, "冻结 (注视)", function() local t=getTarget() if t and grabbed[t] then frozen[t]=true end end)
+btn(pages.main, "解冻 (注视)", function()
     local t=getTarget()
     if t then frozen[t]=nil setHighlight(t,false) end
 end)
-btn(pages.main, "UNFREEZE ALL", function() frozen={} selected={} for p in pairs(highlights) do setHighlight(p,false) end clearAllHandles() end)
+btn(pages.main, "全部解冻", function() frozen={} selected={} for p in pairs(highlights) do setHighlight(p,false) end clearAllHandles() end)
 
-label(pages.main, "--- AUTO SETTINGS ---")
-btn(pages.main, "AUTO GRAB NPC : OFF", function(b) autoGrabNPC = not autoGrabNPC b.Text = "AUTO GRAB NPC : "..(autoGrabNPC and "ON" or "OFF") end)
-btn(pages.main, "AUTO GRAB PART : OFF", function(b) autoGrabPart = not autoGrabPart b.Text = "AUTO GRAB PART : "..(autoGrabPart and "ON" or "OFF") end)
-btn(pages.main, "AUTO FREEZE : OFF", function(b) autoFreeze = not autoFreeze b.Text = "AUTO FREEZE : "..(autoFreeze and "ON" or "OFF") end)
-btn(pages.main, "AUTO THROW : OFF", function(b) autoThrow = not autoThrow b.Text = "AUTO THROW : "..(autoThrow and "ON" or "OFF") end)
+label(pages.main, "--- 自动设置 ---")
+btn(pages.main, "自动抓取NPC : 关", function(b) autoGrabNPC = not autoGrabNPC b.Text = "自动抓取NPC : "..(autoGrabNPC and "开" or "关") end)
+btn(pages.main, "自动抓取部件 : 关", function(b) autoGrabPart = not autoGrabPart b.Text = "自动抓取部件 : "..(autoGrabPart and "开" or "关") end)
+btn(pages.main, "自动冻结 : 关", function(b) autoFreeze = not autoFreeze b.Text = "自动冻结 : "..(autoFreeze and "开" or "关") end)
+btn(pages.main, "自动投掷 : 关", function(b) autoThrow = not autoThrow b.Text = "自动投掷 : "..(autoThrow and "开" or "关") end)
 
-label(pages.main, "--- ACTIONS ---")
-btn(pages.main, "THROW (LOOK)", function()
+label(pages.main, "--- 操作 ---")
+btn(pages.main, "投掷 (注视)", function()
     local t = getTarget()
     if t and grabbed[t] then
         t.AssemblyLinearVelocity = Cam.CFrame.LookVector * throwForce
@@ -854,20 +858,28 @@ btn(pages.main, "THROW (LOOK)", function()
     end
 end)
 
-local distLabel = btn(pages.main, "DISTANCE : "..holdDistance, function() end)
-btn(pages.main, "+ DIST", function() holdDistance+=5 distLabel.Text = "DISTANCE : "..holdDistance end)
-btn(pages.main, "- DIST", function() holdDistance = math.max(1, holdDistance-5) distLabel.Text = "DISTANCE : "..holdDistance end)
-btn(pages.main, "HIGHLIGHT : ON", function(b) highlightOn = not highlightOn b.Text = "HIGHLIGHT : "..(highlightOn and "ON" or "OFF") end)
-btn(pages.main, "▶ MOVE / ROTATE MODE", function() showPage("move") end)
+local distLabel = btn(pages.main, "距离 : "..holdDistance, function() end)
+btn(pages.main, "+ 距离", function() holdDistance+=5 distLabel.Text = "距离 : "..holdDistance end)
+btn(pages.main, "- 距离", function() holdDistance = math.max(1, holdDistance-5) distLabel.Text = "距离 : "..holdDistance end)
+btn(pages.main, "高亮 : 开", function(b) highlightOn = not highlightOn b.Text = "高亮 : "..(highlightOn and "开" or "关") end)
+btn(pages.main, "▶ 移动/旋转模式", function() showPage("move") end)
 
 -- ADD GET TOOL BUTTON TO UI
-local getToolBtn = btn(pages.main, "GET TELEKINESIS TOOL", function() 
+local getToolBtn = btn(pages.main, "获取念力工具", function() 
     giveTelekinesisTool()
 end)
 getToolBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 150)
 getToolBtn.Font = Enum.Font.GothamBold
 
-btn(pages.main, "DESTROY UI", function() for p,o in pairs(grabbed) do o.bp:Destroy() o.bg:Destroy() end gui:Destroy() end)
+btn(pages.main, "关闭界面", function()
+    for p,o in pairs(grabbed) do o.bp:Destroy() o.bg:Destroy() end
+    for p,hl in pairs(highlights) do hl:Destroy() end
+    highlights = {}
+    grabbed = {}
+    frozen = {}
+    selected = {}
+    gui:Destroy()
+end)
 
 do
     local TEST_PLACE_ID = 90218315607797
@@ -912,7 +924,7 @@ do
     cfTitle.Size = UDim2.new(1, -16, 1, 0)
     cfTitle.Position = UDim2.new(0, 12, 0, 0)
     cfTitle.BackgroundTransparency = 1
-    cfTitle.Text = "🚀  WARP TO TEST PLACE"
+    cfTitle.Text = "🚀  传送到测试地点"
     cfTitle.Font = Enum.Font.GothamBlack
     cfTitle.TextSize = 12
     cfTitle.TextColor3 = Color3.new(1, 1, 1)
@@ -921,7 +933,7 @@ do
     cfDesc.Size = UDim2.new(1, -20, 0, 30)
     cfDesc.Position = UDim2.new(0, 10, 0, 44)
     cfDesc.BackgroundTransparency = 1
-    cfDesc.Text = "Teleport to Baseplate HD?"
+    cfDesc.Text = "传送到 Baseplate HD？"
     cfDesc.Font = Enum.Font.GothamMedium
     cfDesc.TextSize = 12
     cfDesc.TextColor3 = Color3.fromRGB(180, 230, 215)
@@ -930,7 +942,7 @@ do
     yesBtn.Size = UDim2.fromOffset(108, 36)
     yesBtn.Position = UDim2.new(0, 10, 0, 82)
     yesBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 110)
-    yesBtn.Text = "✓  CONFIRM"
+    yesBtn.Text = "✓  确认"
     yesBtn.Font = Enum.Font.GothamBold
     yesBtn.TextSize = 12
     yesBtn.TextColor3 = Color3.new(1, 1, 1)
@@ -957,7 +969,7 @@ do
     noBtn.Size = UDim2.fromOffset(108, 36)
     noBtn.Position = UDim2.new(0, 132, 0, 82)
     noBtn.BackgroundColor3 = Color3.fromRGB(14, 20, 16)
-    noBtn.Text = "✕  CANCEL"
+    noBtn.Text = "✕  取消"
     noBtn.Font = Enum.Font.GothamBold
     noBtn.TextSize = 12
     noBtn.TextColor3 = Color3.fromRGB(200, 215, 210)
@@ -977,7 +989,7 @@ do
     noBtn.MouseButton1Click:Connect(function()
         cf.Visible = false
     end)
-    local warpBtn = btn(pages.main, "🚀  WARP TO TEST PLACE", function()
+    local warpBtn = btn(pages.main, "🚀  传送到测试地点", function()
         cf.Visible = true
     end)
     warpBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 88)
@@ -1009,29 +1021,29 @@ local function refreshList()
         end
     end
 end
-btn(pages.move, "REFRESH LIST", refreshList)
-btn(pages.move, "SELECT ALL", function()
+btn(pages.move, "刷新列表", refreshList)
+btn(pages.move, "全选", function()
     local last = nil; for p in pairs(frozen) do selected[p] = true; setHighlight(p, true); last = p end
     if last then createHandles(last) end refreshList()
 end)
-btn(pages.move, "UNSELECT ALL", function() for p in pairs(selected) do setHighlight(p, false) end selected = {}; clearAllHandles(); refreshList() end)
-label(pages.move, "--- TOOLS (MULTI-EDIT) ---")
-local toolBtn = btn(pages.move, "CURRENT TOOL: NONE", function(b)
-    if currentTool == "NONE" then currentTool = "MOVE" elseif currentTool == "MOVE" then currentTool = "ROTATE" else currentTool = "NONE" end
-    b.Text = "CURRENT TOOL: "..currentTool
+btn(pages.move, "取消全选", function() for p in pairs(selected) do setHighlight(p, false) end selected = {}; clearAllHandles(); refreshList() end)
+label(pages.move, "--- 工具(多部件编辑) ---")
+local toolBtn = btn(pages.move, "当前工具: 无", function(b)
+    if currentTool == "无" then currentTool = "移动" elseif currentTool == "MOVE" then currentTool = "旋转" else currentTool = "无" end
+    b.Text = "当前工具: "..currentTool
     local last = nil; for p in pairs(selected) do last = p end
     if last then createHandles(last) end
 end)
-label(pages.move, "--- SETTINGS ---")
-btn(pages.move, "MOVE STEP (SNAP): "..MOVE_SNAP, function(b)
+label(pages.move, "--- 设置 ---")
+btn(pages.move, "移动步长(吸附): "..MOVE_SNAP, function(b)
     if MOVE_SNAP == 0.1 then MOVE_SNAP = 0.5 elseif MOVE_SNAP == 0.5 then MOVE_SNAP = 1 elseif MOVE_SNAP == 1 then MOVE_SNAP = 5 else MOVE_SNAP = 0.1 end
-    b.Text = "MOVE STEP (SNAP): "..MOVE_SNAP
+    b.Text = "移动步长(吸附): "..MOVE_SNAP
 end)
-btn(pages.move, "ROTATE STEP (SNAP): "..ROT_SNAP, function(b)
+btn(pages.move, "旋转步长(吸附): "..ROT_SNAP, function(b)
     if ROT_SNAP == 1 then ROT_SNAP = 15 elseif ROT_SNAP == 15 then ROT_SNAP = 45 elseif ROT_SNAP == 45 then ROT_SNAP = 90 else ROT_SNAP = 1 end
-    b.Text = "ROTATE STEP (SNAP): "..ROT_SNAP
+    b.Text = "旋转步长(吸附): "..ROT_SNAP
 end)
-btn(pages.move, "◀ BACK", function() showPage("main") end)
+btn(pages.move, "◀ 返回", function() showPage("main") end)
 
 RunService.RenderStepped:Connect(function()
     targetHL.Adornee = highlightOn and getTarget() or nil
@@ -1045,16 +1057,18 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
+    local toRemove = {}
     for p, objs in pairs(grabbed) do
         if not p or not p.Parent or p.Anchored then
             if objs.bp then objs.bp:Destroy() end
             if objs.bg then objs.bg:Destroy() end
-            grabbed[p] = nil; frozen[p] = nil; setHighlight(p, false)
+            table.insert(toRemove, p)
         elseif not frozen[p] then
             objs.bp.Position = Cam.CFrame.Position + Cam.CFrame.LookVector * holdDistance
             objs.bg.CFrame = p.CFrame
         end
     end
+    for _, p in ipairs(toRemove) do grabbed[p] = nil; frozen[p] = nil; setHighlight(p, false) end
 end)
 
 local toggleBtn = Instance.new("TextButton", gui)
@@ -1095,7 +1109,7 @@ helpUI.Draggable = true
 Instance.new("UICorner", helpUI).CornerRadius = UDim.new(0, 10)
 local helpTitle = Instance.new("TextLabel", helpUI)
 helpTitle.Size = UDim2.new(1, 0, 0, 40)
-helpTitle.Text = "💻 PC CONTROLS"
+helpTitle.Text = "💻 电脑操控"
 helpTitle.TextColor3 = Color3.fromRGB(0, 255, 255)
 helpTitle.BackgroundTransparency = 1
 helpTitle.Font = Enum.Font.GothamBold
@@ -1103,7 +1117,7 @@ helpTitle.TextSize = 22
 local helpText = Instance.new("TextLabel", helpUI)
 helpText.Size = UDim2.new(1, -20, 1, -50)
 helpText.Position = UDim2.fromOffset(10, 50)
-helpText.Text = "• [G] : Grab Mode (L-Click)\n• [F] : Freeze Mode (L-Click)\n• [T] : Throw (T x2 = Auto)\n• [N] : Unfreeze All\n\n🖱️ MOUSE ACTIONS:\n• L-Click: Grab/Freeze\n• R-Click: Drop Part\n• R-Click x2: Drop All\n\n⚠️ NOTE: Must turn OFF \nFreeze Mode to Drop parts!"
+helpText.Text = "• [G] : 抓取模式(左键)\n• [F] : 冻结模式(左键)\n• [T] : 投掷(T按2次=自动)\n• [N] : 全部解冻\n\n🖱️ 鼠标操作:\n• 左键: 抓取/冻结\n• 右键: 放下部件\n• 右键x2: 全部放下\n\n⚠️ 注意: 必须关闭\n冻结模式才能放下部件!"
 helpText.TextColor3 = Color3.new(1, 1, 1)
 helpText.TextWrapped = true
 helpText.TextYAlignment = Enum.TextYAlignment.Top
@@ -1135,6 +1149,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         grabModeActive = not grabModeActive
         freezeModeActive = false
     elseif input.KeyCode == Enum.KeyCode.N then
+        for p, objs in pairs(grabbed) do objs.bp:Destroy() objs.bg:Destroy() end
+        grabbed = {}
         frozen = {}
         for p in pairs(highlights) do setHighlight(p, false) end
     elseif input.KeyCode == Enum.KeyCode.T then
@@ -1225,8 +1241,8 @@ local function teleportSelectedToFront()
     end
 end
 if pages and pages.move then
-    label(pages.move, "--- POSITIONING ---")
-    local tpFrontBtn = btn(pages.move, "TELEPORT PART(SELECT FIRST)", function()
+    label(pages.move, "--- 定位 ---")
+    local tpFrontBtn = btn(pages.move, "传送部件(请先选择)", function()
         teleportSelectedToFront()
     end)
     tpFrontBtn.BackgroundColor3 = Color3.fromRGB(80, 50, 200)
@@ -1234,8 +1250,8 @@ if pages and pages.move then
 end
 local deleteForce = 4500
 if pages and pages.main then
-    label(pages.main, "--- DESTRUCTION ---")
-    local delBtn = btn(pages.main, "DELETE PART(LOOK)", function()
+    label(pages.main, "--- 破坏 ---")
+    local delBtn = btn(pages.main, "删除部件(注视)", function()
         local t = getTarget()
         if t and isValidPart(t) then
             t.AssemblyLinearVelocity = Cam.CFrame.LookVector * deleteForce
@@ -1261,7 +1277,7 @@ if isPC then
             grabModeActive = false
             freezeModeActive = false
             if helpTitle then
-                helpTitle.Text = "PC: "..(deleteModeActive and "DELETE MODE" or "IDLE")
+                helpTitle.Text = "电脑: "..(deleteModeActive and "删除模式" or "待机")
                 helpTitle.TextColor3 = deleteModeActive and Color3.new(1, 0, 0) or Color3.new(0, 1, 1)
             end
         elseif input.UserInputType == Enum.UserInputType.MouseButton2 and deleteModeActive then
@@ -1335,10 +1351,10 @@ local function throwToTarget(part, targetVector)
     end
 end
 if pages and pages.main then
-    label(pages.main, "--- COORDINATE THROWER ---")
+    label(pages.main, "--- 坐标投掷器 ---")
     local inputBox = Instance.new("TextBox", pages.main)
     inputBox.Size = UDim2.new(1, 0, 0, 30)
-    inputBox.PlaceholderText = "X, Y, Z (Like 100, 20, -50)"
+    inputBox.PlaceholderText = "X, Y, Z (例如 100, 20, -50)"
     inputBox.Text = targetPosInput
     inputBox.Font = Enum.Font.Gotham
     inputBox.TextSize = 14
@@ -1354,7 +1370,7 @@ if pages and pages.main then
     local l = Instance.new("UIListLayout", throwFrame)
     l.FillDirection = Enum.FillDirection.Horizontal
     l.Padding = UDim.new(0, 5)
-    local btnThrow = btn(throwFrame, "THROW TO POS", function()
+    local btnThrow = btn(throwFrame, "投掷到坐标", function()
         local coords = {}
         for s in string.gmatch(targetPosInput, "[%d%.%-]+") do
             table.insert(coords, tonumber(s))
@@ -1373,10 +1389,10 @@ if pages and pages.main then
     end)
     btnThrow.Size = UDim2.new(0.6, -2, 1, 0)
     btnThrow.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
-    local btnPower = btn(throwFrame, "PWR: "..customThrowPower, function(b)
+    local btnPower = btn(throwFrame, "力度: "..customThrowPower, function(b)
         if customThrowPower >= 5 then customThrowPower = 0.5
         else customThrowPower = customThrowPower + 0.5 end
-        b.Text = "PWR: "..customThrowPower
+        b.Text = "力度: "..customThrowPower
     end)
     btnPower.Size = UDim2.new(0.4, -3, 1, 0)
 end
@@ -1411,9 +1427,9 @@ do
         local sLayout = Instance.new("UIListLayout", shieldFrame)
         sLayout.Padding = UDim.new(0, 2)
 
-        local btnShield = btn(shieldFrame, "🛡️ AUTO SHIELD : OFF", function(b)
+        local btnShield = btn(shieldFrame, "🛡️ 自动护盾 : 关", function(b)
             autoShield = not autoShield
-            b.Text = "🛡️ AUTO SHIELD : " .. (autoShield and "ON" or "OFF")
+            b.Text = "🛡️ 自动护盾 : " .. (autoShield and "开" or "关")
             b.BackgroundColor3 = autoShield and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(70, 70, 70)
         end)
         btnShield.Font = Enum.Font.GothamBold
@@ -1424,7 +1440,7 @@ do
 
         local speedLabel = Instance.new("TextLabel", speedCtrlFrame)
         speedLabel.Size = UDim2.new(0.5, 0, 1, 0)
-        speedLabel.Text = "DETECT SPEED: " .. shieldSpeedThreshold
+        speedLabel.Text = "检测速度: " .. shieldSpeedThreshold
         speedLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         speedLabel.TextColor3 = Color3.new(1, 1, 1)
         speedLabel.Font = Enum.Font.GothamMedium
@@ -1440,17 +1456,17 @@ do
 
         setupHoldButton(btnPlus, 1, function(d)
             shieldSpeedThreshold = shieldSpeedThreshold + d
-            speedLabel.Text = "DETECT SPEED: " .. shieldSpeedThreshold
+            speedLabel.Text = "检测速度: " .. shieldSpeedThreshold
         end)
         setupHoldButton(btnMinus, -1, function(d)
             shieldSpeedThreshold = math.max(0, shieldSpeedThreshold + d)
-            speedLabel.Text = "DETECT SPEED: " .. shieldSpeedThreshold
+            speedLabel.Text = "检测速度: " .. shieldSpeedThreshold
         end)
 
-        label(pages.main, "--- OWNER PHYSICS ---")
-        local btnFollow = btn(pages.main, "FOLLOW OWNER : OFF", function(b)
+        label(pages.main, "--- 主人物理 ---")
+        local btnFollow = btn(pages.main, "跟随主人 : 关", function(b)
             followOwner = not followOwner
-            b.Text = "FOLLOW OWNER : " .. (followOwner and "ON" or "OFF")
+            b.Text = "跟随主人 : " .. (followOwner and "开" or "关")
             b.BackgroundColor3 = followOwner and Color3.fromRGB(100, 0, 150) or Color3.fromRGB(70, 70, 70)
             if followOwner then
                 for p in pairs(grabbed) do
@@ -1501,8 +1517,8 @@ local deleteSpeed = 5000
 local deleteRadius = 20
 
 if pages and pages.main then
-    label(pages.main, "--- AUTO DESTRUCTION ---")
-    local btnAutoDel = btn(pages.main, "AUTO DELETE : OFF", function(b)
+    label(pages.main, "--- 自动破坏 ---")
+    local btnAutoDel = btn(pages.main, "自动删除 : 关", function(b)
         autoDelete = not autoDelete
         b.Text = "AUTO DELETE : " .. (autoDelete and "ON" or "OFF")
         b.BackgroundColor3 = autoDelete and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(70, 70, 70)
@@ -1514,7 +1530,7 @@ if pages and pages.main then
     delRangeFrame.BackgroundTransparency = 1
     local rangeLabel = Instance.new("TextLabel", delRangeFrame)
     rangeLabel.Size = UDim2.new(0.5, 0, 1, 0)
-    rangeLabel.Text = "DEL RADIUS: " .. deleteRadius
+    rangeLabel.Text = "删除半径: " .. deleteRadius
     rangeLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     rangeLabel.TextColor3 = Color3.new(1, 1, 1)
     rangeLabel.Font = Enum.Font.GothamMedium
@@ -1534,8 +1550,8 @@ if pages and pages.main then
         btn.MouseButton1Up:Connect(function() holding = false end)
         btn.MouseLeave:Connect(function() holding = false end)
     end
-    setupHoldButton2(btnPlusR, 5, function(d) deleteRadius = math.min(200, deleteRadius + d); rangeLabel.Text = "DEL RADIUS: " .. deleteRadius end)
-    setupHoldButton2(btnMinusR, -5, function(d) deleteRadius = math.max(5, deleteRadius + d); rangeLabel.Text = "DEL RADIUS: " .. deleteRadius end)
+    setupHoldButton2(btnPlusR, 5, function(d) deleteRadius = math.min(200, deleteRadius + d); rangeLabel.Text = "删除半径: " .. deleteRadius end)
+    setupHoldButton2(btnMinusR, -5, function(d) deleteRadius = math.max(5, deleteRadius + d); rangeLabel.Text = "删除半径: " .. deleteRadius end)
 end
 
 RunService.Stepped:Connect(function()
@@ -1565,7 +1581,7 @@ local selectClickMode = false
 local autoAddNPC = false
 pages.puppet = createPage()
 
-btn(pages.main, "OPEN PUPPET MASTER", function() showPage("puppet") end)
+btn(pages.main, "打开傀儡大师", function() showPage("puppet") end)
 
 local function getPuppetModel(obj)
     if not obj then return nil end
@@ -1577,7 +1593,7 @@ local function getPuppetModel(obj)
     return nil
 end
 
-label(pages.puppet, "PUPPET MASTER CONTROL")
+label(pages.puppet, "傀儡大师控制")
 local dropDown = Instance.new("ScrollingFrame", pages.puppet)
 dropDown.Size = UDim2.new(1, 0, 0, 120)
 dropDown.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -1587,7 +1603,8 @@ local dropLayout = Instance.new("UIListLayout", dropDown)
 
 local function refreshPuppetList()
     for _, v in ipairs(dropDown:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
-    for i, model in ipairs(puppetList) do
+    for i = #puppetList, 1, -1 do
+        local model = puppetList[i]
         if model and model.Parent and model:FindFirstChildOfClass("Humanoid") and model:FindFirstChildOfClass("Humanoid").Health > 0 then
             local isActive = selectedForControl[model]
             local prefix = (currentPuppet == model) and "[FOCUS] " or ""
@@ -1608,42 +1625,42 @@ local function refreshPuppetList()
     dropDown.CanvasSize = UDim2.new(0, 0, 0, dropLayout.AbsoluteContentSize.Y)
 end
 
-local btnSelectMode = btn(pages.puppet, "CLICK TO ADD NPC: OFF", function(b)
+local btnSelectMode = btn(pages.puppet, "点击添加NPC: 关", function(b)
     selectClickMode = not selectClickMode
-    b.Text = "CLICK TO ADD NPC: " .. (selectClickMode and "ON" or "OFF")
+    b.Text = "点击添加NPC: " .. (selectClickMode and "开" or "关")
     b.BackgroundColor3 = selectClickMode and Color3.fromRGB(0, 100, 180) or Color3.fromRGB(70, 70, 70)
 end)
 
-local btnAutoMode = btn(pages.puppet, "AUTO ADD NEARBY: OFF", function(b)
+local btnAutoMode = btn(pages.puppet, "自动添加附近: 关", function(b)
     autoAddNPC = not autoAddNPC
-    b.Text = "AUTO ADD NEARBY: " .. (autoAddNPC and "ON" or "OFF")
+    b.Text = "自动添加附近: " .. (autoAddNPC and "开" or "关")
     b.BackgroundColor3 = autoAddNPC and Color3.fromRGB(0, 100, 180) or Color3.fromRGB(70, 70, 70)
 end)
 
 local row = Instance.new("Frame", pages.puppet)
 row.Size = UDim2.new(1, 0, 0, 30); row.BackgroundTransparency = 1
 Instance.new("UIListLayout", row).FillDirection = Enum.FillDirection.Horizontal
-btn(row, "SELECT ALL", function() for _, m in ipairs(puppetList) do selectedForControl[m] = true end; refreshPuppetList() end).Size = UDim2.new(0.5, -2, 1, 0)
-btn(row, "UNSELECT ALL", function() for _, m in ipairs(puppetList) do selectedForControl[m] = false end; refreshPuppetList() end).Size = UDim2.new(0.5, -2, 1, 0)
+btn(row, "全选", function() for _, m in ipairs(puppetList) do selectedForControl[m] = true end; refreshPuppetList() end).Size = UDim2.new(0.5, -2, 1, 0)
+btn(row, "取消全选", function() for _, m in ipairs(puppetList) do selectedForControl[m] = false end; refreshPuppetList() end).Size = UDim2.new(0.5, -2, 1, 0)
 
-local btnControl = btn(pages.puppet, "START CONTROL", function(b)
+local btnControl = btn(pages.puppet, "开始控制", function(b)
     controlling = not controlling
     if controlling then
         if not currentPuppet then for m, s in pairs(selectedForControl) do if s then currentPuppet = m break end end end
         if not currentPuppet then controlling = false return end
-        b.Text = "STOP CONTROL"
+        b.Text = "停止控制"
         b.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
         Cam.CameraSubject = currentPuppet:FindFirstChildOfClass("Humanoid")
         if LP.Character then LP.Character.HumanoidRootPart.Anchored = true end
     else
-        b.Text = "START CONTROL"
+        b.Text = "开始控制"
         b.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
         Cam.CameraSubject = LP.Character:FindFirstChildOfClass("Humanoid")
         if LP.Character then LP.Character.HumanoidRootPart.Anchored = false end
     end
 end)
 btnControl.Size = UDim2.new(1, 0, 0, 40)
-btn(pages.puppet, "BACK TO MAIN", function() showPage("main") end)
+btn(pages.puppet, "返回主界面", function() showPage("main") end)
 
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp or not selectClickMode then return end
@@ -1739,7 +1756,7 @@ local function isValidTextPart(p)
 end
 
 if pages and pages.main then
-    label(pages.main, "TEXT PART CONTROL")
+    label(pages.main, "文本部件控制")
     local editFrame = Instance.new("Frame", pages.main)
     editFrame.Size = UDim2.new(1, 0, 0, 35); editFrame.BackgroundTransparency = 1
     Instance.new("UIListLayout", editFrame).FillDirection = "Horizontal"
@@ -1747,9 +1764,9 @@ if pages and pages.main then
     textBox.Size = UDim2.new(0.6, -5, 1, 0); textBox.Text = "HELLO"
     textBox.BackgroundColor3 = Color3.fromRGB(40,40,40); textBox.TextColor3 = Color3.new(1,1,1)
     
-    local btnToggle = btn(editFrame, "MODE: OFF", function(b)
+    local btnToggle = btn(editFrame, "模式: 关", function(b)
         textMode = not textMode
-        b.Text = "MODE: " .. (textMode and "ON" or "OFF")
+        b.Text = "模式: " .. (textMode and "开" or "关")
         b.BackgroundColor3 = textMode and Color3.fromRGB(0,120,200) or Color3.fromRGB(60,60,60)
         if not textMode then
             textFrozen = false
@@ -1763,10 +1780,10 @@ if pages and pages.main then
     end)
     btnToggle.Size = UDim2.new(0.4, 0, 1, 0)
     
-    local btnFreeze = btn(pages.main, "FREEZE TEXT: OFF", function(b)
+    local btnFreeze = btn(pages.main, "冻结文本: 关", function(b)
         if not textMode then return end
         textFrozen = not textFrozen
-        b.Text = "FREEZE TEXT: " .. (textFrozen and "ON" or "OFF")
+        b.Text = "冻结文本: " .. (textFrozen and "开" or "关")
         b.BackgroundColor3 = textFrozen and Color3.fromRGB(200,100,0) or Color3.fromRGB(60,60,60)
         for p, _ in pairs(textPartsMap) do
             p.Anchored = textFrozen
@@ -1781,7 +1798,7 @@ if pages and pages.main then
         textString = textBox.Text:upper()
         if textFrozen then
             textFrozen = false
-            btnFreeze.Text = "FREEZE TEXT: OFF"
+            btnFreeze.Text = "冻结文本: 关"
             btnFreeze.BackgroundColor3 = Color3.fromRGB(60,60,60)
         end
     end)
@@ -1848,7 +1865,7 @@ local buildData = {}
 local buildPartsMap = {}
 local gridRes = 10
 pages.build = createPage()
-btn(pages.main, "BUILDER MODE (3D)", function() showPage("build") end)
+btn(pages.main, "3D建造模式", function() showPage("build") end)
 
 local function isUsable(p)
     if not p:IsA("BasePart") or p.Anchored then return false end
@@ -1860,7 +1877,7 @@ local function isUsable(p)
     return true
 end
 
-label(pages.build, "--- 3D GRID BUILDER ---")
+label(pages.build, "--- 3D网格建造 ---")
 local canvasFrame = Instance.new("Frame", pages.build)
 canvasFrame.Size = UDim2.new(1, 0, 0, 280)
 canvasFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
@@ -1890,9 +1907,9 @@ for y = 1, gridRes do
     end
 end
 
-local btnToggle = btn(pages.build, "BUILD MODE: OFF", function(b)
+local btnToggle = btn(pages.build, "建造模式: 关", function(b)
     buildMode = not buildMode
-    b.Text = "BUILD MODE: " .. (buildMode and "ON" or "OFF")
+    b.Text = "建造模式: " .. (buildMode and "开" or "关")
     b.BackgroundColor3 = buildMode and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(60, 60, 60)
     if not buildMode then
         buildFrozen = false
@@ -1905,10 +1922,10 @@ local btnToggle = btn(pages.build, "BUILD MODE: OFF", function(b)
     end
 end)
 
-local btnFreeze = btn(pages.build, "FREEZE PICTURE: OFF", function(b)
+local btnFreeze = btn(pages.build, "冻结图案: 关", function(b)
     if not buildMode then return end
     buildFrozen = not buildFrozen
-    b.Text = "FREEZE PICTURE: " .. (buildFrozen and "ON" or "OFF")
+    b.Text = "冻结图案: " .. (buildFrozen and "开" or "关")
     b.BackgroundColor3 = buildFrozen and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(60, 60, 60)
     for p, _ in pairs(buildPartsMap) do
         p.Anchored = buildFrozen
@@ -1919,11 +1936,11 @@ local btnFreeze = btn(pages.build, "FREEZE PICTURE: OFF", function(b)
     end
 end)
 
-btn(pages.build, "CLEAR ALL BLOCKS", function()
+btn(pages.build, "清除所有方块", function()
     buildData = {}
     for _, cell in pairs(gridCells) do cell.BackgroundColor3 = Color3.fromRGB(45, 45, 45) end
 end)
-btn(pages.build, "BACK TO MAIN", function() showPage("main") end)
+btn(pages.build, "返回主界面", function() showPage("main") end)
 
 RunService.Heartbeat:Connect(function()
     if not buildMode or buildFrozen then return end
@@ -2023,25 +2040,25 @@ speedControlFrame.BackgroundTransparency = 1
 
 local speedDisplay = Instance.new("TextLabel", speedControlFrame)
 speedDisplay.Size = UDim2.new(1, 0, 0.4, 0); speedDisplay.BackgroundTransparency = 1
-speedDisplay.Text = "SPEED: " .. speed; speedDisplay.TextColor3 = Color3.fromRGB(255, 255, 0)
+speedDisplay.Text = "速度: " .. speed; speedDisplay.TextColor3 = Color3.fromRGB(255, 255, 0)
 speedDisplay.Font = Enum.Font.GothamBlack; speedDisplay.TextSize = 16
 
 local btnSpeedDown = createPedal(speedControlFrame, "-", UDim2.new(0.1, 0, 0.5, 0), UDim2.new(0.35, 0, 0, 30), Color3.fromRGB(60, 60, 60))
 local btnSpeedUp = createPedal(speedControlFrame, "+", UDim2.new(0.55, 0, 0.5, 0), UDim2.new(0.35, 0, 0, 30), Color3.fromRGB(60, 60, 60))
-btnSpeedDown.MouseButton1Click:Connect(function() speed = math.max(2, speed - 2); speedDisplay.Text = "SPEED: " .. speed end)
-btnSpeedUp.MouseButton1Click:Connect(function() speed = speed + 2; speedDisplay.Text = "SPEED: " .. speed end)
+btnSpeedDown.MouseButton1Click:Connect(function() speed = math.max(2, speed - 2); speedDisplay.Text = "速度: " .. speed end)
+btnSpeedUp.MouseButton1Click:Connect(function() speed = speed + 2; speedDisplay.Text = "速度: " .. speed end)
 
 if pages and pages.main then
-    label(pages.main, "--- CAR MODE (FE FIX) ---")
-    btn(pages.main, "ENABLE CAR MODE: OFF", function(b)
+    label(pages.main, "--- 车辆模式 ---")
+    btn(pages.main, "开启车辆模式: 关", function(b)
         carModeEnabled = not carModeEnabled
-        b.Text = "ENABLE CAR MODE: " .. (carModeEnabled and "ON" or "OFF")
+        b.Text = "开启车辆模式: " .. (carModeEnabled and "开" or "关")
         b.BackgroundColor3 = carModeEnabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(70, 70, 70)
         if not carModeEnabled and isDriving then stopDriving() end
     end)
 end
 
-function stopDriving()
+local function stopDriving()
     isDriving = false
     carGui.Enabled = false
     if carBV then carBV:Destroy() carBV = nil end
@@ -2051,11 +2068,11 @@ function stopDriving()
     if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
         local hum = LP.Character:FindFirstChild("Humanoid")
         if hum then hum.PlatformStand = false; hum.Sit = false end
-        LP.Character.HumanoidRootPart.Velocity = Vector3.new(0,0,0)
+        LP.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
     end
 end
 
-function startDriving(part)
+local function startDriving(part)
     if not part or not part:IsA("BasePart") or part.Anchored then return end
     currentCarPart = part; isDriving = true; carGui.Enabled = true
     pcall(function() part:SetNetworkOwner(LP) end)
@@ -2128,7 +2145,7 @@ RunService.Heartbeat:Connect(function()
         if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
             local root = LP.Character.HumanoidRootPart
             local targetCFrame = currentCarPart.CFrame * CFrame.new(0, currentCarPart.Size.Y/2 + 3, 0)
-            root.CFrame = targetCFrame; root.Velocity = Vector3.new(0,0,0); root.RotVelocity = Vector3.new(0,0,0)
+            root.CFrame = targetCFrame; root.AssemblyLinearVelocity = Vector3.new(0,0,0); root.AssemblyAngularVelocity = Vector3.new(0,0,0)
         end
         pcall(function() currentCarPart:SetNetworkOwner(LP) end)
         for p, offset in pairs(frozenCarOffsets) do
@@ -2179,6 +2196,10 @@ end)
 
 -- ให้รันทันทีเมื่อ Execute
 giveTelekinesisTool()
+LP.CharacterAdded:Connect(function()
+    task.wait(1)
+    giveTelekinesisTool()
+end)
 -- ══════════════════════════════════════════════════════════════
 --  GLOBAL CHAT v6.0 + ADMIN PANEL v4.0 (ADDON)
 --  วิธีใช้: นำโค้ดนี้ไปวางต่อท้ายสคริปต์หลักได้เลย
@@ -2201,8 +2222,8 @@ do
     if not pages.chat then pages.chat = createPage() end
     local chatPage = pages.chat
     
-    label(pages.main, "--- GLOBAL CHAT ---")
-    local chatOpenBtn = btn(pages.main, "🌐 GLOBAL CHAT v6.0", function()
+    label(pages.main, "--- 全球聊天 ---")
+    local chatOpenBtn = btn(pages.main, "🌐 全球聊天 v6.0", function()
         showPage("chat")
     end)
     chatOpenBtn.BackgroundColor3 = Color3.fromRGB(30, 60, 130)
@@ -2211,7 +2232,7 @@ do
     local chatTitle = Instance.new("TextLabel", chatPage)
     chatTitle.Size               = UDim2.new(1, 0, 0, 22)
     chatTitle.BackgroundColor3   = Color3.fromRGB(20, 30, 60)
-    chatTitle.Text               = "🌐  GLOBAL CHAT  v6.0"
+    chatTitle.Text               = "🌐  全球聊天  v6.0"
     chatTitle.Font               = Enum.Font.GothamBold
     chatTitle.TextSize           = 13
     chatTitle.TextColor3         = Color3.fromRGB(160, 180, 255)
@@ -2256,7 +2277,7 @@ do
     input.Size               = UDim2.new(1, -70, 1, -6)
     input.Position           = UDim2.new(0, 8, 0, 3)
     input.BackgroundTransparency = 1
-    input.PlaceholderText    = "Chat Here"
+    input.PlaceholderText    = "在这里聊天"
     input.PlaceholderColor3  = Color3.fromRGB(100, 100, 130)
     input.Text               = ""
     input.Font               = Enum.Font.Gotham
@@ -2268,7 +2289,7 @@ do
     sendBtn2.Size             = UDim2.fromOffset(56, 22)
     sendBtn2.Position         = UDim2.new(1, -60, 0.5, -11)
     sendBtn2.BackgroundColor3 = Color3.fromRGB(50, 80, 200)
-    sendBtn2.Text             = "SEND"
+    sendBtn2.Text             = "发送"
     sendBtn2.Font             = Enum.Font.GothamBold
     sendBtn2.TextSize         = 11
     sendBtn2.TextColor3       = Color3.new(1,1,1)
@@ -2299,7 +2320,7 @@ do
     local statusLbl = Instance.new("TextLabel", chatPage)
     statusLbl.Size               = UDim2.new(1, 0, 0, 14)
     statusLbl.BackgroundTransparency = 1
-    statusLbl.Text               = "● Firebase connected"
+    statusLbl.Text               = "● Firebase 已连接"
     statusLbl.Font               = Enum.Font.Gotham
     statusLbl.TextSize           = 9
     statusLbl.TextColor3         = Color3.fromRGB(70, 200, 90)
@@ -2319,14 +2340,14 @@ do
         return b
     end
 
-    local clearBtn2 = botBtn("🗑 CLEAR", Color3.fromRGB(130, 35, 35))
+    local clearBtn2 = botBtn("🗑 清除", Color3.fromRGB(130, 35, 35))
     clearBtn2.MouseButton1Click:Connect(function()
         for _, v in ipairs(scroll:GetChildren()) do
             if v:IsA("Frame") then v:Destroy() end
         end
     end)
 
-    local backBtn = botBtn("◀ BACK", Color3.fromRGB(50, 50, 50))
+    local backBtn = botBtn("◀ 返回", Color3.fromRGB(50, 50, 50))
     backBtn.MouseButton1Click:Connect(function() showPage("main") end)
 
     local msgCount = 0
@@ -2334,6 +2355,13 @@ do
 
     local function addChatMsg(user, text, jobId, placeId)
         msgCount += 1
+        -- 限制消息数量，超过100条删除最旧的
+        local frames = {}
+        for _, v in ipairs(scroll:GetChildren()) do if v:IsA("Frame") then table.insert(frames, v) end end
+        if #frames > 100 then
+            table.sort(frames, function(a, b) return (a.LayoutOrder or 0) < (b.LayoutOrder or 0) end)
+            for i = 1, #frames - 100 do frames[i]:Destroy() end
+        end
         local isOwner = GlobalOwners[user] == true
 
         local f = Instance.new("Frame", scroll)
@@ -2370,7 +2398,8 @@ do
         else
             displayName = string.format("<b><font color='#9999FF'>%s</font></b>", user)
         end
-        t.Text = displayName .. "<font color='#CCCCCC'>: " .. text .. "</font>"
+        local safeText = text:gsub("<", "&lt;"):gsub(">", "&gt;")
+        t.Text = displayName .. "<font color='#CCCCCC'>: " .. safeText .. "</font>"
 
         if jobId and jobId ~= "" and jobId ~= game.JobId then
             local j = Instance.new("TextButton", f)
@@ -2414,7 +2443,7 @@ do
         end)
     end
 
-    function fbReq(method, path, data)
+    local function fbReq(method, path, data)
         local req = (syn and syn.request) or (http and http.request) or request or http_request
         if not req then
             statusLbl.Text = "✕ HTTP not supported"
@@ -2495,7 +2524,7 @@ do
         statusLbl.TextColor3 = col
         if resetSec then
             task.delay(resetSec, function()
-                statusLbl.Text = "● Firebase connected"
+                statusLbl.Text = "● Firebase 已连接"
                 statusLbl.TextColor3 = Color3.fromRGB(70, 200, 90)
             end)
         end
@@ -2566,6 +2595,12 @@ do
                     for _, entry in ipairs(sorted) do
                         cache[entry.id] = true
                         addChatMsg(entry.msg.u or "?", entry.msg.t or "", entry.msg.job, entry.msg.placeid)
+                    end
+                    -- 限制缓存大小
+                    if #cache > 500 then
+                        local keys = {}
+                        for k in pairs(cache) do table.insert(keys, k) end
+                        for i = 1, #keys - 200 do cache[keys[i]] = nil end
                     end
                 end
             end
@@ -2723,13 +2758,13 @@ do
 
         local ibox=Instance.new("TextBox",ibg)
         ibox.Size=UDim2.new(1,-60,1,-6); ibox.Position=UDim2.new(0,6,0,3)
-        ibox.BackgroundTransparency=1; ibox.PlaceholderText="Type here..."
+        ibox.BackgroundTransparency=1; ibox.PlaceholderText="在这里输入..."
         ibox.PlaceholderColor3=Color3.fromRGB(80,80,100); ibox.Text=""
         ibox.Font=Enum.Font.Gotham; ibox.TextSize=11; ibox.TextColor3=Color3.new(1,1,1); ibox.ClearTextOnFocus=false
 
         local snd=Instance.new("TextButton",ibg)
         snd.Size=UDim2.fromOffset(50,22); snd.Position=UDim2.new(1,-54,0.5,-11)
-        snd.BackgroundColor3=Color3.fromRGB(50,80,200); snd.Text="SEND"
+        snd.BackgroundColor3=Color3.fromRGB(50,80,200); snd.Text="发送"
         snd.Font=Enum.Font.GothamBold; snd.TextSize=10; snd.TextColor3=Color3.new(1,1,1); snd.BorderSizePixel=0
         Instance.new("UICorner",snd).CornerRadius=UDim.new(0,5)
 
@@ -2798,8 +2833,8 @@ do
         task.spawn(function()
             if not pages.admin then pages.admin = createPage() end
 
-            label(pages.main,"--- ADMIN PANEL ---")
-            local adminOpenBtn=btn(pages.main,"👑 ADMIN PANEL",function() showPage("admin") end)
+            label(pages.main,"--- 管理面板 ---")
+            local adminOpenBtn=btn(pages.main,"👑 管理面板",function() showPage("admin") end)
             adminOpenBtn.BackgroundColor3=Color3.fromRGB(10,18,15)
             adminOpenBtn.Font=Enum.Font.GothamBold
             Instance.new("UIStroke",adminOpenBtn).Color=Color3.fromRGB(0,195,145)
@@ -2815,12 +2850,12 @@ do
             adminTitleLbl.Size=UDim2.new(1,-10,1,0)
             adminTitleLbl.Position=UDim2.new(0,10,0,0)
             adminTitleLbl.BackgroundTransparency=1
-            adminTitleLbl.Text="  ADMIN PANEL"
+            adminTitleLbl.Text="  管理面板"
             adminTitleLbl.Font=Enum.Font.GothamBlack; adminTitleLbl.TextSize=12
             adminTitleLbl.TextColor3=Color3.fromRGB(0,215,160); adminTitleLbl.BorderSizePixel=0
             adminTitleLbl.TextXAlignment=Enum.TextXAlignment.Left
 
-            label(pages.admin,"🌐 All Runners (Any Server):")
+            label(pages.admin,"🌐 所有玩家(所有服务器):")
 
             local runnerScroll=Instance.new("ScrollingFrame",pages.admin)
             runnerScroll.Size=UDim2.new(1,0,0,120)
@@ -2884,8 +2919,8 @@ do
                 
                 local jBtn=mkB(row,"JOIN",0.34,Color3.fromRGB(0,140,80))
                 jBtn.MouseButton1Click:Connect(function()
-                    if same then setStatus("Already in same server!",Color3.fromRGB(255,180,0),3) return end
-                    if runner.job=="" then setStatus("No JobID!",Color3.fromRGB(255,180,0),3) return end
+                    if same then setStatus("已在同一服务器！",Color3.fromRGB(255,180,0),3) return end
+                    if runner.job=="" then setStatus("没有JobID！",Color3.fromRGB(255,180,0),3) return end
                     jBtn.Text="..."
                     pcall(function() game:GetService("CoreGui").RobloxPromptGui.promptOverlay.Visible=false end)
                     task.spawn(function() pcall(function() fbReq("PUT","/join_notify/"..runner.name,{owner=LP.Name,ts=os.time()}) end) end)
@@ -2895,12 +2930,12 @@ do
                 
                 mkB(row,"BRING",0.48,Color3.fromRGB(30,80,200)).MouseButton1Click:Connect(function()
                     task.spawn(function() pcall(function() fbReq("PUT","/bring_request/"..runner.name,{from=LP.Name,job=game.JobId,placeid=game.PlaceId,ts=os.time()}) end) end)
-                    setStatus("Bring sent to "..runner.name,Color3.fromRGB(100,200,255),3)
+                    setStatus("已发送传送请求给 "..runner.name,Color3.fromRGB(100,200,255),3)
                 end)
                 
                 mkB(row,"KICK",0.62,Color3.fromRGB(180,30,30)).MouseButton1Click:Connect(function()
                     task.spawn(function() pcall(function() fbReq("PUT","/kick_request/"..runner.name,{from=LP.Name,ts=os.time()}) end) end)
-                    setStatus("Kick sent to "..runner.name,Color3.fromRGB(255,100,100),3)
+                    setStatus("已发送踢出请求给 "..runner.name,Color3.fromRGB(255,100,100),3)
                 end)
             end
 
@@ -2919,9 +2954,9 @@ do
                 table.sort(list,function(a,b) return a.ts>b.ts end)
                 for _,runner in ipairs(list) do addRunnerRow(runnerScroll, runner) end
             end
-            btn(pages.admin,"🔄 REFRESH ALL RUNNERS",function() task.spawn(refreshRunners) end).BackgroundColor3=Color3.fromRGB(40,80,40)
+            btn(pages.admin,"🔄 刷新所有玩家",function() task.spawn(refreshRunners) end).BackgroundColor3=Color3.fromRGB(40,80,40)
 
-            label(pages.admin,"🟢 In This Server:")
+            label(pages.admin,"🟢 本服务器中:")
 
             local srvScroll=Instance.new("ScrollingFrame",pages.admin)
             srvScroll.Size=UDim2.new(1,0,0,120); srvScroll.BackgroundColor3=Color3.fromRGB(8,10,12); srvScroll.BorderSizePixel=0
@@ -2960,12 +2995,12 @@ do
                 
                 mkB(row,"KILL",0.46,Color3.fromRGB(180,20,20)).MouseButton1Click:Connect(function()
                     task.spawn(function() pcall(function() fbReq("PUT","/kill_request/"..name,{from=LP.Name,ts=os.time()}) end) end)
-                    setStatus("Kill sent to "..name,Color3.fromRGB(255,80,80),3)
+                    setStatus("已发送击杀请求给 "..name,Color3.fromRGB(255,80,80),3)
                 end)
                 
                 mkB(row,"BRING",0.61,Color3.fromRGB(30,100,180)).MouseButton1Click:Connect(function()
                     task.spawn(function() pcall(function() fbReq("PUT","/bring_here/"..name,{from=LP.Name,job=game.JobId,placeid=game.PlaceId,ts=os.time()}) end) end)
-                    setStatus("Bring sent to "..name,Color3.fromRGB(100,200,255),3)
+                    setStatus("已发送传送请求给 "..name,Color3.fromRGB(100,200,255),3)
                 end)
                 
                 mkB(row,"GOTO",0.76,Color3.fromRGB(100,60,180)).MouseButton1Click:Connect(function()
@@ -2974,10 +3009,10 @@ do
                         local cf=tp.Character.HumanoidRootPart.CFrame
                         if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
                             LP.Character.HumanoidRootPart.CFrame=cf*CFrame.new(3,0,0)
-                            setStatus("Teleported to "..name,Color3.fromRGB(200,200,100),3)
+                            setStatus("已传送到 "..name,Color3.fromRGB(200,200,100),3)
                         end
                     else
-                        setStatus(name.." not found",Color3.fromRGB(255,180,0),3)
+                        setStatus(name.." 未找到",Color3.fromRGB(255,180,0),3)
                     end
                 end)
             end
@@ -2994,9 +3029,9 @@ do
                 end
             end
 
-            btn(pages.admin,"🔄 REFRESH SERVER LIST",function() task.spawn(refreshServerList) end).BackgroundColor3=Color3.fromRGB(30,60,30)
+            btn(pages.admin,"🔄 刷新服务器列表",function() task.spawn(refreshServerList) end).BackgroundColor3=Color3.fromRGB(30,60,30)
 
-            label(pages.admin,"--- MODERATION ---")
+            label(pages.admin,"--- 管理操作 ---")
 
             local modBg=Instance.new("Frame",pages.admin)
             modBg.Size=UDim2.new(1,0,0,30); modBg.BackgroundColor3=Color3.fromRGB(28,28,44); modBg.BorderSizePixel=0
@@ -3004,7 +3039,7 @@ do
             
             local modInput=Instance.new("TextBox",modBg)
             modInput.Size=UDim2.new(1,-10,1,-6); modInput.Position=UDim2.new(0,5,0,3)
-            modInput.BackgroundTransparency=1; modInput.PlaceholderText="Username to unmute/force mute..."
+            modInput.BackgroundTransparency=1; modInput.PlaceholderText="输入用户名以取消禁言/强制禁言..."
             modInput.Text=""; modInput.Font=Enum.Font.Gotham; modInput.TextSize=11
             modInput.TextColor3=Color3.new(1,1,1); modInput.ClearTextOnFocus=false
 
@@ -3012,27 +3047,27 @@ do
             modRow.Size=UDim2.new(1,0,0,28); modRow.BackgroundTransparency=1
             Instance.new("UIListLayout",modRow).FillDirection=Enum.FillDirection.Horizontal
 
-            local unmuteB=btn(modRow,"UNMUTE",function()
+            local unmuteB=btn(modRow,"取消禁言",function()
                 local t=modInput.Text:match("^%s*(.-)%s*$")
                 if t=="" then return end
                 task.spawn(function()
                     fbReq("DELETE","/warnings/"..t,nil)
-                    setStatus("Cleared warnings for "..t,Color3.fromRGB(100,220,100),3)
+                    setStatus("已清除 "..t.." 的警告",Color3.fromRGB(100,220,100),3)
                 end)
             end)
             unmuteB.Size=UDim2.new(0.5,-2,1,0); unmuteB.BackgroundColor3=Color3.fromRGB(0,130,70)
 
-            local fmuteB=btn(modRow,"FORCE MUTE",function()
+            local fmuteB=btn(modRow,"强制禁言",function()
                 local t=modInput.Text:match("^%s*(.-)%s*$")
                 if t=="" then return end
                 task.spawn(function()
                     fbReq("PUT","/warnings/"..t,{count=3,muted_until=os.time()+MUTE_DURATION,muted_by=LP.Name})
-                    setStatus("Force-muted "..t,Color3.fromRGB(255,100,100),3)
+                    setStatus("已强制禁言 "..t,Color3.fromRGB(255,100,100),3)
                 end)
             end)
             fmuteB.Size=UDim2.new(0.5,-2,1,0); fmuteB.BackgroundColor3=Color3.fromRGB(180,30,30)
 
-            btn(pages.admin,"◀ BACK TO MAIN",function() showPage("main") end).BackgroundColor3=Color3.fromRGB(50,50,50)
+            btn(pages.admin,"◀ 返回主界面",function() showPage("main") end).BackgroundColor3=Color3.fromRGB(50,50,50)
 
             adminOpenBtn.MouseButton1Click:Connect(function()
                 task.spawn(refreshRunners)
@@ -3179,7 +3214,7 @@ task.spawn(function()
                 local adminPage = nil
                 
                 for _, v in pairs(gui:GetDescendants()) do
-                    if v:IsA("TextBox") and v.PlaceholderText == "Username to unmute/force mute..." then
+                    if v:IsA("TextBox") and v.PlaceholderText == "输入用户名以取消禁言/强制禁言..." then
                         adminPage = v.Parent.Parent
                         break
                     end
@@ -3200,7 +3235,7 @@ task.spawn(function()
                     lblTxt.Size = UDim2.new(1, -16, 1, 0)
                     lblTxt.Position = UDim2.new(0, 14, 0, 0)
                     lblTxt.BackgroundTransparency = 1
-                    lblTxt.Text = "--- GLOBAL ANNOUNCEMENT ---"
+                    lblTxt.Text = "--- 全局公告 ---"
                     lblTxt.Font = Enum.Font.GothamBold
                     lblTxt.TextSize = 9
                     lblTxt.TextColor3 = Color3.fromRGB(0, 195, 148)
@@ -3215,7 +3250,7 @@ task.spawn(function()
                     annInput.Size = UDim2.new(1, -10, 1, -6)
                     annInput.Position = UDim2.new(0, 5, 0, 3)
                     annInput.BackgroundTransparency = 1
-                    annInput.PlaceholderText = "Type announcement to all servers..."
+                    annInput.PlaceholderText = "输入向所有服务器发送的公告..."
                     annInput.Text = ""
                     annInput.Font = Enum.Font.Gotham
                     annInput.TextSize = 11
@@ -3224,7 +3259,7 @@ task.spawn(function()
                     local annBtn = Instance.new("TextButton", adminPage)
                     annBtn.Size = UDim2.new(1, 0, 0, 28)
                     annBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 50)
-                    annBtn.Text = "SEND ANNOUNCEMENT"
+                    annBtn.Text = "发送公告"
                     annBtn.Font = Enum.Font.GothamBold
                     annBtn.TextSize = 11
                     annBtn.TextColor3 = Color3.new(1,1,1)
@@ -3234,7 +3269,7 @@ task.spawn(function()
                         local msg = annInput.Text:match("^%s*(.-)%s*$")
                         if msg == "" then return end
                         
-                        annBtn.Text = "SENDING..."
+                        annBtn.Text = "发送中..."
                         pcall(function()
                             fbReq("PUT", "/announce", {
                                 msg = msg,
@@ -3244,9 +3279,9 @@ task.spawn(function()
                         end)
                         
                         annInput.Text = ""
-                        annBtn.Text = "SENT TO EVERYONE"
+                        annBtn.Text = "已发送给所有人"
                         task.wait(2)
-                        annBtn.Text = "SEND ANNOUNCEMENT"
+                        annBtn.Text = "发送公告"
                     end)
                 end
             end
