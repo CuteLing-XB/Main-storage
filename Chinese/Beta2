@@ -777,6 +777,7 @@ local function giveTelekinesisTool()
                     touched = false
                     BP:remove()
                     point:remove()
+                    tool:remove()
                 end
             end)
             usrinput.TouchTapInWorld:connect(function()
@@ -2178,10 +2179,6 @@ end)
 
 -- ให้รันทันทีเมื่อ Execute
 giveTelekinesisTool()
-LP.CharacterAdded:Connect(function()
-    task.wait(1)
-    giveTelekinesisTool()
-end)
 -- ══════════════════════════════════════════════════════════════
 --  GLOBAL CHAT v6.0 + ADMIN PANEL v4.0 (ADDON)
 --  วิธีใช้: นำโค้ดนี้ไปวางต่อท้ายสคริปต์หลักได้เลย
