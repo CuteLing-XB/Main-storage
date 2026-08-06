@@ -1,0 +1,1561 @@
+-- ==============================================================================
+-- 🚀 ULTRA HUB V3.5 ULTIATE (俄亥俄州 - 云端背景与悬浮球图片完整修复版)
+-- 作者: 𝕿𝖆𝖎𝖇𝖆𝖔𝟎𝟎𝟏  |  🐧群聊: 1038531272
+-- ==============================================================================
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+if not isfolder("XA-Hub") then
+    makefolder("XA-Hub")
+end
+if not isfolder("XA-Hub/Fluent") then
+    makefolder("XA-Hub/Fluent")
+end
+if not isfile("XA-Hub/Fluent/AutoFindMoneyPrinter.txt") then
+    writefile("XA-Hub/Fluent/AutoFindMoneyPrinter.txt", "false")
+end
+
+local autoFind = readfile("XA-Hub/Fluent/AutoFindMoneyPrinter.txt")
+if autoFind == "true" then
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Xingtaiduan/Script/refs/heads/main/Games/俄亥俄州_印钞机.lua"))()
+    end)
+    return
+end
+
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local SoundService = game:GetService("SoundService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local Lighting = game:GetService("Lighting")
+
+local LocalPlayer = Players.LocalPlayer
+
+-----------------------------------------------------------
+-- 🎯 [开发者与界面清理]
+-----------------------------------------------------------
+if CoreGui:FindFirstChild("UltraHub_Full_V2") then
+    CoreGui:FindFirstChild("UltraHub_Full_V2"):Destroy()
+end
+
+local function makeTextCrisp(label)
+    if label:IsA("TextLabel") or label:IsA("TextButton") or label:IsA("TextBox") then
+        label.RichText = true
+        label.TextScaled = false
+        label.BorderSizePixel = 0
+    end
+end
+
+-----------------------------------------------------------
+-- 🖼️ [恢复: 云端资源下载与本地缓存机制]
+-----------------------------------------------------------
+local BG_IMAGE_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/%E3%80%90%E5%93%B2%E9%A3%8E%E5%A3%81%E7%BA%B8%E3%80%91jk-%E4%BA%8C%E6%AC%A1%E5%85%83-%E5%9F%8E%E5%B8%82%20(1).png"
+local ICON_IMAGE_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/OPLKK.png"
+
+local bgFileName = "UltraHub_BgImage.png"
+local iconFileName = "UltraHub_MiniIcon.png"
+local FALLBACK_ASSET = "rbxassetid://11402246237"
+
+local function fetchValidImage(url)
+    local body = nil
+    local req = (syn and syn.request) or (http and http.request) or http_request or request
+    if req then
+        local success, response = pcall(function() return req({Url = url, Method = "GET"}) end)
+        if success and response and response.Success and response.Body then body = response.Body end
+    elseif game.HttpGet then
+        pcall(function() body = game:HttpGet(url) end)
+    end
+    if body and #body > 10240 then return body end
+    return nil
+end
+
+local function getOrDownloadAsset(url, fileName)
+    if writefile and readfile and getcustomasset then
+        if isfile and isfile(fileName) then
+            pcall(function() if readfile(fileName) and #readfile(fileName) < 10240 then delfile(fileName) end end)
+        end
+        if not (isfile and isfile(fileName)) then
+            local validBytes = fetchValidImage(url)
+            if validBytes then pcall(function() writefile(fileName, validBytes) end) end
+        end
+        if isfile and isfile(fileName) then
+            local success, asset = pcall(function() return getcustomasset(fileName) end)
+            if success and asset then return asset end
+        end
+    end
+    return FALLBACK_ASSET
+end
+
+local FinalBgAsset = getOrDownloadAsset(BG_IMAGE_URL, bgFileName)
+local FinalIconAsset = getOrDownloadAsset(ICON_IMAGE_URL, iconFileName)
+
+-----------------------------------------------------------
+-- 🎨 [通用脚本作者信息弹窗]
+-----------------------------------------------------------
+local function showAuthorNotification(playSound)
+    local notifyGui = Instance.new("ScreenGui")
+    notifyGui.Name = "TaibaoNotifyGui"
+    notifyGui.ResetOnSpawn = false
+    notifyGui.DisplayOrder = 9999
+    
+    if gethui then notifyGui.Parent = gethui()
+    elseif syn and syn.protect_gui then syn.protect_gui(notifyGui); notifyGui.Parent = CoreGui
+    else notifyGui.Parent = CoreGui end
+
+    if playSound ~= false then
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://602698205"
+        sound.Volume = 1
+        sound.Parent = notifyGui
+        sound:Play()
+    end
+
+    local cardFrame = Instance.new("Frame")
+    cardFrame.Name = "NotifyCard"
+    cardFrame.Size = UDim2.new(0, 260, 0, 48)
+    cardFrame.Position = UDim2.new(1, 20, 1, -68)
+    cardFrame.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
+    cardFrame.BorderSizePixel = 0
+    cardFrame.Parent = notifyGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = cardFrame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 2
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = cardFrame
+
+    local accentBar = Instance.new("Frame")
+    accentBar.Size = UDim2.new(0, 4, 1, -12)
+    accentBar.Position = UDim2.new(0, 6, 0, 6)
+    accentBar.BorderSizePixel = 0
+    accentBar.Parent = cardFrame
+
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(0, 4)
+    barCorner.Parent = accentBar
+
+    local topLabel = Instance.new("TextLabel")
+    topLabel.Size = UDim2.new(1, -22, 0, 20)
+    topLabel.Position = UDim2.new(0, 16, 0, 5)
+    topLabel.BackgroundTransparency = 1
+    topLabel.Font = Enum.Font.GothamBold
+    topLabel.Text = "✨ 俄亥俄州 云端壁纸增强版已就绪"
+    topLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    topLabel.TextSize = 13
+    topLabel.TextXAlignment = Enum.TextXAlignment.Left
+    makeTextCrisp(topLabel)
+    topLabel.Parent = cardFrame
+
+    local bottomLabel = Instance.new("TextLabel")
+    bottomLabel.Size = UDim2.new(1, -22, 0, 18)
+    bottomLabel.Position = UDim2.new(0, 16, 0, 24)
+    bottomLabel.BackgroundTransparency = 1
+    bottomLabel.Font = Enum.Font.Gotham
+    bottomLabel.Text = "作者: Taibao001  |  🐧群聊: 1038531272"
+    bottomLabel.TextColor3 = Color3.fromRGB(180, 185, 195)
+    bottomLabel.TextSize = 11
+    bottomLabel.TextXAlignment = Enum.TextXAlignment.Left
+    makeTextCrisp(bottomLabel)
+    bottomLabel.Parent = cardFrame
+
+    local rainbowConnection
+    rainbowConnection = RunService.RenderStepped:Connect(function()
+        local hue = (tick() % 2) / 2
+        local rainbowColor = Color3.fromHSV(hue, 0.8, 1)
+        stroke.Color = rainbowColor
+        accentBar.BackgroundColor3 = rainbowColor
+    end)
+
+    local tweenIn = TweenService:Create(cardFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(1, -275, 1, -68)})
+    tweenIn:Play()
+
+    task.delay(2.5, function()
+        local tweenInfoOut = TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        TweenService:Create(cardFrame, tweenInfoOut, {Position = UDim2.new(1, 20, 1, -68), BackgroundTransparency = 1}):Play()
+        TweenService:Create(stroke, tweenInfoOut, {Transparency = 1}):Play()
+        TweenService:Create(accentBar, tweenInfoOut, {BackgroundTransparency = 1}):Play()
+        TweenService:Create(topLabel, tweenInfoOut, {TextTransparency = 1}):Play()
+        local tweenOut = TweenService:Create(bottomLabel, tweenInfoOut, {TextTransparency = 1})
+        tweenOut:Play()
+
+        tweenOut.Completed:Connect(function()
+            if rainbowConnection then rainbowConnection:Disconnect() end
+            notifyGui:Destroy()
+        end)
+    end)
+end
+
+local function playCrispSound(soundId, pitch)
+    task.spawn(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = soundId or "rbxassetid://6895079853"
+        sound.Volume = 0.55
+        sound.PlaybackSpeed = pitch or 1.25
+        sound.Parent = SoundService
+        sound:Play()
+        sound.Ended:Connect(function() sound:Destroy() end)
+    end)
+end
+
+-----------------------------------------------------------
+-- 🎨 [主题与基本样式配置]
+-----------------------------------------------------------
+local Themes = {
+    ["猫娘粉紫"] = { MainBg = Color3.fromRGB(48, 35, 58), HeaderBg = Color3.fromRGB(68, 45, 82), CardBg = Color3.fromRGB(88, 58, 105), Accent = Color3.fromRGB(245, 140, 255), Text = Color3.fromRGB(255, 245, 255), SubText = Color3.fromRGB(220, 185, 235) },
+    ["暗黑动漫"] = { MainBg = Color3.fromRGB(30, 35, 50), HeaderBg = Color3.fromRGB(42, 48, 68), CardBg = Color3.fromRGB(54, 62, 88), Accent = Color3.fromRGB(255, 130, 195), Text = Color3.fromRGB(250, 252, 255), SubText = Color3.fromRGB(180, 190, 215) },
+    ["赛博霓虹"] = { MainBg = Color3.fromRGB(22, 40, 60), HeaderBg = Color3.fromRGB(32, 58, 85), CardBg = Color3.fromRGB(42, 75, 110), Accent = Color3.fromRGB(50, 245, 255), Text = Color3.fromRGB(235, 255, 255), SubText = Color3.fromRGB(150, 210, 235) },
+    ["深海翡翠"] = { MainBg = Color3.fromRGB(22, 48, 42), HeaderBg = Color3.fromRGB(32, 68, 60), CardBg = Color3.fromRGB(44, 90, 80), Accent = Color3.fromRGB(80, 240, 140), Text = Color3.fromRGB(240, 255, 250), SubText = Color3.fromRGB(160, 215, 195) },
+    ["冰雪冰蓝"] = { MainBg = Color3.fromRGB(35, 48, 68), HeaderBg = Color3.fromRGB(50, 68, 95), CardBg = Color3.fromRGB(65, 88, 122), Accent = Color3.fromRGB(120, 200, 255), Text = Color3.fromRGB(245, 252, 255), SubText = Color3.fromRGB(185, 215, 240) },
+    ["极光落日"] = { MainBg = Color3.fromRGB(52, 35, 42), HeaderBg = Color3.fromRGB(75, 48, 58), CardBg = Color3.fromRGB(98, 62, 75), Accent = Color3.fromRGB(255, 150, 110), Text = Color3.fromRGB(255, 245, 240), SubText = Color3.fromRGB(235, 185, 175) }
+}
+
+local UIConfig = { IsLocked = false, IsMinimized = false, RainbowBorder = true, RainbowSpeed = 1.5, RainbowType = "七彩光谱", BgTransparency = 0.35, CurrentTheme = "猫娘粉紫", MinSize = Vector2.new(520, 360), MaxSize = Vector2.new(900, 600) }
+local Themeables = { MainFrames = {}, Headers = {}, Cards = {}, Accents = {}, Texts = {}, SubTexts = {} }
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "UltraHub_Full_V2"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function() ScreenGui.Parent = CoreGui end)
+if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+-- 📢 通知系统
+local NotifyHolder = Instance.new("Frame")
+NotifyHolder.Name = "NotifyHolder"
+NotifyHolder.Size = UDim2.new(0, 260, 1, -20)
+NotifyHolder.Position = UDim2.new(1, -270, 0, 10)
+NotifyHolder.BackgroundTransparency = 1
+NotifyHolder.ZIndex = 100
+NotifyHolder.Parent = ScreenGui
+
+local NotifyLayout = Instance.new("UIListLayout")
+NotifyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+NotifyLayout.Padding = UDim.new(0, 8)
+NotifyLayout.Parent = NotifyHolder
+
+local function Notify(titleText, descText, duration)
+    playCrispSound("rbxassetid://9114223179", 1.3)
+    duration = duration or 3
+    local curTheme = Themes[UIConfig.CurrentTheme]
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 0)
+    card.BackgroundColor3 = curTheme.HeaderBg
+    card.ClipsDescendants = true
+    card.Parent = NotifyHolder
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = card
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1.5
+    stroke.Color = curTheme.Accent
+    stroke.Parent = card
+
+    local title = Instance.new("TextLabel")
+    title.Text = titleText
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 13
+    title.TextColor3 = curTheme.Text
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Position = UDim2.new(0, 10, 0, 6)
+    title.Size = UDim2.new(1, -20, 0, 16)
+    title.BackgroundTransparency = 1
+    makeTextCrisp(title)
+    title.Parent = card
+
+    local desc = Instance.new("TextLabel")
+    desc.Text = descText
+    desc.Font = Enum.Font.Gotham
+    desc.TextSize = 11
+    desc.TextColor3 = curTheme.SubText
+    desc.TextXAlignment = Enum.TextXAlignment.Left
+    desc.Position = UDim2.new(0, 10, 0, 24)
+    desc.Size = UDim2.new(1, -20, 0, 24)
+    desc.BackgroundTransparency = 1
+    makeTextCrisp(desc)
+    desc.Parent = card
+
+    TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 54)}):Play()
+    task.delay(duration, function()
+        if card and card.Parent then
+            local tween = TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = UDim2.new(1, 0, 0, 0)})
+            tween:Play()
+            tween.Completed:Connect(function() card:Destroy() end)
+        end
+    end)
+end
+
+-----------------------------------------------------------
+-- 🖼️ 主 GUI 构建 (恢复云端壁纸与小图标)
+-----------------------------------------------------------
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 640, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -320, 0.5, -210)
+MainFrame.BackgroundColor3 = Themes[UIConfig.CurrentTheme].MainBg
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = false
+MainFrame.Parent = ScreenGui
+table.insert(Themeables.MainFrames, MainFrame)
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 3.5
+MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+MainStroke.Parent = MainFrame
+
+local StrokeGradient = Instance.new("UIGradient")
+StrokeGradient.Parent = MainStroke
+local rainbowOffset = 0
+
+-- 恢复：主界面背景动漫壁纸
+local AnimeBg = Instance.new("ImageLabel")
+AnimeBg.Name = "AnimeBg"
+AnimeBg.Size = UDim2.new(1, 0, 1, 0)
+AnimeBg.Image = FinalBgAsset
+AnimeBg.ImageTransparency = UIConfig.BgTransparency
+AnimeBg.ScaleType = Enum.ScaleType.Crop
+AnimeBg.BackgroundTransparency = 1
+AnimeBg.ZIndex = 0
+AnimeBg.Parent = MainFrame
+
+local BgCorner = Instance.new("UICorner")
+BgCorner.CornerRadius = UDim.new(0, 12)
+BgCorner.Parent = AnimeBg
+
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 46)
+Header.BackgroundColor3 = Themes[UIConfig.CurrentTheme].HeaderBg
+Header.BorderSizePixel = 0
+Header.ZIndex = 2
+Header.Parent = MainFrame
+table.insert(Themeables.Headers, Header)
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 12)
+HeaderCorner.Parent = Header
+
+local PlayerInfoLabel = Instance.new("TextLabel")
+PlayerInfoLabel.Name = "PlayerInfoLabel"
+PlayerInfoLabel.Text = string.format("<b>%s</b> <font color='#aab5d0' size='10'>(@%s)</font>\n<font color='#ff88cc' size='10'>ULTRA HUB - 俄亥俄州</font>", LocalPlayer.DisplayName, LocalPlayer.Name)
+PlayerInfoLabel.Font = Enum.Font.GothamBold
+PlayerInfoLabel.TextSize = 12
+PlayerInfoLabel.TextColor3 = Themes[UIConfig.CurrentTheme].Text
+PlayerInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+PlayerInfoLabel.Position = UDim2.new(0, 16, 0, 0)
+PlayerInfoLabel.Size = UDim2.new(0.6, 0, 1, 0)
+PlayerInfoLabel.BackgroundTransparency = 1
+PlayerInfoLabel.ZIndex = 3
+makeTextCrisp(PlayerInfoLabel)
+PlayerInfoLabel.Parent = Header
+table.insert(Themeables.Texts, PlayerInfoLabel)
+
+local ControlBox = Instance.new("Frame")
+ControlBox.Size = UDim2.new(0, 105, 1, 0)
+ControlBox.Position = UDim2.new(1, -110, 0, 0)
+ControlBox.BackgroundTransparency = 1
+ControlBox.ZIndex = 3
+ControlBox.Parent = Header
+
+local ControlLayout = Instance.new("UIListLayout")
+ControlLayout.FillDirection = Enum.FillDirection.Horizontal
+ControlLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+ControlLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+ControlLayout.Padding = UDim.new(0, 6)
+ControlLayout.Parent = ControlBox
+
+local function createHeaderBtn(text, color)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 28, 0, 28)
+    btn.BackgroundColor3 = color or Color3.fromRGB(55, 62, 88)
+    btn.Text = text
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.TextColor3 = Color3.fromRGB(250, 250, 250)
+    makeTextCrisp(btn)
+    btn.Parent = ControlBox
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    return btn
+end
+
+local MinimizeBtn = createHeaderBtn("—", Color3.fromRGB(65, 72, 102))
+local LockBtn = createHeaderBtn("🔓")
+local CloseBtn = createHeaderBtn("✕", Color3.fromRGB(235, 70, 90))
+
+-- 恢复：悬浮球图片小图标按钮
+local NekoIcon = Instance.new("ImageButton")
+NekoIcon.Name = "NekoMiniIcon"
+NekoIcon.Size = UDim2.new(0, 55, 0, 55)
+NekoIcon.Position = UDim2.new(0.03, 0, 0.2, 0)
+NekoIcon.Image = FinalIconAsset
+NekoIcon.BackgroundColor3 = Color3.fromRGB(45, 52, 78)
+NekoIcon.Visible = false
+NekoIcon.ZIndex = 1000
+NekoIcon.Parent = ScreenGui
+
+local NekoCorner = Instance.new("UICorner")
+NekoCorner.CornerRadius = UDim.new(1, 0)
+NekoCorner.Parent = NekoIcon
+
+local NekoStroke = Instance.new("UIStroke")
+NekoStroke.Thickness = 3
+NekoStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+NekoStroke.Parent = NekoIcon
+
+local NekoStrokeGradient = Instance.new("UIGradient")
+NekoStrokeGradient.Parent = NekoStroke
+
+-- 彩虹边框刷新机制
+RunService.RenderStepped:Connect(function(delta)
+    if UIConfig.RainbowBorder then
+        rainbowOffset = (rainbowOffset + delta * (UIConfig.RainbowSpeed * 0.15)) % 1
+        local currentGradientColor
+        if UIConfig.RainbowType == "七彩光谱" then
+            currentGradientColor = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromHSV(rainbowOffset, 1, 1)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromHSV((rainbowOffset + 0.5) % 1, 1, 1)),
+                ColorSequenceKeypoint.new(1, Color3.fromHSV((rainbowOffset + 1) % 1, 1, 1))
+            })
+        elseif UIConfig.RainbowType == "呼吸霓虹" then
+            local c = Color3.fromHSV(rainbowOffset, 1, 1)
+            currentGradientColor = ColorSequence.new(c, c)
+        elseif UIConfig.RainbowType == "双色波浪" then
+            local c1 = Color3.fromHSV(rainbowOffset, 1, 1)
+            local c2 = Color3.fromHSV((rainbowOffset + 0.5) % 1, 1, 1)
+            currentGradientColor = ColorSequence.new({ ColorSequenceKeypoint.new(0, c1), ColorSequenceKeypoint.new(0.5, c2), ColorSequenceKeypoint.new(1, c1) })
+        elseif UIConfig.RainbowType == "猫娘粉紫" then
+            currentGradientColor = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromHSV(rainbowOffset, 0.6, 1)), ColorSequenceKeypoint.new(0.5, Color3.fromHSV((rainbowOffset + 0.3) % 1, 0.8, 1)), ColorSequenceKeypoint.new(1, Color3.fromHSV((rainbowOffset + 0.6) % 1, 0.6, 1)) })
+        end
+        StrokeGradient.Color = currentGradientColor
+        NekoStrokeGradient.Color = currentGradientColor
+    end
+end)
+
+local SidebarContainer = Instance.new("ScrollingFrame")
+SidebarContainer.Name = "SidebarContainer"
+SidebarContainer.Size = UDim2.new(0, 145, 1, -50)
+SidebarContainer.Position = UDim2.new(0, 0, 0, 50)
+SidebarContainer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+SidebarContainer.BackgroundTransparency = 0.85
+SidebarContainer.BorderSizePixel = 0
+SidebarContainer.ScrollBarThickness = 2
+SidebarContainer.ZIndex = 2
+SidebarContainer.Parent = MainFrame
+
+local SidebarLayout = Instance.new("UIListLayout")
+SidebarLayout.Padding = UDim.new(0, 4)
+SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+SidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SidebarLayout.Parent = SidebarContainer
+
+SidebarLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    SidebarContainer.CanvasSize = UDim2.new(0, 0, 0, SidebarLayout.AbsoluteContentSize.Y + 12)
+end)
+
+local ContentHolder = Instance.new("Frame")
+ContentHolder.Name = "ContentHolder"
+ContentHolder.Size = UDim2.new(1, -155, 1, -58)
+ContentHolder.Position = UDim2.new(0, 150, 0, 52)
+ContentHolder.BackgroundTransparency = 1
+ContentHolder.ZIndex = 2
+ContentHolder.Parent = MainFrame
+
+local function makeDraggable(frame, handle)
+    local dragging = false
+    local currentInput = nil
+    local dragStart = Vector2.new(0, 0)
+    local startPos = UDim2.new(0, 0, 0, 0)
+
+    handle.InputBegan:Connect(function(input)
+        if UIConfig.IsLocked and frame == MainFrame then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then return end
+            dragging = true
+            currentInput = input
+            dragStart = input.Position
+            startPos = frame.Position
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == currentInput then
+            local delta = input.Position - dragStart
+            if not (UIConfig.IsLocked and frame == MainFrame) then
+                frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input == currentInput then dragging = false currentInput = nil end
+    end)
+end
+
+local restoreUI
+
+local function setupNekoIcon(btn)
+    local dragging = false
+    local currentInput = nil
+    local dragStart = Vector2.new(0, 0)
+    local startPos = UDim2.new(0, 0, 0, 0)
+    local hasDragged = false
+
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if not btn.Visible or dragging then return end
+            dragging = true
+            hasDragged = false
+            currentInput = input
+            dragStart = input.Position
+            startPos = btn.Position
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == currentInput and btn.Visible then
+            local delta = input.Position - dragStart
+            if delta.Magnitude > 5 then hasDragged = true end
+            btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input == currentInput then
+            dragging = false
+            currentInput = nil
+            if not hasDragged and btn.Visible then if restoreUI then restoreUI() end end
+        end
+    end)
+end
+
+makeDraggable(MainFrame, Header)
+setupNekoIcon(NekoIcon)
+
+local lastSavedPosition = UDim2.new(0.5, -320, 0.5, -210)
+
+local function minimizeUI()
+    playCrispSound("rbxassetid://6895079853", 1.4)
+    UIConfig.IsMinimized = true
+    lastSavedPosition = MainFrame.Position
+    local tween = TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), { Size = UDim2.new(0, 0, 0, 0), Position = NekoIcon.Position })
+    tween:Play()
+    tween.Completed:Connect(function()
+        MainFrame.Visible = false
+        NekoIcon.Visible = true
+        NekoIcon.Size = UDim2.new(0, 0, 0, 0)
+        TweenService:Create(NekoIcon, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 55, 0, 55)}):Play()
+    end)
+end
+
+restoreUI = function()
+    playCrispSound("rbxassetid://6895079853", 1.5)
+    UIConfig.IsMinimized = false
+    TweenService:Create(NekoIcon, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)}):Play()
+    task.delay(0.15, function()
+        NekoIcon.Visible = false
+        MainFrame.Visible = true
+        MainFrame.Size = UDim2.new(0, 0, 0, 0)
+        TweenService:Create(MainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.new(0, 640, 0, 420), Position = lastSavedPosition }):Play()
+    end)
+end
+
+MinimizeBtn.MouseButton1Click:Connect(minimizeUI)
+CloseBtn.MouseButton1Click:Connect(minimizeUI)
+
+LockBtn.MouseButton1Click:Connect(function()
+    playCrispSound("rbxassetid://6895079853", 1.3)
+    UIConfig.IsLocked = not UIConfig.IsLocked
+    LockBtn.Text = UIConfig.IsLocked and "🔒" or "🔓"
+    LockBtn.BackgroundColor3 = UIConfig.IsLocked and Color3.fromRGB(235, 70, 90) or Color3.fromRGB(55, 62, 88)
+    Notify("UI 锁定", UIConfig.IsLocked and "窗口已锁定位置" or "窗口位置已解锁", 2)
+end)
+
+local function ApplyTheme(themeName)
+    local target = Themes[themeName]
+    if not target then return end
+    UIConfig.CurrentTheme = themeName
+    for _, f in ipairs(Themeables.MainFrames) do TweenService:Create(f, TweenInfo.new(0.3), {BackgroundColor3 = target.MainBg}):Play() end
+    for _, h in ipairs(Themeables.Headers) do TweenService:Create(h, TweenInfo.new(0.3), {BackgroundColor3 = target.HeaderBg}):Play() end
+    for _, c in ipairs(Themeables.Cards) do TweenService:Create(c, TweenInfo.new(0.3), {BackgroundColor3 = target.CardBg}):Play() end
+    for _, a in ipairs(Themeables.Accents) do
+        if a:IsA("UIStroke") then TweenService:Create(a, TweenInfo.new(0.3), {Color = target.Accent}):Play()
+        else TweenService:Create(a, TweenInfo.new(0.3), {BackgroundColor3 = target.Accent, TextColor3 = target.Accent}):Play() end
+    end
+    for _, t in ipairs(Themeables.Texts) do TweenService:Create(t, TweenInfo.new(0.3), {TextColor3 = target.Text}):Play() end
+    for _, st in ipairs(Themeables.SubTexts) do TweenService:Create(st, TweenInfo.new(0.3), {TextColor3 = target.SubText}):Play() end
+    if not UIConfig.RainbowBorder then
+        MainStroke.Color = target.Accent
+        NekoStroke.Color = target.Accent
+    end
+end
+
+-----------------------------------------------------------
+-- 🛠️ 控件生成与全局状态表
+-----------------------------------------------------------
+local HubUI = { Tabs = {} }
+local Options = {}
+
+local function RegisterOption(name, default)
+    Options[name] = { Value = default, IsMoved = true }
+    return Options[name]
+end
+
+local function selectTab(targetTab)
+    playCrispSound("rbxassetid://6895079853", 1.3)
+    for _, t in pairs(HubUI.Tabs) do
+        t.Page.Visible = false
+        t.Button.BackgroundColor3 = Color3.fromRGB(38, 45, 68)
+        t.Button.TextColor3 = Themes[UIConfig.CurrentTheme].SubText
+    end
+    targetTab.Page.Visible = true
+    targetTab.Button.BackgroundColor3 = Themes[UIConfig.CurrentTheme].Accent
+    targetTab.Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+end
+
+function HubUI:CreateTab(name, icon, parentContainer)
+    local theme = Themes[UIConfig.CurrentTheme]
+    local parent = parentContainer or SidebarContainer
+
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Size = UDim2.new(parentContainer and 1 or 0.92, 0, 0, 28)
+    tabBtn.BackgroundColor3 = Color3.fromRGB(38, 45, 68)
+    tabBtn.Text = (icon or "📌") .. " " .. name
+    tabBtn.Font = Enum.Font.GothamMedium
+    tabBtn.TextSize = 11
+    tabBtn.TextColor3 = theme.SubText
+    makeTextCrisp(tabBtn)
+    tabBtn.Parent = parent
+    table.insert(Themeables.SubTexts, tabBtn)
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 6)
+    btnCorner.Parent = tabBtn
+
+    local pageScroll = Instance.new("ScrollingFrame")
+    pageScroll.Size = UDim2.new(1, 0, 1, 0)
+    pageScroll.BackgroundTransparency = 1
+    pageScroll.BorderSizePixel = 0
+    pageScroll.ScrollBarThickness = 3
+    pageScroll.Visible = false
+    pageScroll.Parent = ContentHolder
+
+    local pageLayout = Instance.new("UIListLayout")
+    pageLayout.Padding = UDim.new(0, 8)
+    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pageLayout.Parent = pageScroll
+
+    pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 12)
+    end)
+
+    local tabObj = { Page = pageScroll, Button = tabBtn }
+    tabBtn.MouseButton1Click:Connect(function()
+        selectTab(tabObj)
+    end)
+
+    table.insert(HubUI.Tabs, tabObj)
+    if #HubUI.Tabs == 1 then
+        pageScroll.Visible = true
+        tabBtn.BackgroundColor3 = theme.Accent
+        tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+
+    local Elements = {}
+    function Elements:AddSection(text)
+        local secLabel = Instance.new("TextLabel")
+        secLabel.Size = UDim2.new(1, -10, 0, 20)
+        secLabel.Text = "—— " .. string.upper(text) .. " ——"
+        secLabel.Font = Enum.Font.GothamBold
+        secLabel.TextSize = 11
+        secLabel.TextColor3 = Themes[UIConfig.CurrentTheme].Accent
+        secLabel.BackgroundTransparency = 1
+        makeTextCrisp(secLabel)
+        secLabel.Parent = pageScroll
+        table.insert(Themeables.Accents, secLabel)
+    end
+
+    function Elements:AddButton(text, callback)
+        local curTheme = Themes[UIConfig.CurrentTheme]
+        local btnCard = Instance.new("Frame")
+        btnCard.Size = UDim2.new(1, -10, 0, 36)
+        btnCard.BackgroundColor3 = curTheme.CardBg
+        btnCard.Parent = pageScroll
+        table.insert(Themeables.Cards, btnCard)
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = btnCard
+
+        local btn = Instance.new("TextButton")
+        btn.Text = "▶  " .. text
+        btn.Font = Enum.Font.GothamMedium
+        btn.TextSize = 12
+        btn.TextColor3 = curTheme.Text
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.Position = UDim2.new(0, 12, 0, 0)
+        btn.Size = UDim2.new(1, -12, 1, 0)
+        btn.BackgroundTransparency = 1
+        makeTextCrisp(btn)
+        btn.Parent = btnCard
+        table.insert(Themeables.Texts, btn)
+
+        btn.MouseButton1Click:Connect(function()
+            playCrispSound("rbxassetid://6895079853", 1.4)
+            if callback then pcall(callback) end
+        end)
+    end
+
+    function Elements:AddToggle(optName, text, defaultState, callback)
+        local opt = RegisterOption(optName, defaultState or false)
+        local curTheme = Themes[UIConfig.CurrentTheme]
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, -10, 0, 36)
+        card.BackgroundColor3 = curTheme.CardBg
+        card.Parent = pageScroll
+        table.insert(Themeables.Cards, card)
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = card
+
+        local label = Instance.new("TextLabel")
+        label.Text = text
+        label.Font = Enum.Font.GothamMedium
+        label.TextSize = 12
+        label.TextColor3 = curTheme.Text
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.Size = UDim2.new(0.7, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        makeTextCrisp(label)
+        label.Parent = card
+        table.insert(Themeables.Texts, label)
+
+        local switch = Instance.new("TextButton")
+        switch.Text = ""
+        switch.Size = UDim2.new(0, 40, 0, 20)
+        switch.Position = UDim2.new(1, -48, 0.5, -10)
+        switch.BackgroundColor3 = opt.Value and curTheme.Accent or Color3.fromRGB(65, 75, 98)
+        switch.Parent = card
+
+        local swCorner = Instance.new("UICorner")
+        swCorner.CornerRadius = UDim.new(1, 0)
+        swCorner.Parent = switch
+
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.new(0, 14, 0, 14)
+        dot.Position = opt.Value and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
+        dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        dot.Parent = switch
+
+        local dotCorner = Instance.new("UICorner")
+        dotCorner.CornerRadius = UDim.new(1, 0)
+        dotCorner.Parent = dot
+
+        switch.MouseButton1Click:Connect(function()
+            playCrispSound("rbxassetid://6895079853", opt.Value and 1.2 or 1.5)
+            opt.Value = not opt.Value
+            local accent = Themes[UIConfig.CurrentTheme].Accent
+            TweenService:Create(switch, TweenInfo.new(0.2), {BackgroundColor3 = opt.Value and accent or Color3.fromRGB(65, 75, 98)}):Play()
+            TweenService:Create(dot, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {Position = opt.Value and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)}):Play()
+            if callback then callback(opt.Value) end
+        end)
+
+        return opt
+    end
+
+    function Elements:AddSlider(optName, text, min, max, default, callback)
+        local opt = RegisterOption(optName, default or min)
+        min = min or 0
+        max = max or 100
+        local curTheme = Themes[UIConfig.CurrentTheme]
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, -10, 0, 48)
+        card.BackgroundColor3 = curTheme.CardBg
+        card.Parent = pageScroll
+        table.insert(Themeables.Cards, card)
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = card
+
+        local label = Instance.new("TextLabel")
+        label.Text = text
+        label.Font = Enum.Font.GothamMedium
+        label.TextSize = 12
+        label.TextColor3 = curTheme.Text
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Position = UDim2.new(0, 12, 0, 6)
+        label.Size = UDim2.new(0.6, 0, 0, 16)
+        label.BackgroundTransparency = 1
+        makeTextCrisp(label)
+        label.Parent = card
+        table.insert(Themeables.Texts, label)
+
+        local valLabel = Instance.new("TextLabel")
+        valLabel.Text = tostring(opt.Value)
+        valLabel.Font = Enum.Font.GothamBold
+        valLabel.TextSize = 12
+        valLabel.TextColor3 = curTheme.Accent
+        valLabel.TextXAlignment = Enum.TextXAlignment.Right
+        valLabel.Position = UDim2.new(1, -62, 0, 6)
+        valLabel.Size = UDim2.new(0, 50, 0, 16)
+        valLabel.BackgroundTransparency = 1
+        makeTextCrisp(valLabel)
+        valLabel.Parent = card
+        table.insert(Themeables.Accents, valLabel)
+
+        local track = Instance.new("Frame")
+        track.Size = UDim2.new(1, -24, 0, 6)
+        track.Position = UDim2.new(0, 12, 1, -12)
+        track.BackgroundColor3 = Color3.fromRGB(60, 70, 95)
+        track.Parent = card
+
+        local trackCorner = Instance.new("UICorner")
+        trackCorner.CornerRadius = UDim.new(1, 0)
+        trackCorner.Parent = track
+
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.new((opt.Value - min) / (max - min), 0, 1, 0)
+        fill.BackgroundColor3 = curTheme.Accent
+        fill.Parent = track
+        table.insert(Themeables.Accents, fill)
+
+        local fillCorner = Instance.new("UICorner")
+        fillCorner.CornerRadius = UDim.new(1, 0)
+        fillCorner.Parent = fill
+
+        local dragging = false
+        local function update(input)
+            local pos = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            opt.Value = math.floor(min + (max - min) * pos + 0.5)
+            valLabel.Text = tostring(opt.Value)
+            fill.Size = UDim2.new(pos, 0, 1, 0)
+            if callback then callback(opt.Value) end
+        end
+
+        track.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                playCrispSound("rbxassetid://6895079853", 1.3)
+                dragging = true
+                update(input)
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                update(input)
+            end
+        end)
+
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+        end)
+
+        return opt
+    end
+
+    function Elements:AddDropdown(optName, text, options, default, callback)
+        local opt = RegisterOption(optName, default or options[1] or "")
+        local expanded = false
+        local curTheme = Themes[UIConfig.CurrentTheme]
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, -10, 0, 38)
+        card.BackgroundColor3 = curTheme.CardBg
+        card.ClipsDescendants = true
+        card.Parent = pageScroll
+        table.insert(Themeables.Cards, card)
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = card
+
+        local label = Instance.new("TextLabel")
+        label.Text = text
+        label.Font = Enum.Font.GothamMedium
+        label.TextSize = 12
+        label.TextColor3 = curTheme.Text
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.Size = UDim2.new(0.5, 0, 0, 38)
+        label.BackgroundTransparency = 1
+        makeTextCrisp(label)
+        label.Parent = card
+        table.insert(Themeables.Texts, label)
+
+        local dropBtn = Instance.new("TextButton")
+        dropBtn.Text = tostring(opt.Value) .. "  ▼"
+        dropBtn.Font = Enum.Font.Gotham
+        dropBtn.TextSize = 11
+        dropBtn.TextColor3 = curTheme.Accent
+        dropBtn.BackgroundColor3 = Color3.fromRGB(32, 38, 55)
+        dropBtn.Size = UDim2.new(0, 130, 0, 24)
+        dropBtn.Position = UDim2.new(1, -138, 0, 7)
+        makeTextCrisp(dropBtn)
+        dropBtn.Parent = card
+        table.insert(Themeables.Accents, dropBtn)
+
+        local dropCorner = Instance.new("UICorner")
+        dropCorner.CornerRadius = UDim.new(0, 6)
+        dropCorner.Parent = dropBtn
+
+        local optHolder = Instance.new("Frame")
+        optHolder.Size = UDim2.new(1, -24, 0, #options * 26)
+        optHolder.Position = UDim2.new(0, 12, 0, 42)
+        optHolder.BackgroundTransparency = 1
+        optHolder.Parent = card
+
+        local optLayout = Instance.new("UIListLayout")
+        optLayout.Padding = UDim.new(0, 2)
+        optLayout.Parent = optHolder
+
+        for _, itemVal in ipairs(options) do
+            local item = Instance.new("TextButton")
+            item.Size = UDim2.new(1, 0, 0, 24)
+            item.BackgroundColor3 = Color3.fromRGB(38, 45, 68)
+            item.Text = tostring(itemVal)
+            item.Font = Enum.Font.Gotham
+            item.TextSize = 11
+            item.TextColor3 = curTheme.SubText
+            makeTextCrisp(item)
+            item.Parent = optHolder
+            table.insert(Themeables.SubTexts, item)
+
+            local itemCorner = Instance.new("UICorner")
+            itemCorner.CornerRadius = UDim.new(0, 4)
+            itemCorner.Parent = item
+
+            item.MouseButton1Click:Connect(function()
+                playCrispSound("rbxassetid://6895079853", 1.4)
+                opt.Value = itemVal
+                dropBtn.Text = tostring(opt.Value) .. "  ▼"
+                expanded = false
+                TweenService:Create(card, TweenInfo.new(0.2), {Size = UDim2.new(1, -10, 0, 38)}):Play()
+                if callback then callback(opt.Value) end
+            end)
+        end
+
+        dropBtn.MouseButton1Click:Connect(function()
+            playCrispSound("rbxassetid://6895079853", 1.2)
+            expanded = not expanded
+            local targetH = expanded and (46 + #options * 26) or 38
+            TweenService:Create(card, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {Size = UDim2.new(1, -10, 0, targetH)}):Play()
+        end)
+
+        return opt
+    end
+
+    function Elements:AddInput(optName, titleText, defaultText, callback)
+        local opt = RegisterOption(optName, defaultText or "")
+        local curTheme = Themes[UIConfig.CurrentTheme]
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, -10, 0, 38)
+        card.BackgroundColor3 = curTheme.CardBg
+        card.Parent = pageScroll
+        table.insert(Themeables.Cards, card)
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = card
+
+        local label = Instance.new("TextLabel")
+        label.Text = titleText
+        label.Font = Enum.Font.GothamMedium
+        label.TextSize = 12
+        label.TextColor3 = curTheme.Text
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Position = UDim2.new(0, 12, 0, 0)
+        label.Size = UDim2.new(0.5, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        makeTextCrisp(label)
+        label.Parent = card
+        table.insert(Themeables.Texts, label)
+
+        local box = Instance.new("TextBox")
+        box.Text = tostring(opt.Value)
+        box.Font = Enum.Font.Code
+        box.TextSize = 11
+        box.TextColor3 = curTheme.Text
+        box.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+        box.Position = UDim2.new(0.52, 0, 0.5, -12)
+        box.Size = UDim2.new(0.45, 0, 0, 24)
+        box.ClearTextOnFocus = false
+        makeTextCrisp(box)
+        box.Parent = card
+
+        local boxCorner = Instance.new("UICorner")
+        boxCorner.CornerRadius = UDim.new(0, 6)
+        boxCorner.Parent = box
+
+        function opt:SetTitle(t)
+            label.Text = t
+        end
+
+        box.FocusLost:Connect(function()
+            opt.Value = box.Text
+            if callback then callback(opt.Value) end
+        end)
+
+        return opt
+    end
+
+    return Elements
+end
+
+-----------------------------------------------------------
+-- 🔍 本地内嵌 ESP 与游戏远程信号提取
+-----------------------------------------------------------
+local ESP = { Objects = {}, ESPFolder = Instance.new("Folder") }
+ESP.ESPFolder.Name = "XA_ESP_Holder"
+ESP.ESPFolder.Parent = workspace
+
+function ESP.Add(cfg)
+    pcall(function()
+        if not cfg.Object or not cfg.Object.Parent then return end
+        local bill = Instance.new("BillboardGui")
+        bill.Name = "XA_ESP_Bill"
+        bill.AlwaysOnTop = true
+        bill.Size = UDim2.new(0, 100, 0, 30)
+        bill.StudsOffset = Vector3.new(0, 2, 0)
+        bill.Adornee = cfg.Object
+        
+        local txt = Instance.new("TextLabel")
+        txt.Parent = bill
+        txt.Size = UDim2.new(1, 0, 1, 0)
+        txt.BackgroundTransparency = 1
+        txt.TextColor3 = cfg.Color or Color3.new(1, 1, 1)
+        txt.TextSize = cfg.TextSize or 12
+        txt.Text = tostring(cfg.Name or "Item")
+        txt.Font = Enum.Font.SourceSansBold
+        
+        bill.Parent = ESP.ESPFolder
+        table.insert(ESP.Objects, bill)
+    end)
+end
+
+function ESP.Clear()
+    for i = #ESP.Objects, 1, -1 do
+        if ESP.Objects[i] and ESP.Objects[i].Parent then
+            ESP.Objects[i]:Destroy()
+        end
+        table.remove(ESP.Objects, i)
+    end
+end
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid", 10)
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart", 10)
+
+local devv = ReplicatedStorage:WaitForChild("devv", 10)
+local RemotesModule, Remotes, ClientReplicator, Inventory, StateData
+
+pcall(function()
+    RemotesModule = require(devv.client.Helpers.remotes.Signal)
+    Remotes = debug.getupvalue(RemotesModule.FireServer, 1)
+    ClientReplicator = require(devv.client.Helpers.objectProperties.ClientReplicator)
+    Inventory = require(devv.client.Objects.v3item.modules.inventory)
+    StateData = require(devv).load("state").data
+end)
+
+local SelectedTarget = nil
+local Whitelist = { 2953444466, 5509421902 }
+local ItemsOnSaleList = {}
+local Locations = {
+    ["军械库"] = CFrame.new(671.68, 6.24, -655.50),
+    ["银行"] = CFrame.new(1091.52, 6.04, -457.62),
+    ["珠宝店"] = CFrame.new(1543.31, 6.24, -682.63),
+    ["警察局"] = CFrame.new(655.10, 9.03, -903.20),
+    ["军事基地"] = CFrame.new(835.84, 25.23, -1327.04),
+    ["医院"] = CFrame.new(1112.45, 6.04, -973.91),
+    ["游乐场"] = CFrame.new(1170.87, 13.85, -25.79)
+}
+
+task.spawn(function()
+    if workspace:FindFirstChild("ItemsOnSale") then
+        for _, item in pairs(workspace.ItemsOnSale:GetChildren()) do
+            ItemsOnSaleList[item.Name] = item.Name
+        end
+    end
+
+    pcall(function()
+        for _, conn in pairs(getconnections(RunService.Heartbeat)) do
+            local fn = conn.Function
+            if fn and getfenv(fn).script == devv.client.Handlers.ClientValidate then
+                conn:Disable()
+                game.StarterGui:SetCore("SendNotification", { Title = "XA：提示", Text = "飞行/速度封禁绕过成功" })
+            end
+        end
+    end)
+end)
+
+local function FindPlayer(input)
+    if not input or input == "" then return nil end
+    local query = input:gsub("%s+", "")
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Name:lower():match("^" .. query:lower()) or player.DisplayName:lower():match("^" .. query:lower()) then
+            return player
+        end
+    end
+    game.StarterGui:SetCore("SendNotification", { Title = "XA：错误", Text = "未找到玩家" })
+    return nil
+end
+
+local function RefreshItemESP()
+    pcall(function()
+        if not workspace:FindFirstChild("Game") or not workspace.Game:FindFirstChild("Entities") or not workspace.Game.Entities:FindFirstChild("ItemPickup") then return end
+        for _, item in pairs(workspace.Game.Entities.ItemPickup:GetChildren()) do
+            for _, part in pairs(item:GetDescendants()) do
+                if part:IsA("MeshPart") then
+                    for _, prompt in pairs(part:GetDescendants()) do
+                        if prompt:IsA("ProximityPrompt") then
+                            ESP.Add({ Object = part, Name = prompt.ObjectText, Color = Color3.new(1, 1, 1), TextSize = 12 })
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Hook Metamethod 核心防护
+local OriginalNamecall
+OriginalNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod()
+
+    if checkcaller() then return OriginalNamecall(self, ...) end
+
+    if Remotes and method == "FireServer" and self == Remotes.meleeItemHit then
+        if tostring(args[1]) == "player" and args[2] and not table.find(Whitelist, args[2].hitPlayerId) then
+            if Options.OnePunch and Options.OnePunch.Value then
+                if not string.find(tostring(args[2].meleeType), "swing") then
+                    args[2].meleeType = "meleemegapunch"
+                end
+            end
+            if Options.OneSwing and Options.OneSwing.Value then
+                if string.find(tostring(args[2].meleeType), "swing") then
+                    args[2].meleeType = "meleemegaswing"
+                end
+            end
+            return OriginalNamecall(self, unpack(args))
+        end
+    end
+
+    if Remotes and Options.Hitbox and Options.Hitbox.Value and method == "FireServer" and self == Remotes.projectileHit then
+        if args[2] and args[2].hitPart then
+            local hitPart = args[2].hitPart
+            local model = hitPart:FindFirstAncestorOfClass("Model")
+            local hitPlayer = Players:GetPlayerFromCharacter(model)
+            if model and hitPlayer and model:FindFirstChild("Hitbox") and model.Hitbox:FindFirstChild("Head_Hitbox") then
+                args[2].hitPart = model.Hitbox["Head_Hitbox"]
+                args[2].hitPlayerId = hitPlayer.UserId
+                args[2].hitSize = args[2].hitPart.Size
+                args[2].pos = args[2].hitPart.Position
+            end
+        end
+        return OriginalNamecall(self, unpack(args))
+    end
+
+    return OriginalNamecall(self, ...)
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    Humanoid = char:WaitForChild("Humanoid", 10)
+    HumanoidRootPart = char:WaitForChild("HumanoidRootPart", 10)
+    if Options.AutoEquip and Options.AutoEquip.Value and Inventory and Remotes then
+        pcall(function() Remotes.FireServer("equip", Inventory.getFromName("Fists").guid) end)
+    end
+end)
+
+-- Frame 渲染主循环
+RunService.RenderStepped:Connect(function()
+    if not HumanoidRootPart or not HumanoidRootPart.Parent then return end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local char = player.Character
+            if not char then continue end
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hum or not hrp then continue end
+            if char:FindFirstChild("ForceField") or table.find(Whitelist, player.UserId) then continue end
+
+            if Options.KillAura and Options.KillAura.Value and Remotes then
+                if (HumanoidRootPart.Position - hrp.Position).Magnitude < 35 and hum.Health > 5 then
+                    Remotes.FireServer("meleeItemHit", "player", { meleeType = "meleemegapunch", hitPlayerId = player.UserId })
+                end
+            end
+
+            if Options.StompAura and Options.StompAura.Value and Remotes and ClientReplicator then
+                pcall(function()
+                    if ClientReplicator.Get(player, "knocked") and (HumanoidRootPart.Position - hrp.Position).Magnitude < 30 then
+                        Remotes.FireServer("stomp", player)
+                    end
+                end)
+            end
+
+            if Options.GrabAura and Options.GrabAura.Value and Remotes and ClientReplicator then
+                pcall(function()
+                    if ClientReplicator.Get(player, "knocked") and (HumanoidRootPart.Position - hrp.Position).Magnitude < 35 then
+                        Remotes.FireServer("grabPlayer", player)
+                    end
+                end)
+            end
+        end
+    end
+
+    if Options.Godmode and Options.Godmode.Value and ClientReplicator then
+        pcall(function()
+            if ClientReplicator.Get(LocalPlayer, "knocked") then ClientReplicator.Set(LocalPlayer, "knocked", false) end
+        end)
+    end
+
+    if Options.WalkSpeed and Options.WalkSpeed.IsMoved and Humanoid then Humanoid.WalkSpeed = Options.WalkSpeed.Value end
+    if Options.JumpPower and Options.JumpPower.IsMoved and Humanoid then Humanoid.JumpPower = Options.JumpPower.Value Humanoid.UseJumpPower = true end
+
+    if Options.Noclip and Options.Noclip.Value and Character then
+        for _, part in pairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+
+    if Options.Fullbright and Options.Fullbright.Value then Lighting.Ambient = Color3.new(1, 1, 1) else Lighting.Ambient = Color3.new(0, 0, 0) end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if Options.InfJump and Options.InfJump.Value and Humanoid then Humanoid:ChangeState("Jumping") end
+end)
+
+-----------------------------------------------------------
+-- 🚀 搭建 Ultra Hub 所有的板块页面与功能按钮
+-----------------------------------------------------------
+
+-- 1. ⚔️ 战斗类 Tab
+local TabCombat = HubUI:CreateTab("战斗类", "⚔️")
+TabCombat:AddToggle("OnePunch", "一拳秒杀", false)
+TabCombat:AddToggle("OneSwing", "其他近战武器秒杀", false)
+TabCombat:AddToggle("KillAura", "杀戮光环", false, function(v)
+    if v and Remotes and Inventory then pcall(function() Remotes.FireServer("equip", Inventory.getFromName("Fists").guid) end) end
+end)
+TabCombat:AddToggle("StompAura", "踩人光环", false)
+TabCombat:AddToggle("GrabAura", "抓人光环", false)
+TabCombat:AddToggle("Killall", "杀死全部", false, function(v)
+    if v and Remotes and Inventory then pcall(function() Remotes.FireServer("equip", Inventory.getFromName("Fists").guid) end) end
+    if HumanoidRootPart then HumanoidRootPart.Anchored = v end
+    task.spawn(function()
+        while Options.Killall.Value do
+            task.wait()
+            for _, player in pairs(Players:GetPlayers()) do
+                if not Options.Killall.Value then break end
+                if player == LocalPlayer or table.find(Whitelist, player.UserId) then continue end
+                local char = player.Character
+                if not char or not char:FindFirstChild("Humanoid") then continue end
+                if char.Humanoid.Health <= 5 or char:FindFirstChild("ForceField") then continue end
+                task.wait()
+                if Humanoid then Humanoid.Sit = false end
+                if char:FindFirstChild("HumanoidRootPart") and Character then
+                    Character:PivotTo(char.HumanoidRootPart.CFrame)
+                    if Remotes then
+                        Remotes.FireServer("meleeItemHit", "player", { meleeType = "meleemegapunch", hitPlayerId = player.UserId })
+                        Remotes.FireServer("stomp", player)
+                    end
+                end
+                task.wait(0.7)
+            end
+        end
+        if HumanoidRootPart then HumanoidRootPart.Anchored = false end
+    end)
+end)
+TabCombat:AddToggle("AutoEquip", "死亡自动装备拳头", false)
+TabCombat:AddToggle("Godmode", "防倒地", false)
+TabCombat:AddToggle("Invisible", "隐身 (可用枪械攻击)", false, function(v)
+    if v and HumanoidRootPart and Character then
+        local savedCF = HumanoidRootPart.CFrame
+        Character:MoveTo(Vector3.new(-25.95, 84, 3537.55))
+        task.wait(0.15)
+        local chair = Instance.new("Seat", workspace)
+        chair.Name = "invischair"
+        chair.Transparency = 1
+        chair.Position = Vector3.new(-25.95, 84, 3537.55)
+        local weld = Instance.new("Weld", chair)
+        weld.Part0 = chair
+        local torso = Character:FindFirstChild("Torso") or Character:FindFirstChild("UpperTorso")
+        if torso then
+            weld.Part1 = torso
+            task.wait()
+            Instance.new("Seat", workspace).CFrame = savedCF
+        end
+    else
+        local chair = workspace:FindFirstChild("invischair")
+        if chair then chair:Destroy() end
+    end
+end)
+TabCombat:AddToggle("RPGBomb", "RPG 全图轰炸", false, function(v)
+    if not v then return end
+    task.spawn(function()
+        while Options.RPGBomb.Value do
+            task.wait()
+            if not Inventory or not Remotes then break end
+            for _, player in pairs(Players:GetPlayers()) do
+                if not Options.RPGBomb.Value then break end
+                if player == LocalPlayer or table.find(Whitelist, player.UserId) then continue end
+                local char = player.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    Remotes.FireServer("rocketHit", "AmmoGuid", "explosionGUID", char.HumanoidRootPart.Position)
+                end
+            end
+        end
+    end)
+end)
+TabCombat:AddToggle("AutoArmor", "自动穿甲", false, function(v)
+    if not v then return end
+    task.spawn(function()
+        while Options.AutoArmor.Value do
+            task.wait(0.5)
+            if not Character or not Remotes or not Inventory then continue end
+            local armor = LocalPlayer:GetAttribute("armor")
+            if not armor or armor <= 0 then
+                pcall(function()
+                    Remotes.InvokeServer("attemptPurchase", "Light Vest")
+                    local vest = Inventory.getFromName("Light Vest")
+                    if vest then
+                        Remotes.FireServer("equip", vest.guid)
+                        Remotes.FireServer("useConsumable", vest.guid)
+                        Remotes.FireServer("removeItem", vest.guid)
+                    end
+                end)
+            end
+        end
+    end)
+end)
+
+TabCombat:AddSection("子弹范围")
+local HitboxConn
+TabCombat:AddToggle("Hitbox", "Hitbox 范围扩充开关", false, function(v)
+    if v then
+        HitboxConn = RunService.RenderStepped:Connect(function()
+            for _, player in next, Players:GetPlayers() do
+                if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    pcall(function()
+                        local hrp = player.Character.HumanoidRootPart
+                        local sz = tonumber(Options.HitboxSize.Value) or 15
+                        hrp.Size = Vector3.new(sz, sz, sz)
+                        hrp.Transparency = tonumber(Options.HitboxTransparency.Value) or 0.8
+                        hrp.Color = Color3.fromRGB(0, 0, 0)
+                        hrp.Material = Enum.Material.Neon
+                        hrp.CanCollide = false
+                    end)
+                end
+            end
+        end)
+    else
+        if HitboxConn then HitboxConn:Disconnect() end
+        for _, player in next, Players:GetPlayers() do
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                pcall(function()
+                    local hrp = player.Character.HumanoidRootPart
+                    hrp.Size = Vector3.new(2, 2, 1)
+                    hrp.Transparency = 1
+                end)
+            end
+        end
+    end
+end)
+TabCombat:AddInput("HitboxSize", "Hitbox 大小", "15")
+TabCombat:AddInput("HitboxTransparency", "Hitbox 透明度", "0.8")
+
+TabCombat:AddSection("白名单")
+local WhitelistInput
+WhitelistInput = TabCombat:AddInput("InputName", "输入目标玩家名称", "", function(v)
+    SelectedTarget = FindPlayer(v)
+    WhitelistInput:SetTitle(SelectedTarget and ("输入目标: " .. SelectedTarget.Name) or "未找到玩家")
+end)
+TabCombat:AddButton("添加至白名单", function()
+    if SelectedTarget and not table.find(Whitelist, SelectedTarget.UserId) then
+        table.insert(Whitelist, SelectedTarget.UserId)
+        Notify("提示", "已将 " .. SelectedTarget.Name .. " 添加到白名单", 2)
+    end
+end)
+TabCombat:AddButton("清空白名单", function()
+    table.clear(Whitelist)
+    Notify("提示", "已清空白名单", 2)
+end)
+
+-- 2. 🎒 物品 Tab
+local TabItems = HubUI:CreateTab("物品", "🎒")
+local SelectedItem = nil
+local itemList = {}
+for k in pairs(ItemsOnSaleList) do table.insert(itemList, k) end
+if #itemList == 0 then itemList = {"M4A1", "AK47", "RPG", "Light Vest", "Lockpick"} end
+
+TabItems:AddDropdown("SelectItem", "选择购买物品", itemList, itemList[1], function(v) SelectedItem = v end)
+TabItems:AddButton("购买所选物品", function()
+    if SelectedItem and Remotes then Remotes.InvokeServer("attemptPurchase", SelectedItem) end
+end)
+TabItems:AddButton("购买所选子弹", function()
+    if SelectedItem and Remotes then Remotes.InvokeServer("attemptPurchaseAmmo", SelectedItem) end
+end)
+TabItems:AddToggle("BlackMarket", "远程黑市", false, function(v)
+    pcall(function() workspace.BlackMarket.Dealer.Dealer.ProximityPrompt.MaxActivationDistance = v and 10000 or 20 end)
+end)
+TabItems:AddToggle("Locker", "远程储物柜", false, function(v)
+    pcall(function() LocalPlayer.PlayerGui.Backpack.Holder.Locker.Visible = v end)
+end)
+TabItems:AddToggle("ItemESP", "透视物品", false, function(v)
+    if v then RefreshItemESP() else ESP.Clear() end
+end)
+
+-- 3. 🤖 自动 Tab
+local TabAuto = HubUI:CreateTab("自动", "🤖")
+TabAuto:AddToggle("ATMFarm", "自动打 ATM", false, function(v)
+    if not v then return end
+    task.spawn(function()
+        while Options.ATMFarm.Value do
+            task.wait()
+            if workspace.Game:FindFirstChild("Props") and workspace.Game.Props:FindFirstChild("ATM") then
+                for _, atm in pairs(workspace.Game.Props.ATM:GetChildren()) do
+                    if not Options.ATMFarm.Value then break end
+                    if atm:GetAttribute("state") ~= "destroyed" then
+                        while atm:GetAttribute("state") ~= "destroyed" and Options.ATMFarm.Value do
+                            task.wait()
+                            if Character then Character:PivotTo(atm:GetPivot()) end
+                            if Remotes then Remotes.FireServer("meleeItemHit", "prop", { meleeType = "meleepunch", guid = atm:GetAttribute("guid") }) end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end)
+TabAuto:AddToggle("RegisterFarm", "自动打收银机", false, function(v)
+    if not v then return end
+    task.spawn(function()
+        while Options.RegisterFarm.Value do
+            task.wait()
+            if workspace.Game:FindFirstChild("Props") and workspace.Game.Props:FindFirstChild("CashRegister") then
+                for _, reg in pairs(workspace.Game.Props.CashRegister:GetChildren()) do
+                    if not Options.RegisterFarm.Value then break end
+                    if reg:GetAttribute("state") ~= "destroyed" then
+                        while reg:GetAttribute("state") ~= "destroyed" and Options.RegisterFarm.Value do
+                            task.wait()
+                            if Character then Character:PivotTo(reg:GetPivot()) end
+                            if Remotes then Remotes.FireServer("meleeItemHit", "prop", { meleeType = "meleepunch", guid = reg:GetAttribute("guid") }) end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end)
+TabAuto:AddToggle("CashAura", "自动捡钱光环", false, function(v)
+    if not v then return end
+    task.spawn(function()
+        while Options.CashAura.Value do
+            if workspace.Game.Entities:FindFirstChild("CashBundle") then
+                for _, bundle in pairs(workspace.Game.Entities.CashBundle:GetChildren()) do
+                    local cd = bundle:FindFirstChildOfClass("ClickDetector")
+                    if cd and HumanoidRootPart and (HumanoidRootPart.Position - bundle:GetPivot().Position).Magnitude <= cd.MaxActivationDistance then
+                        if fireclickdetector then fireclickdetector(cd) end
+                    end
+                end
+            end
+            task.wait(0.25)
+        end
+    end)
+end)
+TabAuto:AddToggle("AutoRobBank", "自动抢银行", false, function(v)
+    if not v then return end
+    task.spawn(function()
+        while Options.AutoRobBank.Value do
+            pcall(function()
+                local bank = workspace:FindFirstChild("BankRobbery")
+                if not bank then return end
+                local cash = bank.BankCash.Cash
+                repeat task.wait() until #cash:GetChildren() ~= 0 or not Options.AutoRobBank.Value
+                if not Options.AutoRobBank.Value then return end
+                
+                if HumanoidRootPart then
+                    HumanoidRootPart.CFrame = bank.VaultDoor.Door.CFrame
+                    if fireproximityprompt then fireproximityprompt(bank.VaultDoor.Door.Attachment.ProximityPrompt) end
+                    task.wait(0.5)
+                end
+                repeat task.wait() until not bank.VaultDoor.Door.Attachment.ProximityPrompt.Enabled or not Options.AutoRobBank.Value
+                if HumanoidRootPart then
+                    HumanoidRootPart.CFrame = bank.BankCash.Pallet.CFrame
+                    if fireproximityprompt then fireproximityprompt(bank.BankCash.Main.Attachment.ProximityPrompt) end
+                    task.wait(0.5)
+                end
+            end)
+            task.wait()
+        end
+    end)
+end)
+
+-- 4. 🚀 传送 Tab
+local TabTeleport = HubUI:CreateTab("传送", "🚀")
+local SelectedLoc = nil
+local locList = {}
+for k in pairs(Locations) do table.insert(locList, k) end
+
+TabTeleport:AddDropdown("SelectLocation", "选择传送地点", locList, locList[1], function(v) SelectedLoc = v end)
+TabTeleport:AddButton("传送至目标位置", function()
+    if SelectedLoc and Locations[SelectedLoc] and Character then
+        Character:PivotTo(Locations[SelectedLoc])
+    end
+end)
+
+-- 5. 🛠️ 其他 Tab
+local TabOther = HubUI:CreateTab("其他", "🛠️")
+TabOther:AddSlider("WalkSpeed", "移动速度", 16, 500, 16, function(v) if Humanoid then Humanoid.WalkSpeed = v end end)
+TabOther:AddSlider("JumpPower", "跳跃高度", 50, 500, 50, function(v) if Humanoid then Humanoid.JumpPower = v Humanoid.UseJumpPower = true end end)
+TabOther:AddToggle("Noclip", "穿墙", false)
+TabOther:AddToggle("Fullbright", "夜视", false)
+TabOther:AddToggle("InfJump", "无限跳", false)
+
+-- 6. ⚙️ 右侧最下方放置彩虹特效与设置 Tab
+local SettingsTab = HubUI:CreateTab("界面设置", "⚙️")
+SettingsTab:AddSection("彩虹特效与动画 (最下方配置)")
+SettingsTab:AddToggle("RainbowBorderToggle", "开启彩虹边框", true, function(v)
+    UIConfig.RainbowBorder = v
+    if not v then
+        MainStroke.Color = Themes[UIConfig.CurrentTheme].Accent
+        NekoStroke.Color = Themes[UIConfig.CurrentTheme].Accent
+    end
+end)
+SettingsTab:AddDropdown("RainbowTypeDrop", "彩虹特效模式", {"七彩光谱", "呼吸霓虹", "双色波浪", "猫娘粉紫"}, "七彩光谱", function(mode)
+    UIConfig.RainbowType = mode
+end)
+SettingsTab:AddSlider("RainbowSpeedSlider", "彩虹变色速度", 0.1, 5, 1.5, function(v)
+    UIConfig.RainbowSpeed = v
+end)
+
+SettingsTab:AddSection("UI 主题风格")
+SettingsTab:AddDropdown("ThemeSelectDrop", "切换全屏配色方案", {"猫娘粉紫", "暗黑动漫", "赛博霓虹", "深海翡翠", "冰雪冰蓝", "极光落日"}, "猫娘粉紫", function(themeName)
+    ApplyTheme(themeName)
+    Notify("主题更替", "配色已切换至: " .. themeName, 2)
+end)
+
+task.spawn(function()
+    task.wait(0.2)
+    showAuthorNotification(true)
+end)
+
+ApplyTheme("猫娘粉紫")
+
