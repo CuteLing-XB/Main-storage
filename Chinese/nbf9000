@@ -1,0 +1,5000 @@
+-- Compiled with roblox-ts v3.0.0
+local env = getgenv()
+local configPath = "assets/nbf9000-config.json"
+local configSaveQueued = false
+local hadEnvConfig = env.config ~= nil
+local _condition = env.config
+if _condition == nil then
+	env.config = {
+		intro = true,
+		method = "Overflow",
+		showHRPs = false,
+		clickThroughWalls = false,
+		showGuide = true,
+		showWatermark = true,
+		autoRefling = true,
+		autoDetectFling = true,
+		flingPrediction = true,
+		manualFlingDuration = 2,
+		antiFling = false,
+		repeatSameTarget = false,
+		preferClosestPart = true,
+		requireAliveTarget = true,
+		teamCheck = false,
+		whitelist = "",
+		hideRealCharacter = true,
+		clearInputOnMenu = true,
+		lowMotion = false,
+		theme = "Tokyo Night",
+		targetPriority = "mouse",
+		platformMode = "auto",
+		mobileFlingTool = true,
+		mobileFlingAllTool = true,
+		mobileCancelTool = true,
+		menuKey = "RightShift",
+		flingKey = "Ctrl+MouseButton1",
+		flingAllKey = "Ctrl+F",
+		clearQueueKey = "Backspace",
+		cancelFlingKey = "Q",
+	}
+	_condition = (env.config)
+end
+local config = _condition
+if config.intro == nil then
+	config.intro = true
+end
+if (config.method) == "NaN" then
+	config.method = "Overflow"
+end
+if config.method == nil then
+	config.method = "Overflow"
+end
+if (config.method) ~= "Overflow" and (config.method) ~= "skidfling" then
+	config.method = "Overflow"
+end
+if config.showHRPs == nil then
+	config.showHRPs = false
+end
+if config.clickThroughWalls == nil then
+	config.clickThroughWalls = false
+end
+if config.showGuide == nil then
+	config.showGuide = true
+end
+if config.showWatermark == nil then
+	config.showWatermark = true
+end
+if config.autoRefling == nil then
+	config.autoRefling = true
+end
+if config.autoDetectFling == nil then
+	config.autoDetectFling = true
+end
+if config.flingPrediction == nil then
+	local _condition_1 = config.skidPrediction
+	if _condition_1 == nil then
+		_condition_1 = true
+	end
+	config.flingPrediction = _condition_1
+end
+if config.manualFlingDuration == nil then
+	config.manualFlingDuration = 2
+end
+if config.antiFling == nil then
+	config.antiFling = false
+end
+if config.repeatSameTarget == nil then
+	config.repeatSameTarget = false
+end
+if config.preferClosestPart == nil then
+	config.preferClosestPart = true
+end
+if config.requireAliveTarget == nil then
+	config.requireAliveTarget = true
+end
+if config.teamCheck == nil then
+	config.teamCheck = false
+end
+if config.whitelist == nil then
+	config.whitelist = ""
+end
+if config.hideRealCharacter == nil then
+	config.hideRealCharacter = true
+end
+if config.clearInputOnMenu == nil then
+	config.clearInputOnMenu = true
+end
+if config.lowMotion == nil then
+	config.lowMotion = false
+end
+if config.theme == nil then
+	config.theme = "Tokyo Night"
+end
+if config.targetPriority == nil then
+	config.targetPriority = "mouse"
+end
+if config.platformMode == nil then
+	config.platformMode = "auto"
+end
+if config.mobileFlingTool == nil then
+	config.mobileFlingTool = true
+end
+if config.mobileFlingAllTool == nil then
+	config.mobileFlingAllTool = true
+end
+if config.mobileCancelTool == nil then
+	config.mobileCancelTool = true
+end
+if config.menuKey == nil then
+	config.menuKey = "RightShift"
+end
+if config.flingKey == nil then
+	config.flingKey = "Ctrl+MouseButton1"
+end
+if config.flingAllKey == nil then
+	config.flingAllKey = "Ctrl+F"
+end
+if config.clearQueueKey == nil then
+	config.clearQueueKey = "Backspace"
+end
+if config.cancelFlingKey == nil then
+	config.cancelFlingKey = "Q"
+end
+local method = if config.method == "skidfling" then "skidfling" else "Overflow"
+local anims = {
+	R6 = {
+		idle = "rbxassetid://180435571",
+		idleAlt = "rbxassetid://180435792",
+		walk = "rbxassetid://180426354",
+		run = nil,
+		jump = "rbxassetid://125750702",
+		fall = "rbxassetid://180436148",
+	},
+	R15 = {
+		idle = "rbxassetid://507766666",
+		walk = "rbxassetid://507777826",
+		run = "rbxassetid://507767714",
+		jump = "rbxassetid://507765000",
+		fall = "rbxassetid://507767968",
+	},
+}
+local players = game:GetService("Players")
+local runService = game:GetService("RunService")
+local inputService = game:GetService("UserInputService")
+local guiService = game:GetService("GuiService")
+local tweenService = game:GetService("TweenService")
+local world = game:GetService("Workspace")
+local debrisService = game:GetService("Debris")
+local soundService = game:GetService("SoundService")
+local localPlayer = players.LocalPlayer
+local mouse = localPlayer:GetMouse()
+local cam = world.CurrentCamera
+local oldRuntime = env.nbf9000
+local oldStop
+local oldDestroyHeight = world.FallenPartsDestroyHeight
+if oldRuntime then
+	oldStop = oldRuntime.stop
+	if oldRuntime.oldDestroyHeight ~= nil then
+		oldDestroyHeight = oldRuntime.oldDestroyHeight
+	end
+end
+local originalDestroyHeight = if oldDestroyHeight ~= oldDestroyHeight then -500 else oldDestroyHeight
+local destroyHeightSet = false
+if oldStop then
+	pcall(oldStop)
+end
+local function setDestroyH(v)
+	world.FallenPartsDestroyHeight = v
+end
+local function setFlingDestroyH()
+	if destroyHeightSet then
+		return nil
+	end
+	setDestroyH(0 / 0)
+	destroyHeightSet = true
+end
+local runtime = {}
+local connections = {}
+local queue = {}
+local cooldowns = {}
+local savedPartState = {}
+local savedScriptDisabled = {}
+local targetCollision = {}
+local antiFlingCollision = {}
+local antiFlingNoCollision = {}
+local sessionModel
+local sessionRootAnchored = false
+local sessionAnchorFrames = 0
+local guidePart
+local guideOutline
+local guideOutlineAlt
+local guideTick = os.clock()
+local introGui
+local introConn
+local introSound
+local settingsGui
+local settingsRoot
+local settingsGlow
+local settingsConn
+local settingsKeyListening = false
+local settingsConnections = {}
+local mobileTools = {}
+local mobileToolConnections = {}
+local watermarkGui
+local watermarkConn
+local watermarkLabel
+local watermarkStroke
+local savedHumanoidState
+local maskedChar
+local deathConn
+local busy = false
+local flingAllToken = 0
+local skidHoldCFrame
+local skidTweenLastClock = os.clock()
+local lastInput
+local lastWasGui = false
+local lastTapTime = 0
+local lastTapPos = Vector3.zero
+local hrpOutlines = {}
+local _vector3 = Vector3.new(math.random(), math.random(), math.random())
+local _arg0 = math.pi * 2
+local guideSpinOffset = _vector3 * _arg0
+local mainTrackPhaseKey = "__nbf9000_main_phase"
+local themeNames = { "Tokyo Night", "RGB", "ALONE", "Crimson", "r/masterhacker", "Homer Simpson", "Light RGB", "Light ALONE", "Roserika", "FastTracker II Blue", "Cherry Blossom", "Sakura", "Tomorrow Night 80s" }
+local keys = {
+	w = false,
+	a = false,
+	s = false,
+	d = false,
+	jump = false,
+	stick = Vector2.zero,
+	padJump = false,
+	move = Vector3.zero,
+	wantJump = false,
+}
+local function track(c)
+	local _c = c
+	table.insert(connections, _c)
+	return c
+end
+local function wrap(n)
+	return ((n % 1) + 1) % 1
+end
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+local function currentThemeName()
+	local name = config.theme
+	for _, theme in themeNames do
+		if name == theme then
+			return theme
+		end
+	end
+	return "Tokyo Night"
+end
+local function currentTheme()
+	local white = rgb(245, 245, 250)
+	local _exp = currentThemeName()
+	repeat
+		if _exp == "RGB" then
+			return {
+				bg = rgb(5, 5, 8),
+				top = rgb(0, 0, 0),
+				surface = rgb(9, 9, 14),
+				depth = rgb(18, 18, 24),
+				text = white,
+				muted = rgb(178, 180, 190),
+				soft = rgb(104, 108, 124),
+				scroll = rgb(255, 255, 255),
+				accent = { rgb(255, 64, 86), rgb(255, 199, 64), rgb(84, 255, 122), rgb(80, 210, 255), rgb(178, 112, 255) },
+			}
+		end
+		if _exp == "ALONE" then
+			return {
+				bg = rgb(0, 0, 0),
+				top = rgb(4, 4, 4),
+				surface = rgb(5, 5, 5),
+				depth = rgb(17, 17, 17),
+				text = white,
+				muted = rgb(184, 184, 184),
+				soft = rgb(96, 96, 96),
+				scroll = white,
+				accent = { white, rgb(188, 188, 188), rgb(255, 255, 255) },
+			}
+		end
+		if _exp == "Crimson" then
+			return {
+				bg = rgb(15, 0, 3),
+				top = rgb(22, 0, 5),
+				surface = rgb(12, 0, 4),
+				depth = rgb(28, 4, 9),
+				text = rgb(255, 236, 240),
+				muted = rgb(204, 128, 142),
+				soft = rgb(122, 55, 66),
+				scroll = rgb(255, 64, 86),
+				accent = { rgb(255, 33, 72), rgb(255, 91, 105), rgb(180, 0, 42) },
+			}
+		end
+		if _exp == "r/masterhacker" then
+			return {
+				bg = rgb(0, 9, 0),
+				top = rgb(0, 15, 0),
+				surface = rgb(0, 10, 0),
+				depth = rgb(0, 22, 0),
+				text = rgb(188, 255, 188),
+				muted = rgb(79, 214, 79),
+				soft = rgb(28, 108, 28),
+				scroll = rgb(0, 255, 64),
+				accent = { rgb(0, 255, 70), rgb(90, 255, 144), rgb(0, 156, 48) },
+			}
+		end
+		if _exp == "Homer Simpson" then
+			return {
+				bg = rgb(255, 239, 48),
+				top = rgb(255, 218, 35),
+				surface = rgb(255, 232, 57),
+				depth = rgb(255, 246, 126),
+				text = rgb(18, 18, 18),
+				muted = rgb(66, 61, 35),
+				soft = rgb(125, 112, 41),
+				scroll = rgb(18, 18, 18),
+				accent = { rgb(0, 90, 180), rgb(255, 255, 255), rgb(230, 70, 60) },
+			}
+		end
+		if _exp == "Light RGB" then
+			return {
+				bg = rgb(246, 248, 255),
+				top = rgb(238, 241, 250),
+				surface = rgb(255, 255, 255),
+				depth = rgb(234, 238, 248),
+				text = rgb(10, 14, 24),
+				muted = rgb(78, 86, 104),
+				soft = rgb(145, 153, 170),
+				scroll = rgb(80, 120, 255),
+				accent = { rgb(255, 64, 86), rgb(255, 184, 64), rgb(42, 206, 100), rgb(45, 150, 255), rgb(160, 86, 255) },
+			}
+		end
+		if _exp == "Light ALONE" then
+			return {
+				bg = rgb(250, 250, 250),
+				top = rgb(238, 238, 238),
+				surface = rgb(255, 255, 255),
+				depth = rgb(232, 232, 232),
+				text = rgb(0, 0, 0),
+				muted = rgb(68, 68, 68),
+				soft = rgb(142, 142, 142),
+				scroll = rgb(0, 0, 0),
+				accent = { rgb(0, 0, 0), rgb(94, 94, 94), rgb(0, 0, 0) },
+			}
+		end
+		if _exp == "Roserika" then
+			return {
+				bg = rgb(38, 18, 4),
+				top = rgb(54, 25, 5),
+				surface = rgb(32, 14, 3),
+				depth = rgb(72, 34, 8),
+				text = rgb(255, 238, 215),
+				muted = rgb(221, 154, 90),
+				soft = rgb(132, 81, 36),
+				scroll = rgb(255, 155, 54),
+				accent = { rgb(255, 153, 43), rgb(255, 205, 107), rgb(84, 34, 5) },
+			}
+		end
+		if _exp == "FastTracker II Blue" then
+			return {
+				bg = rgb(26, 31, 94),
+				top = rgb(36, 42, 130),
+				surface = rgb(22, 28, 86),
+				depth = rgb(54, 63, 156),
+				text = rgb(242, 245, 255),
+				muted = rgb(170, 181, 255),
+				soft = rgb(99, 110, 206),
+				scroll = rgb(160, 176, 255),
+				accent = { rgb(102, 110, 255), rgb(150, 170, 255), rgb(51, 55, 128) },
+			}
+		end
+		if _exp == "Cherry Blossom" then
+			return {
+				bg = rgb(255, 224, 244),
+				top = rgb(247, 171, 232),
+				surface = rgb(255, 238, 249),
+				depth = rgb(250, 203, 238),
+				text = rgb(82, 28, 56),
+				muted = rgb(117, 40, 75),
+				soft = rgb(168, 93, 129),
+				scroll = rgb(117, 40, 75),
+				accent = { rgb(117, 40, 75), rgb(247, 171, 232), rgb(255, 255, 255) },
+			}
+		end
+		if _exp == "Sakura" then
+			return {
+				bg = rgb(42, 13, 29),
+				top = rgb(76, 28, 52),
+				surface = rgb(35, 12, 26),
+				depth = rgb(92, 35, 63),
+				text = rgb(255, 237, 248),
+				muted = rgb(247, 171, 232),
+				soft = rgb(154, 86, 124),
+				scroll = rgb(247, 171, 232),
+				accent = { rgb(247, 171, 232), rgb(255, 220, 246), rgb(117, 40, 75) },
+			}
+		end
+		if _exp == "Tomorrow Night 80s" then
+			return {
+				bg = rgb(39, 39, 39),
+				top = rgb(45, 45, 45),
+				surface = rgb(33, 33, 33),
+				depth = rgb(52, 52, 52),
+				text = rgb(222, 222, 222),
+				muted = rgb(190, 190, 190),
+				soft = rgb(115, 115, 115),
+				scroll = rgb(190, 190, 190),
+				accent = { rgb(204, 102, 102), rgb(240, 198, 116), rgb(181, 189, 104), rgb(129, 162, 190), rgb(178, 148, 187) },
+			}
+		end
+		return {
+			bg = rgb(22, 22, 33),
+			top = rgb(15, 15, 24),
+			surface = rgb(8, 9, 15),
+			depth = rgb(17, 17, 27),
+			text = rgb(235, 235, 245),
+			muted = rgb(174, 176, 190),
+			soft = rgb(110, 112, 130),
+			scroll = rgb(160, 180, 255),
+			accent = { rgb(122, 162, 247), rgb(125, 207, 255), rgb(187, 154, 247), rgb(247, 118, 142), rgb(224, 175, 104) },
+		}
+	until true
+end
+local function accentColor(n)
+	local colors = currentTheme().accent
+	local x = wrap(n) * #colors
+	local i = math.floor(x)
+	local a = x - i
+	return colors[i + 1]:Lerp(colors[(i + 1) % #colors + 1], a)
+end
+local function accentSequence()
+	local colors = currentTheme().accent
+	local points = {}
+	for i = 0, #colors - 1 do
+		local _colorSequenceKeypoint = ColorSequenceKeypoint.new(if #colors == 1 then 0 else i / (#colors - 1), colors[i + 1])
+		table.insert(points, _colorSequenceKeypoint)
+	end
+	return ColorSequence.new(points)
+end
+local function accentLoopSequence()
+	local colors = currentTheme().accent
+	local points = {}
+	for i = 0, #colors do
+		local _colorSequenceKeypoint = ColorSequenceKeypoint.new(i / #colors, colors[i % #colors + 1])
+		table.insert(points, _colorSequenceKeypoint)
+	end
+	return ColorSequence.new(points)
+end
+local function accentGradient(parent, rot)
+	if rot == nil then
+		rot = 0
+	end
+	local g = Instance.new("UIGradient")
+	g.Color = accentSequence()
+	g.Rotation = rot
+	g.Parent = parent
+	return g
+end
+local function charParts(char)
+	local _hum = char
+	if _hum ~= nil then
+		_hum = _hum:FindFirstChildOfClass("Humanoid")
+	end
+	local hum = _hum
+	local _namedRoot = char
+	if _namedRoot ~= nil then
+		_namedRoot = _namedRoot:FindFirstChild("HumanoidRootPart")
+	end
+	local namedRoot = _namedRoot
+	local _result = namedRoot
+	if _result ~= nil then
+		_result = _result:IsA("BasePart")
+	end
+	local _result_1
+	if _result then
+		_result_1 = namedRoot
+	else
+		local _result_2 = hum
+		if _result_2 ~= nil then
+			_result_2 = _result_2.RootPart
+		end
+		_result_1 = _result_2
+	end
+	local rp = _result_1
+	local _result_2 = rp
+	if _result_2 ~= nil then
+		_result_2 = _result_2:IsA("BasePart")
+	end
+	return hum, if _result_2 then rp else nil
+end
+local function isDead(hum)
+	if not hum then
+		return false
+	end
+	return hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead
+end
+local function clearGuide()
+	if guideOutline then
+		guideOutline:Destroy()
+	end
+	if guideOutlineAlt then
+		guideOutlineAlt:Destroy()
+	end
+	if guidePart then
+		guidePart:Destroy()
+	end
+	guideOutline = nil
+	guideOutlineAlt = nil
+	guidePart = nil
+end
+local function releaseGuide()
+	local p = guidePart
+	if not p then
+		return nil
+	end
+	guidePart = nil
+	guideOutline = nil
+	guideOutlineAlt = nil
+	guideTick = os.clock()
+	p.Anchored = false
+	p.Massless = false
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.AssemblyLinearVelocity = Vector3.new(0, -135, 0)
+	p.AssemblyAngularVelocity = Vector3.new(math.random(-14, 14), math.random(-22, 22), math.random(-14, 14))
+	p.Velocity = p.AssemblyLinearVelocity
+	p.RotVelocity = p.AssemblyAngularVelocity
+	debrisService:AddItem(p, 2.5)
+end
+local function pivotRootTo(char, root, wanted)
+	if not char or not root then
+		return nil
+	end
+	local offset = root.CFrame:ToObjectSpace(char:GetPivot())
+	char:PivotTo(wanted * offset)
+	root.CFrame = wanted
+end
+local function loadSavedConfig()
+	local hasFile, fileOk = pcall(function()
+		return isfile(configPath)
+	end)
+	if not hasFile or not fileOk then
+		return {}
+	end
+	local readOk, raw = pcall(function()
+		return readfile(configPath)
+	end)
+	if not readOk or not (type(raw) == "string") or #raw < 2 then
+		return {}
+	end
+	local decodeOk, decoded = pcall(function()
+		return game:GetService("HttpService"):JSONDecode(raw)
+	end)
+	if not decodeOk or not (type(decoded) == "table") then
+		return {}
+	end
+	return decoded
+end
+local function savedBool(saved, key, fallback)
+	local v = saved[key]
+	return if type(v) == "boolean" then v else fallback
+end
+local function savedString(saved, key, fallback)
+	local v = saved[key]
+	return if type(v) == "string" and #v > 0 then v else fallback
+end
+local function savedNumber(saved, key, fallback, min, max)
+	local v = saved[key]
+	return if type(v) == "number" then math.clamp(v, min, max) else fallback
+end
+local function savedMethod(saved)
+	return if savedString(saved, "method", "Overflow") == "skidfling" then "skidfling" else "Overflow"
+end
+local function savedTargetPriority(saved)
+	local v = savedString(saved, "targetPriority", "mouse")
+	return if (v == "closest" or v == "camera" or v == "mouse") then v else "mouse"
+end
+local function savedPlatformMode(saved)
+	local v = savedString(saved, "platformMode", "auto")
+	return if (v == "pc" or v == "mobile" or v == "auto") then v else "auto"
+end
+local function savedTheme(saved)
+	local v = savedString(saved, "theme", "Tokyo Night")
+	for _, theme in themeNames do
+		if v == theme then
+			return theme
+		end
+	end
+	return "Tokyo Night"
+end
+local function applySavedConfig(saved)
+	config.intro = savedBool(saved, "intro", config.intro ~= false)
+	config.method = savedMethod(saved)
+	config.showHRPs = savedBool(saved, "showHRPs", config.showHRPs == true)
+	config.clickThroughWalls = savedBool(saved, "clickThroughWalls", config.clickThroughWalls == true)
+	config.showGuide = savedBool(saved, "showGuide", config.showGuide ~= false)
+	config.showWatermark = savedBool(saved, "showWatermark", config.showWatermark ~= false)
+	config.autoRefling = savedBool(saved, "autoRefling", config.autoRefling ~= false)
+	config.autoDetectFling = savedBool(saved, "autoDetectFling", config.autoDetectFling ~= false)
+	config.flingPrediction = savedBool(saved, "flingPrediction", savedBool(saved, "skidPrediction", config.flingPrediction ~= false))
+	local _exp = saved
+	local _condition_1 = config.manualFlingDuration
+	if _condition_1 == nil then
+		_condition_1 = 2
+	end
+	config.manualFlingDuration = savedNumber(_exp, "manualFlingDuration", _condition_1, 0.25, 8)
+	config.antiFling = savedBool(saved, "antiFling", config.antiFling == true)
+	config.repeatSameTarget = savedBool(saved, "repeatSameTarget", config.repeatSameTarget == true)
+	config.preferClosestPart = savedBool(saved, "preferClosestPart", config.preferClosestPart ~= false)
+	config.requireAliveTarget = savedBool(saved, "requireAliveTarget", config.requireAliveTarget ~= false)
+	config.teamCheck = savedBool(saved, "teamCheck", config.teamCheck == true)
+	local _exp_1 = saved
+	local _condition_2 = config.whitelist
+	if _condition_2 == nil then
+		_condition_2 = ""
+	end
+	config.whitelist = savedString(_exp_1, "whitelist", _condition_2)
+	config.hideRealCharacter = savedBool(saved, "hideRealCharacter", config.hideRealCharacter ~= false)
+	config.clearInputOnMenu = savedBool(saved, "clearInputOnMenu", config.clearInputOnMenu ~= false)
+	config.lowMotion = savedBool(saved, "lowMotion", config.lowMotion == true)
+	config.theme = savedTheme(saved)
+	config.targetPriority = savedTargetPriority(saved)
+	config.platformMode = savedPlatformMode(saved)
+	config.mobileFlingTool = savedBool(saved, "mobileFlingTool", config.mobileFlingTool ~= false)
+	config.mobileFlingAllTool = savedBool(saved, "mobileFlingAllTool", config.mobileFlingAllTool ~= false)
+	config.mobileCancelTool = savedBool(saved, "mobileCancelTool", config.mobileCancelTool ~= false)
+	local _exp_2 = saved
+	local _condition_3 = config.menuKey
+	if _condition_3 == nil then
+		_condition_3 = "RightShift"
+	end
+	config.menuKey = savedString(_exp_2, "menuKey", _condition_3)
+	local _exp_3 = saved
+	local _condition_4 = config.flingKey
+	if _condition_4 == nil then
+		_condition_4 = "Ctrl+MouseButton1"
+	end
+	config.flingKey = savedString(_exp_3, "flingKey", _condition_4)
+	local _exp_4 = saved
+	local _condition_5 = config.flingAllKey
+	if _condition_5 == nil then
+		_condition_5 = "Ctrl+F"
+	end
+	config.flingAllKey = savedString(_exp_4, "flingAllKey", _condition_5)
+	local _exp_5 = saved
+	local _condition_6 = config.clearQueueKey
+	if _condition_6 == nil then
+		_condition_6 = "Backspace"
+	end
+	config.clearQueueKey = savedString(_exp_5, "clearQueueKey", _condition_6)
+	local _exp_6 = saved
+	local _condition_7 = config.cancelFlingKey
+	if _condition_7 == nil then
+		_condition_7 = "Q"
+	end
+	config.cancelFlingKey = savedString(_exp_6, "cancelFlingKey", _condition_7)
+	if (config.method) == "NaN" then
+		config.method = "Overflow"
+	end
+	if (config.method) ~= "Overflow" and (config.method) ~= "skidfling" then
+		config.method = "Overflow"
+	end
+end
+if not hadEnvConfig then
+	applySavedConfig(loadSavedConfig())
+	method = if config.method == "skidfling" then "skidfling" else "Overflow"
+end
+local function configSnapshot()
+	return {
+		intro = config.intro,
+		method = config.method,
+		showHRPs = config.showHRPs,
+		clickThroughWalls = config.clickThroughWalls,
+		showGuide = config.showGuide,
+		showWatermark = config.showWatermark,
+		autoRefling = config.autoRefling,
+		autoDetectFling = config.autoDetectFling,
+		flingPrediction = config.flingPrediction,
+		manualFlingDuration = config.manualFlingDuration,
+		antiFling = config.antiFling,
+		repeatSameTarget = config.repeatSameTarget,
+		preferClosestPart = config.preferClosestPart,
+		requireAliveTarget = config.requireAliveTarget,
+		teamCheck = config.teamCheck,
+		whitelist = config.whitelist,
+		hideRealCharacter = config.hideRealCharacter,
+		clearInputOnMenu = config.clearInputOnMenu,
+		lowMotion = config.lowMotion,
+		theme = config.theme,
+		targetPriority = config.targetPriority,
+		platformMode = config.platformMode,
+		mobileFlingTool = config.mobileFlingTool,
+		mobileFlingAllTool = config.mobileFlingAllTool,
+		mobileCancelTool = config.mobileCancelTool,
+		menuKey = config.menuKey,
+		flingKey = config.flingKey,
+		flingAllKey = config.flingAllKey,
+		clearQueueKey = config.clearQueueKey,
+		cancelFlingKey = config.cancelFlingKey,
+	}
+end
+local function saveConfigNow()
+	pcall(function()
+		return makefolder("assets")
+	end)
+	local ok, data = pcall(function()
+		return game:GetService("HttpService"):JSONEncode(configSnapshot())
+	end)
+	if ok and type(data) == "string" then
+		pcall(function()
+			return writefile(configPath, data)
+		end)
+	end
+end
+local function saveConfigSoon()
+	if configSaveQueued then
+		return nil
+	end
+	configSaveQueued = true
+	task.delay(0.08, function()
+		configSaveQueued = false
+		saveConfigNow()
+	end)
+end
+local function settingsTrack(c)
+	local _c = c
+	table.insert(settingsConnections, _c)
+	return c
+end
+local function clearSettingsConnections()
+	for _, c in settingsConnections do
+		c:Disconnect()
+	end
+	table.clear(settingsConnections)
+end
+local function clearMobileTools()
+	for _, c in mobileToolConnections do
+		c:Disconnect()
+	end
+	table.clear(mobileToolConnections)
+	for _, tool in mobileTools do
+		if tool.Parent then
+			tool:Destroy()
+		end
+	end
+	table.clear(mobileTools)
+end
+local function destroySettingsMenu()
+	clearSettingsConnections()
+	if settingsConn then
+		settingsConn:Disconnect()
+	end
+	settingsConn = nil
+	settingsKeyListening = false
+	if settingsGui then
+		settingsGui:Destroy()
+	end
+	settingsGui = nil
+	settingsRoot = nil
+	settingsGlow = nil
+end
+local function configBool(key, fallback)
+	local v = config[key]
+	return if type(v) == "boolean" then v else fallback
+end
+local function configString(key, fallback)
+	local v = config[key]
+	return if type(v) == "string" and #v > 0 then v else fallback
+end
+local function cleanWhitelistToken(token)
+	return string.lower((string.gsub((string.gsub(token, "^%s+", "")), "%s+$", "")))
+end
+local function playerWhitelisted(player)
+	local raw = configString("whitelist", "")
+	if #raw == 0 then
+		return false
+	end
+	local name = string.lower(player.Name)
+	local display = string.lower(player.DisplayName)
+	local id = `{player.UserId}`
+	for _, chunk in string.split((string.gsub((string.gsub(raw, ";", ",")), "\n", ",")), ",") do
+		local token = cleanWhitelistToken(chunk)
+		if token == name or token == display or token == id then
+			return true
+		end
+	end
+	return false
+end
+local function configNumber(key, fallback)
+	local v = config[key]
+	return if type(v) == "number" then v else fallback
+end
+local applyConfigSideEffects
+local function setConfigValue(key, value)
+	local bag = config
+	bag[key] = value
+	applyConfigSideEffects(key)
+	saveConfigSoon()
+end
+local updateWatermark, showSettingsMenu, clearHrpOutlines, killIntro, restoreAntiFlingCollision, playerFromTarget, updateMobileTools
+function applyConfigSideEffects(key)
+	if key == "method" then
+		if (config.method) == "NaN" then
+			config.method = "Overflow"
+		end
+		if (config.method) ~= "Overflow" and (config.method) ~= "skidfling" then
+			config.method = "Overflow"
+		end
+		method = if config.method == "skidfling" then "skidfling" else "Overflow"
+	end
+	if key == "manualFlingDuration" then
+		config.manualFlingDuration = math.clamp(configNumber("manualFlingDuration", 2), 0.25, 8)
+	end
+	if key == "theme" then
+		config.theme = currentThemeName()
+		updateWatermark()
+		local _restorePosition = settingsRoot
+		if _restorePosition ~= nil then
+			_restorePosition = _restorePosition.Position
+		end
+		local restorePosition = _restorePosition
+		local _restoreSize = settingsRoot
+		if _restoreSize ~= nil then
+			_restoreSize = _restoreSize.Size
+		end
+		local restoreSize = _restoreSize
+		local _result = settingsRoot
+		if _result ~= nil then
+			_result = _result.Visible
+		end
+		local _condition_1 = _result
+		if _condition_1 == nil then
+			_condition_1 = true
+		end
+		local restoreVisible = _condition_1
+		local _oldPage = settingsGui
+		if _oldPage ~= nil then
+			_oldPage = _oldPage:FindFirstChild("settingsPage", true)
+		end
+		local oldPage = _oldPage
+		local _result_1 = oldPage
+		if _result_1 ~= nil then
+			_result_1 = _result_1:IsA("ScrollingFrame")
+		end
+		local restoreScroll = if _result_1 then oldPage.CanvasPosition else nil
+		task.defer(function()
+			local _result_2 = settingsGui
+			if _result_2 ~= nil then
+				_result_2 = _result_2.Parent
+			end
+			if _result_2 then
+				destroySettingsMenu()
+				showSettingsMenu()
+				if settingsRoot then
+					if restorePosition then
+						settingsRoot.Position = restorePosition
+					end
+					if restoreSize then
+						settingsRoot.Size = restoreSize
+					end
+					settingsRoot.Visible = restoreVisible
+				end
+				local _newPage = settingsGui
+				if _newPage ~= nil then
+					_newPage = _newPage:FindFirstChild("settingsPage", true)
+				end
+				local newPage = _newPage
+				local _result_3 = newPage
+				if _result_3 ~= nil then
+					_result_3 = _result_3:IsA("ScrollingFrame")
+				end
+				local _condition_2 = _result_3
+				if _condition_2 then
+					_condition_2 = restoreScroll
+				end
+				if _condition_2 then
+					newPage.CanvasPosition = restoreScroll
+					task.defer(function()
+						if newPage.Parent then
+							newPage.CanvasPosition = restoreScroll
+						end
+					end)
+				end
+				if settingsGlow and settingsRoot then
+					settingsGlow.AnchorPoint = settingsRoot.AnchorPoint
+					settingsGlow.Position = settingsRoot.Position
+					settingsGlow.Size = UDim2.fromOffset(settingsRoot.AbsoluteSize.X + 26, settingsRoot.AbsoluteSize.Y + 26)
+					settingsGlow.Visible = restoreVisible
+				end
+			end
+		end)
+	end
+	if key == "showGuide" and config.showGuide ~= true then
+		clearGuide()
+	end
+	if key == "showHRPs" and config.showHRPs ~= true then
+		clearHrpOutlines()
+	end
+	if key == "showWatermark" then
+		updateWatermark()
+	end
+	if key == "intro" and config.intro == false then
+		killIntro()
+	end
+	if key == "antiFling" and config.antiFling ~= true then
+		restoreAntiFlingCollision()
+	end
+	if key == "repeatSameTarget" then
+		for _, item in queue do
+			if item.batch then
+				continue
+			end
+			item["repeat"] = config.repeatSameTarget == true
+			if item["repeat"] and not item.player then
+				item.player = playerFromTarget(item.tgt)
+			end
+		end
+	end
+	if key == "platformMode" or key == "mobileFlingTool" or key == "mobileFlingAllTool" or key == "mobileCancelTool" then
+		updateMobileTools()
+	end
+end
+local function baseInputName(input)
+	if input.KeyCode ~= Enum.KeyCode.Unknown then
+		return input.KeyCode.Name
+	end
+	return input.UserInputType.Name
+end
+local function isCtrlName(name)
+	return name == "LeftControl" or name == "RightControl" or name == "LeftMeta" or name == "RightMeta" or name == "LeftSuper" or name == "RightSuper" or name == "Ctrl"
+end
+local function ctrlDownFor(input)
+	local base = if input then baseInputName(input) else ""
+	if base ~= "" and isCtrlName(base) then
+		return true
+	end
+	return inputService:IsKeyDown(Enum.KeyCode.LeftControl) or inputService:IsKeyDown(Enum.KeyCode.RightControl) or inputService:IsKeyDown(Enum.KeyCode.LeftMeta) or inputService:IsKeyDown(Enum.KeyCode.RightMeta) or inputService:IsKeyDown(Enum.KeyCode.LeftSuper) or inputService:IsKeyDown(Enum.KeyCode.RightSuper)
+end
+local function inputCombo(input)
+	local base = baseInputName(input)
+	if isCtrlName(base) then
+		return "Ctrl"
+	end
+	return if ctrlDownFor(input) then `Ctrl+{base}` else base
+end
+local function bindMatches(input, bind)
+	if not (bind ~= "" and bind) or #bind == 0 then
+		return false
+	end
+	local parts = string.split(bind, "+")
+	local needCtrl = false
+	local base = ""
+	for _, part in parts do
+		if isCtrlName(part) then
+			needCtrl = true
+		else
+			base = part
+		end
+	end
+	if needCtrl and not ctrlDownFor(input) then
+		return false
+	end
+	if base == "" then
+		return isCtrlName(baseInputName(input))
+	end
+	return baseInputName(input) == base
+end
+local function detectedPlatform()
+	if inputService.TouchEnabled and not inputService.KeyboardEnabled then
+		return "mobile"
+	end
+	if inputService.TouchEnabled and inputService.KeyboardEnabled then
+		return "hybrid"
+	end
+	return "pc"
+end
+local function wantsMobileControls()
+	local mode = config.platformMode or "auto"
+	if mode == "mobile" then
+		return true
+	end
+	if mode == "pc" then
+		return false
+	end
+	return inputService.TouchEnabled and not inputService.KeyboardEnabled
+end
+local function clampDragPosition(guiObject, position)
+	cam = world.CurrentCamera
+	local _result = cam
+	if _result ~= nil then
+		_result = _result.ViewportSize
+	end
+	local _condition_1 = _result
+	if _condition_1 == nil then
+		_condition_1 = Vector2.new(1920, 1080)
+	end
+	local viewport = _condition_1
+	local size = guiObject.AbsoluteSize
+	local anchor = guiObject.AnchorPoint
+	local raw = Vector2.new(position.X.Scale * viewport.X + position.X.Offset, position.Y.Scale * viewport.Y + position.Y.Offset)
+	local minX = size.X * anchor.X + 8
+	local maxX = viewport.X - size.X * (1 - anchor.X) - 8
+	local minY = size.Y * anchor.Y + 8
+	local maxY = viewport.Y - size.Y * (1 - anchor.Y) - 8
+	return UDim2.fromOffset(if maxX > minX then math.clamp(raw.X, minX, maxX) else viewport.X * anchor.X, if maxY > minY then math.clamp(raw.Y, minY, maxY) else viewport.Y * anchor.Y)
+end
+local function dragify(guiObject, handle)
+	local startPosition
+	local dragStart = Vector3.zero
+	local dragging = false
+	local dragInput
+	local activeTween
+	settingsTrack(handle.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return nil
+		end
+		dragging = true
+		dragStart = input.Position
+		startPosition = guiObject.Position
+	end))
+	settingsTrack(handle.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end))
+	settingsTrack(inputService.InputChanged:Connect(function(input)
+		if input ~= dragInput or not dragging or not startPosition then
+			return nil
+		end
+		local _position = input.Position
+		local _dragStart = dragStart
+		local delta = _position - _dragStart
+		local nextPosition = clampDragPosition(guiObject, UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y))
+		if activeTween then
+			activeTween:Cancel()
+		end
+		activeTween = tweenService:Create(guiObject, TweenInfo.new(0.16, Enum.EasingStyle.Circular, Enum.EasingDirection.Out), {
+			Position = nextPosition,
+		})
+		activeTween:Play()
+	end))
+	settingsTrack(inputService.InputEnded:Connect(function(input)
+		if input == dragInput or input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end))
+end
+function killIntro()
+	if introConn then
+		introConn:Disconnect()
+	end
+	if introSound then
+		introSound.Volume = 0
+		introSound:Stop()
+		introSound:Destroy()
+	end
+	if introGui then
+		introGui:Destroy()
+	end
+	introConn = nil
+	introSound = nil
+	introGui = nil
+	local _result = watermarkLabel
+	if _result ~= nil then
+		_result = _result.Parent
+	end
+	if _result then
+		tweenService:Create(watermarkLabel, TweenInfo.new(0.18), {
+			TextTransparency = 0.08,
+			TextStrokeTransparency = 0.38,
+		}):Play()
+	end
+	local _result_1 = watermarkStroke
+	if _result_1 ~= nil then
+		_result_1 = _result_1.Parent
+	end
+	if _result_1 then
+		tweenService:Create(watermarkStroke, TweenInfo.new(0.18), {
+			Transparency = 0.24,
+		}):Play()
+	end
+end
+function clearHrpOutlines()
+	for _, box in hrpOutlines do
+		if box.Parent then
+			box:Destroy()
+		end
+	end
+	table.clear(hrpOutlines)
+end
+local function clearWatermark()
+	if watermarkConn then
+		watermarkConn:Disconnect()
+	end
+	if watermarkGui then
+		watermarkGui:Destroy()
+	end
+	watermarkConn = nil
+	watermarkGui = nil
+	watermarkLabel = nil
+	watermarkStroke = nil
+end
+function updateWatermark()
+	if config.showWatermark ~= true then
+		clearWatermark()
+		return nil
+	end
+	local _result = watermarkGui
+	if _result ~= nil then
+		_result = _result.Parent
+	end
+	if _result then
+		return nil
+	end
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "nbf9000Mark"
+	screenGui.IgnoreGuiInset = true
+	screenGui.ResetOnSpawn = false
+	screenGui.DisplayOrder = 2147483646
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.Parent = gethui()
+	watermarkGui = screenGui
+	local label = Instance.new("TextLabel")
+	label.AnchorPoint = Vector2.new(1, 1)
+	label.Position = UDim2.new(1, -12, 1, -10)
+	label.Size = UDim2.fromOffset(180, 20)
+	label.BackgroundTransparency = 1
+	label.BorderSizePixel = 0
+	label.Font = Enum.Font.Code
+	label.Text = "NBF9000"
+	label.TextSize = 15
+	label.TextXAlignment = Enum.TextXAlignment.Right
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.TextColor3 = currentTheme().text
+	label.TextTransparency = 0
+	label.TextStrokeColor3 = accentColor(0.72)
+	label.TextStrokeTransparency = 0.35
+	label.ZIndex = 52
+	label.Parent = screenGui
+	watermarkLabel = label
+	local labelGrad = Instance.new("UIGradient")
+	labelGrad.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, accentColor(0.72)), ColorSequenceKeypoint.new(0.5, currentTheme().text), ColorSequenceKeypoint.new(1, accentColor(0.2)) })
+	labelGrad.Parent = label
+	watermarkConn = runService.RenderStepped:Connect(function()
+		if not label.Parent then
+			if watermarkConn then
+				watermarkConn:Disconnect()
+			end
+			watermarkConn = nil
+			return nil
+		end
+		local t = os.clock()
+		labelGrad.Offset = Vector2.new(math.sin(t * 1.8) * 0.18, 0)
+	end)
+end
+local function updateHrpOutlines()
+	if config.showHRPs ~= true then
+		clearHrpOutlines()
+		return nil
+	end
+	local live = {}
+	for _, player in players:GetPlayers() do
+		if player == localPlayer then
+			continue
+		end
+		live[player] = true
+		local _1, root = charParts(player.Character)
+		local box = hrpOutlines[player]
+		if not root or not root.Parent then
+			if box then
+				box:Destroy()
+				hrpOutlines[player] = nil
+			end
+			continue
+		end
+		if not box or box.Adornee ~= root or not box.Parent then
+			if box then
+				box:Destroy()
+			end
+			box = Instance.new("SelectionBox")
+			box.Name = "HRP Mark"
+			box.Adornee = root
+			box.LineThickness = 0.02
+			box.SurfaceTransparency = 1
+			box.Parent = root
+			local _box = box
+			hrpOutlines[player] = _box
+		end
+		box.Color3 = accentColor(os.clock() * 0.55 + 0.26)
+	end
+	for player, box in hrpOutlines do
+		if not (live[player] ~= nil) then
+			box:Destroy()
+			hrpOutlines[player] = nil
+		end
+	end
+end
+local function makeIntroText(parent, s, size, y, high)
+	if high == nil then
+		high = false
+	end
+	local theme = currentTheme()
+	local textIsLight = theme.text.R * 0.2126 + theme.text.G * 0.7152 + theme.text.B * 0.0722 >= 0.45
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.new(0.5, 0, 0, y)
+	label.Size = UDim2.new(1, -28, 0, size + 10)
+	label.Font = if high then Enum.Font.Arcade else Enum.Font.Code
+	label.Text = s
+	label.TextSize = size
+	label.TextColor3 = theme.text
+	label.TextStrokeColor3 = if textIsLight then theme.surface else Color3.new(1, 1, 1)
+	label.TextStrokeTransparency = if textIsLight then (if high then 0.25 else 0.55) else (if high then 0.18 else 0.34)
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.ZIndex = 6
+	label.Parent = parent
+	return label
+end
+local function customAsset(path)
+	local hasFile, fileOk = pcall(function()
+		return isfile(path)
+	end)
+	if hasFile and fileOk then
+		local readOk, data = pcall(function()
+			return readfile(path)
+		end)
+		if readOk and type(data) == "string" and #data < 100000 then
+			return nil
+		end
+		local ok, id = pcall(function()
+			return getcustomasset(path)
+		end)
+		if ok and type(id) == "string" and #id > 0 then
+			return id
+		end
+	end
+end
+local function introAsset()
+	local path = "assets/nbf9000-intro.mp3"
+	for _, p in { path } do
+		local asset = customAsset(p)
+		if asset ~= "" and asset then
+			return asset
+		end
+	end
+	pcall(function()
+		pcall(function()
+			return makefolder("assets")
+		end)
+		local httpGet = game.HttpGet
+		local data = httpGet(game, "https://raw.githubusercontent.com/xaviersupreme/nbf9000/main/assets/nbf9000-intro.mp3")
+		if #data > 100000 then
+			writefile(path, data)
+		end
+	end)
+	local asset = customAsset(path)
+	if not (asset ~= "" and asset) then
+		warn("nbf9000 intro sound missing: assets/nbf9000-intro.mp3 did not download or is not a valid mp3")
+	end
+	return asset
+end
+function showSettingsMenu(from)
+	local _result = settingsGui
+	if _result ~= nil then
+		_result = _result.Parent
+	end
+	local _condition_1 = _result
+	if _condition_1 then
+		_condition_1 = settingsRoot and not from
+	end
+	if _condition_1 then
+		settingsRoot.Visible = true
+		if settingsGlow then
+			settingsGlow.Visible = true
+		end
+		return nil
+	end
+	local _result_1 = settingsGui
+	if _result_1 ~= nil then
+		_result_1 = _result_1.Parent
+	end
+	if _result_1 then
+		destroySettingsMenu()
+	end
+	local theme = currentTheme()
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "nbf9000Settings"
+	screenGui.IgnoreGuiInset = true
+	screenGui.ResetOnSpawn = false
+	screenGui.DisplayOrder = 2147483646
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.Parent = gethui()
+	settingsGui = screenGui
+	local _fromSize = from
+	if _fromSize ~= nil then
+		_fromSize = _fromSize.AbsoluteSize
+	end
+	local fromSize = _fromSize
+	local _fromPos = from
+	if _fromPos ~= nil then
+		_fromPos = _fromPos.AbsolutePosition
+	end
+	local fromPos = _fromPos
+	local startPosition = if fromPos and fromSize then UDim2.fromOffset(fromPos.X + fromSize.X * 0.5, fromPos.Y + fromSize.Y * 0.5) else UDim2.fromScale(0.5, 0.5)
+	local startSize = if fromSize then UDim2.fromOffset(fromSize.X, fromSize.Y) else UDim2.new(0.92, 0, 0.78, 0)
+	local fullSize = UDim2.new(0.92, 0, 0.78, 0)
+	local root = Instance.new("Frame")
+	root.AnchorPoint = Vector2.new(0.5, 0.5)
+	root.Position = startPosition
+	root.Size = startSize
+	root.BackgroundColor3 = theme.bg
+	root.BackgroundTransparency = 0.03
+	root.BorderSizePixel = 0
+	root.ClipsDescendants = true
+	root.Active = true
+	root.ZIndex = 2
+	root.Parent = screenGui
+	settingsRoot = root
+	local rootCorner = Instance.new("UICorner")
+	rootCorner.CornerRadius = UDim.new(0, 7)
+	rootCorner.Parent = root
+	local rootSize = Instance.new("UISizeConstraint")
+	rootSize.MinSize = if from then Vector2.new(260, 36) else Vector2.new(330, 304)
+	rootSize.MaxSize = Vector2.new(440, 382)
+	rootSize.Parent = root
+	local rootScale = Instance.new("UIScale")
+	rootScale.Scale = if from then 1 else 0.96
+	rootScale.Parent = root
+	local rootStroke = Instance.new("UIStroke")
+	rootStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	rootStroke.Color = Color3.new(1, 1, 1)
+	rootStroke.Thickness = 1.25
+	rootStroke.Transparency = 0
+	rootStroke.Parent = root
+	accentGradient(rootStroke)
+	local glow = Instance.new("Frame")
+	glow.AnchorPoint = root.AnchorPoint
+	glow.Position = root.Position
+	local _result_2 = fromSize
+	if _result_2 ~= nil then
+		_result_2 = _result_2.X
+	end
+	local _condition_2 = _result_2
+	if _condition_2 == nil then
+		_condition_2 = 440
+	end
+	local _exp = _condition_2 + 26
+	local _result_3 = fromSize
+	if _result_3 ~= nil then
+		_result_3 = _result_3.Y
+	end
+	local _condition_3 = _result_3
+	if _condition_3 == nil then
+		_condition_3 = 382
+	end
+	glow.Size = UDim2.fromOffset(_exp, _condition_3 + 26)
+	glow.BackgroundColor3 = accentColor(0)
+	glow.BackgroundTransparency = 1
+	glow.BorderSizePixel = 0
+	glow.ZIndex = 1
+	glow.Parent = screenGui
+	settingsGlow = glow
+	local glowCorner = Instance.new("UICorner")
+	glowCorner.CornerRadius = UDim.new(0, 12)
+	glowCorner.Parent = glow
+	local glowStroke = Instance.new("UIStroke")
+	glowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	glowStroke.Color = Color3.new(1, 1, 1)
+	glowStroke.Thickness = 5
+	glowStroke.Transparency = 0.6
+	glowStroke.Parent = glow
+	local glowGrad = accentGradient(glowStroke)
+	local top = Instance.new("Frame")
+	top.Size = UDim2.new(1, 0, 0, 36)
+	top.BackgroundColor3 = theme.top
+	top.BorderSizePixel = 0
+	top.ZIndex = 4
+	top.Parent = root
+	local topCorner = Instance.new("UICorner")
+	topCorner.CornerRadius = UDim.new(0, 7)
+	topCorner.Parent = top
+	local topFill = Instance.new("Frame")
+	topFill.Position = UDim2.new(0, 0, 1, -7)
+	topFill.Size = UDim2.new(1, 0, 0, 7)
+	topFill.BackgroundColor3 = top.BackgroundColor3
+	topFill.BorderSizePixel = 0
+	topFill.ZIndex = 4
+	topFill.Parent = top
+	local title = Instance.new("TextLabel")
+	title.Position = UDim2.fromOffset(12, 0)
+	title.Size = UDim2.fromOffset(176, 36)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.Code
+	title.Text = "NBF9000 // settings"
+	title.TextColor3 = theme.text
+	title.TextSize = 18
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.TextYAlignment = Enum.TextYAlignment.Center
+	local titleIsLight = theme.text.R * 0.2126 + theme.text.G * 0.7152 + theme.text.B * 0.0722 >= 0.45
+	title.TextStrokeColor3 = if titleIsLight then theme.surface else Color3.new(1, 1, 1)
+	title.TextStrokeTransparency = if titleIsLight then 0.38 else 0.24
+	title.TextTruncate = Enum.TextTruncate.AtEnd
+	title.ZIndex = 5
+	title.Parent = top
+	local titleGrad = if titleIsLight then accentGradient(title) else nil
+	local mini = Instance.new("TextButton")
+	mini.AnchorPoint = Vector2.new(1, 0)
+	mini.Position = UDim2.new(1, 0, 0, 0)
+	mini.Size = UDim2.fromOffset(38, 36)
+	mini.BackgroundTransparency = 1
+	mini.Text = ""
+	mini.AutoButtonColor = false
+	mini.ZIndex = 7
+	mini.Parent = top
+	local miniBar = Instance.new("Frame")
+	miniBar.AnchorPoint = Vector2.new(0.5, 0.5)
+	miniBar.Position = UDim2.fromScale(0.5, 0.5)
+	miniBar.Size = UDim2.fromOffset(16, 2)
+	miniBar.BackgroundColor3 = theme.text
+	miniBar.BorderSizePixel = 0
+	miniBar.ZIndex = 8
+	miniBar.Parent = mini
+	local mathStrip = Instance.new("Frame")
+	mathStrip.Position = UDim2.fromOffset(184, 9)
+	mathStrip.Size = UDim2.new(1, -226, 0, 18)
+	mathStrip.BackgroundTransparency = 1
+	mathStrip.ClipsDescendants = true
+	mathStrip.ZIndex = 6
+	mathStrip.Parent = top
+	local mathNodes = {}
+	local mathLines = {}
+	for i = 0, 23 do
+		local dot = Instance.new("Frame")
+		dot.AnchorPoint = Vector2.new(0.5, 0.5)
+		dot.Position = UDim2.fromScale(0.5, 0.5)
+		dot.Size = UDim2.fromOffset(3, 3)
+		dot.BackgroundColor3 = accentColor(i / 24)
+		dot.BackgroundTransparency = 0.12
+		dot.BorderSizePixel = 0
+		dot.ZIndex = 8
+		dot.Parent = mathStrip
+		local dotCorner = Instance.new("UICorner")
+		dotCorner.CornerRadius = UDim.new(0, 2)
+		dotCorner.Parent = dot
+		table.insert(mathNodes, dot)
+		if i > 0 then
+			local line = Instance.new("Frame")
+			line.AnchorPoint = Vector2.new(0.5, 0.5)
+			line.Position = UDim2.fromScale(0.5, 0.5)
+			line.Size = UDim2.fromOffset(8, 1)
+			line.BackgroundColor3 = accentColor(i / 24)
+			line.BackgroundTransparency = 0.46
+			line.BorderSizePixel = 0
+			line.ZIndex = 7
+			line.Parent = mathStrip
+			table.insert(mathLines, line)
+		end
+	end
+	local content = Instance.new("Frame")
+	content.Position = UDim2.fromOffset(12, 44)
+	content.Size = UDim2.new(1, -24, 1, -58)
+	content.BackgroundTransparency = 1
+	content.ClipsDescendants = true
+	content.ZIndex = 4
+	content.Visible = from == nil
+	content.Parent = root
+	local scanlines = {}
+	for i = 0, 10 do
+		local line = Instance.new("Frame")
+		line.Position = UDim2.new(0, 0, 0, 40 + i * 22)
+		line.Size = UDim2.new(1, 0, 0, 1)
+		line.BackgroundColor3 = Color3.new(1, 1, 1)
+		line.BackgroundTransparency = 0.955
+		line.BorderSizePixel = 0
+		line.ZIndex = 3
+		line.Visible = from == nil
+		line.Parent = root
+		table.insert(scanlines, line)
+	end
+	local page = Instance.new("ScrollingFrame")
+	page.Name = "settingsPage"
+	page.Size = UDim2.fromScale(1, 1)
+	page.BackgroundTransparency = 1
+	page.BorderSizePixel = 0
+	page.CanvasSize = UDim2.new()
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.ScrollBarThickness = 3
+	page.ScrollBarImageColor3 = theme.scroll
+	page.ScrollBarImageTransparency = 0.18
+	page.ScrollingDirection = Enum.ScrollingDirection.Y
+	page.ZIndex = 5
+	page.Parent = content
+	local pagePadding = Instance.new("UIPadding")
+	pagePadding.PaddingTop = UDim.new(0, 0)
+	pagePadding.PaddingBottom = UDim.new(0, 8)
+	pagePadding.PaddingLeft = UDim.new(0, 2)
+	pagePadding.PaddingRight = UDim.new(0, 8)
+	pagePadding.Parent = page
+	local pageLayout = Instance.new("UIListLayout")
+	pageLayout.FillDirection = Enum.FillDirection.Vertical
+	pageLayout.Padding = UDim.new(0, 8)
+	pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	pageLayout.Parent = page
+	local function stylizeBox(obj, depth)
+		if depth == nil then
+			depth = false
+		end
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 7)
+		corner.Parent = obj
+		local stroke = Instance.new("UIStroke")
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		stroke.Color = Color3.new(1, 1, 1)
+		stroke.Thickness = 1
+		stroke.Transparency = 0.2
+		stroke.Parent = obj
+		accentGradient(stroke)
+		obj.BackgroundColor3 = if depth then theme.depth else theme.surface
+		return stroke
+	end
+	local function section(text)
+		local frame = Instance.new("Frame")
+		frame.Size = UDim2.new(1, 0, 0, 28)
+		frame.BackgroundTransparency = 1
+		frame.ZIndex = 5
+		frame.Parent = page
+		local label = Instance.new("TextLabel")
+		label.Position = UDim2.fromOffset(0, 0)
+		label.Size = UDim2.fromOffset(120, 28)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.Code
+		label.Text = string.upper(text)
+		label.TextColor3 = theme.muted
+		label.TextSize = 13
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextYAlignment = Enum.TextYAlignment.Center
+		label.TextTransparency = 0.04
+		label.ZIndex = 6
+		label.Parent = frame
+		accentGradient(label)
+		local line = Instance.new("Frame")
+		line.AnchorPoint = Vector2.new(1, 0.5)
+		line.Position = UDim2.new(1, 0, 0.5, 0)
+		line.Size = UDim2.new(1, -130, 0, 1)
+		line.BackgroundColor3 = Color3.new(1, 1, 1)
+		line.BackgroundTransparency = 0.72
+		line.BorderSizePixel = 0
+		line.ZIndex = 6
+		line.Parent = frame
+		accentGradient(line)
+	end
+	local function row(height)
+		local frame = Instance.new("Frame")
+		frame.Size = UDim2.new(1, 0, 0, height)
+		frame.BackgroundTransparency = 0.14
+		frame.BorderSizePixel = 0
+		frame.ClipsDescendants = false
+		frame.ZIndex = 5
+		frame.Parent = page
+		stylizeBox(frame, true)
+		return frame
+	end
+	local function makeToggle(text, key, fallback, onChanged)
+		local item = row(42)
+		local caption = Instance.new("TextLabel")
+		caption.Position = UDim2.fromOffset(10, 0)
+		caption.Size = UDim2.new(1, -64, 1, 0)
+		caption.BackgroundTransparency = 1
+		caption.Font = Enum.Font.Code
+		caption.Text = text
+		caption.TextColor3 = theme.text
+		caption.TextSize = 15
+		caption.TextXAlignment = Enum.TextXAlignment.Left
+		caption.TextYAlignment = Enum.TextYAlignment.Center
+		caption.TextWrapped = true
+		caption.ZIndex = 6
+		caption.Parent = item
+		local button = Instance.new("TextButton")
+		button.AnchorPoint = Vector2.new(1, 0.5)
+		button.Position = UDim2.new(1, -10, 0.5, 0)
+		button.Size = UDim2.fromOffset(42, 24)
+		button.BackgroundTransparency = 0
+		button.BorderSizePixel = 0
+		button.Text = ""
+		button.AutoButtonColor = false
+		button.ZIndex = 7
+		button.Parent = item
+		stylizeBox(button)
+		local fill = Instance.new("Frame")
+		fill.Size = UDim2.fromScale(1, 1)
+		fill.BackgroundColor3 = accentColor(0)
+		fill.BackgroundTransparency = 1
+		fill.BorderSizePixel = 0
+		fill.ZIndex = 7
+		fill.Parent = button
+		local fillCorner = Instance.new("UICorner")
+		fillCorner.CornerRadius = UDim.new(0, 7)
+		fillCorner.Parent = fill
+		local knob = Instance.new("Frame")
+		knob.AnchorPoint = Vector2.new(0.5, 0.5)
+		knob.Position = UDim2.new(0, 12, 0.5, 0)
+		knob.Size = UDim2.fromOffset(14, 14)
+		knob.BackgroundColor3 = theme.text
+		knob.BackgroundTransparency = 0.1
+		knob.BorderSizePixel = 0
+		knob.ZIndex = 8
+		knob.Parent = button
+		local knobCorner = Instance.new("UICorner")
+		knobCorner.CornerRadius = UDim.new(0, 5)
+		knobCorner.Parent = knob
+		local function update(animated)
+			if animated == nil then
+				animated = true
+			end
+			local on = configBool(key, fallback)
+			local info = TweenInfo.new(if animated then 0.18 else 0, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
+			tweenService:Create(fill, info, {
+				BackgroundTransparency = if on then 0.2 else 1,
+			}):Play()
+			tweenService:Create(knob, info, {
+				Position = UDim2.new(if on then 1 else 0, if on then -12 else 12, 0.5, 0),
+			}):Play()
+			caption.TextTransparency = if on then 0 else 0.16
+		end
+		settingsTrack(button.MouseEnter:Connect(function()
+			return tweenService:Create(button, TweenInfo.new(0.14), {
+				BackgroundTransparency = 0.08,
+			}):Play()
+		end))
+		settingsTrack(button.MouseLeave:Connect(function()
+			return tweenService:Create(button, TweenInfo.new(0.18), {
+				BackgroundTransparency = 0,
+			}):Play()
+		end))
+		settingsTrack(button.Activated:Connect(function()
+			setConfigValue(key, not configBool(key, fallback))
+			update()
+			local _result_4 = onChanged
+			if _result_4 ~= nil then
+				_result_4(configBool(key, fallback))
+			end
+		end))
+		update(false)
+	end
+	local function makeInfo(text, value)
+		local item = row(34)
+		local caption = Instance.new("TextLabel")
+		caption.Position = UDim2.fromOffset(10, 0)
+		caption.Size = UDim2.new(1, -150, 1, 0)
+		caption.BackgroundTransparency = 1
+		caption.Font = Enum.Font.Code
+		caption.Text = text
+		caption.TextColor3 = theme.text
+		caption.TextSize = 14
+		caption.TextXAlignment = Enum.TextXAlignment.Left
+		caption.TextYAlignment = Enum.TextYAlignment.Center
+		caption.ZIndex = 6
+		caption.Parent = item
+		local val = Instance.new("TextLabel")
+		val.AnchorPoint = Vector2.new(1, 0.5)
+		val.Position = UDim2.new(1, -10, 0.5, 0)
+		val.Size = UDim2.fromOffset(132, 24)
+		val.BackgroundTransparency = 1
+		val.Font = Enum.Font.Code
+		val.Text = value
+		val.TextColor3 = theme.muted
+		val.TextSize = 13
+		val.TextXAlignment = Enum.TextXAlignment.Center
+		val.TextYAlignment = Enum.TextYAlignment.Center
+		val.ZIndex = 6
+		val.Parent = item
+	end
+	local function makeTextInput(text, key, fallback, placeholder)
+		local item = row(54)
+		item.ClipsDescendants = true
+		local caption = Instance.new("TextLabel")
+		caption.Position = UDim2.fromOffset(10, 2)
+		caption.Size = UDim2.new(1, -20, 0, 20)
+		caption.BackgroundTransparency = 1
+		caption.Font = Enum.Font.Code
+		caption.Text = text
+		caption.TextColor3 = theme.text
+		caption.TextSize = 14
+		caption.TextXAlignment = Enum.TextXAlignment.Left
+		caption.TextYAlignment = Enum.TextYAlignment.Center
+		caption.ZIndex = 6
+		caption.Parent = item
+		local box = Instance.new("TextBox")
+		box.Position = UDim2.fromOffset(8, 24)
+		box.Size = UDim2.new(1, -16, 0, 24)
+		box.BackgroundTransparency = 0
+		box.BorderSizePixel = 0
+		box.ClearTextOnFocus = false
+		box.Font = Enum.Font.Code
+		box.PlaceholderText = placeholder
+		box.PlaceholderColor3 = theme.soft
+		box.Text = configString(key, fallback)
+		box.TextColor3 = theme.text
+		box.TextSize = 13
+		box.TextTruncate = Enum.TextTruncate.AtEnd
+		box.TextXAlignment = Enum.TextXAlignment.Left
+		box.TextYAlignment = Enum.TextYAlignment.Center
+		box.ZIndex = 7
+		box.Parent = item
+		stylizeBox(box)
+		local pad = Instance.new("UIPadding")
+		pad.PaddingLeft = UDim.new(0, 8)
+		pad.PaddingRight = UDim.new(0, 8)
+		pad.Parent = box
+		settingsTrack(box.Focused:Connect(function()
+			return tweenService:Create(box, TweenInfo.new(0.12), {
+				BackgroundTransparency = 0.06,
+			}):Play()
+		end))
+		settingsTrack(box.FocusLost:Connect(function()
+			setConfigValue(key, box.Text)
+			tweenService:Create(box, TweenInfo.new(0.14), {
+				BackgroundTransparency = 0,
+			}):Play()
+		end))
+	end
+	local function makeSlider(text, key, fallback, min, max, step, unit)
+		if unit == nil then
+			unit = ""
+		end
+		local height = 64
+		local margin = 10
+		local item = row(height)
+		item.ClipsDescendants = true
+		local caption = Instance.new("TextLabel")
+		caption.Position = UDim2.fromOffset(margin, 4)
+		caption.Size = UDim2.new(1, -112, 0, 28)
+		caption.BackgroundTransparency = 1
+		caption.Font = Enum.Font.Code
+		caption.Text = text
+		caption.TextColor3 = theme.text
+		caption.TextSize = 15
+		caption.TextXAlignment = Enum.TextXAlignment.Left
+		caption.TextYAlignment = Enum.TextYAlignment.Center
+		caption.TextWrapped = true
+		caption.ZIndex = 6
+		caption.Parent = item
+		local box = Instance.new("Frame")
+		box.AnchorPoint = Vector2.new(1, 0)
+		box.Position = UDim2.new(1, -margin, 0, 7)
+		box.Size = UDim2.fromOffset(82, 24)
+		box.BackgroundTransparency = 0
+		box.BorderSizePixel = 0
+		box.ZIndex = 7
+		box.Parent = item
+		stylizeBox(box)
+		local valueBox = Instance.new("TextBox")
+		valueBox.Size = UDim2.fromScale(1, 1)
+		valueBox.BackgroundTransparency = 1
+		valueBox.ClearTextOnFocus = false
+		valueBox.Font = Enum.Font.Code
+		valueBox.TextColor3 = theme.text
+		valueBox.PlaceholderColor3 = theme.soft
+		valueBox.TextSize = 13
+		valueBox.TextXAlignment = Enum.TextXAlignment.Center
+		valueBox.TextYAlignment = Enum.TextYAlignment.Center
+		valueBox.ZIndex = 8
+		valueBox.Parent = box
+		local bar = Instance.new("TextButton")
+		bar.Position = UDim2.fromOffset(0, 36)
+		bar.Size = UDim2.new(1, 0, 0, 24)
+		bar.BackgroundTransparency = 1
+		bar.BorderSizePixel = 0
+		bar.Text = ""
+		bar.AutoButtonColor = true
+		bar.ZIndex = 7
+		bar.Parent = item
+		local rail = Instance.new("Frame")
+		rail.AnchorPoint = Vector2.new(0.5, 0.5)
+		rail.Position = UDim2.new(0.5, 0, 0.5, 0)
+		rail.Size = UDim2.new(1, -38, 0, 5)
+		rail.BackgroundColor3 = theme.surface
+		rail.BackgroundTransparency = 0
+		rail.BorderSizePixel = 0
+		rail.ZIndex = 7
+		rail.Parent = bar
+		stylizeBox(rail, true)
+		local fill = Instance.new("Frame")
+		fill.Size = UDim2.fromScale(0, 1)
+		fill.BackgroundColor3 = accentColor(0)
+		fill.BackgroundTransparency = 0.18
+		fill.BorderSizePixel = 0
+		fill.ZIndex = 8
+		fill.Parent = rail
+		local fillCorner = Instance.new("UICorner")
+		fillCorner.CornerRadius = UDim.new(0, 7)
+		fillCorner.Parent = fill
+		accentGradient(fill)
+		local knob = Instance.new("Frame")
+		knob.AnchorPoint = Vector2.new(0.5, 0.5)
+		knob.Position = UDim2.new(0, 0, 0.5, 0)
+		knob.Size = UDim2.fromOffset(18, 18)
+		knob.BackgroundColor3 = theme.text
+		knob.BackgroundTransparency = 0
+		knob.BorderSizePixel = 0
+		knob.ZIndex = 9
+		knob.Parent = rail
+		local knobCorner = Instance.new("UICorner")
+		knobCorner.CornerRadius = UDim.new(1, 0)
+		knobCorner.Parent = knob
+		local knobStroke = Instance.new("UIStroke")
+		knobStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		knobStroke.Color = Color3.new(1, 1, 1)
+		knobStroke.Thickness = 1
+		knobStroke.Transparency = 0.28
+		knobStroke.Parent = knob
+		accentGradient(knobStroke)
+		local range = max - min
+		if step > 0 and range / step <= 20 then
+			local i = min + step
+			while i < max do
+				local tick = Instance.new("Frame")
+				tick.AnchorPoint = Vector2.new(0.5, 0)
+				tick.Position = UDim2.new((i - min) / range, 0, 1, 2)
+				tick.Size = UDim2.fromOffset(1, 4)
+				tick.BackgroundColor3 = theme.text
+				tick.BackgroundTransparency = 0.55
+				tick.BorderSizePixel = 0
+				tick.ZIndex = 8
+				tick.Parent = rail
+				i += step
+			end
+		end
+		local function snap(v)
+			return math.clamp(min + math.floor((v - min) / step + 0.5) * step, min, max)
+		end
+		local function current()
+			return snap(configNumber(key, fallback))
+		end
+		local function updateVisual(animated)
+			if animated == nil then
+				animated = true
+			end
+			local value = current()
+			local alpha = math.clamp((value - min) / (max - min), 0, 1)
+			local rounded = math.floor(value * 100 + 0.5) / 100
+			valueBox.Text = `{rounded}{unit}`
+			local info = TweenInfo.new(if animated then 0.12 else 0, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
+			tweenService:Create(fill, info, {
+				Size = UDim2.new(alpha, 0, 1, 0),
+			}):Play()
+			tweenService:Create(knob, info, {
+				Position = UDim2.new(alpha, 0, 0.5, 0),
+			}):Play()
+		end
+		local function setFromX(x)
+			local alpha = math.clamp((x - rail.AbsolutePosition.X) / math.max(1, rail.AbsoluteSize.X), 0, 1)
+			local value = snap(min + (max - min) * alpha)
+			setConfigValue(key, value)
+			updateVisual(false)
+		end
+		local dragging = false
+		settingsTrack(bar.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+				return nil
+			end
+			dragging = true
+			setFromX(input.Position.X)
+		end))
+		settingsTrack(inputService.InputChanged:Connect(function(input)
+			if not dragging then
+				return nil
+			end
+			if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
+				return nil
+			end
+			setFromX(input.Position.X)
+		end))
+		settingsTrack(inputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = false
+			end
+		end))
+		settingsTrack(valueBox.Focused:Connect(function()
+			valueBox.Text = `{current()}`
+		end))
+		settingsTrack(valueBox.FocusLost:Connect(function()
+			local _text = valueBox.Text
+			local _unit = unit
+			local clean = (string.gsub(_text, _unit, ""))
+			local parsed = tonumber(clean)
+			if parsed ~= nil then
+				setConfigValue(key, snap(parsed))
+			end
+			updateVisual(false)
+		end))
+		updateVisual(false)
+		local function setVisible(visible, animated)
+			if animated == nil then
+				animated = true
+			end
+			if visible then
+				item.Visible = true
+			end
+			local info = TweenInfo.new(if animated then 0.2 else 0, Enum.EasingStyle.Cubic, if visible then Enum.EasingDirection.Out else Enum.EasingDirection.In)
+			tweenService:Create(item, info, {
+				Size = UDim2.new(1, 0, 0, if visible then height else 0),
+				BackgroundTransparency = if visible then 0.14 else 1,
+			}):Play()
+			if not visible then
+				task.delay(if animated then 0.2 else 0, function()
+					if item.Size.Y.Offset <= 1 then
+						item.Visible = false
+					end
+				end)
+			end
+		end
+		return {
+			setVisible = setVisible,
+		}
+	end
+	local creditsOverlay
+	local function closeCredits(animated)
+		if animated == nil then
+			animated = true
+		end
+		local overlay = creditsOverlay
+		creditsOverlay = nil
+		local _result_4 = overlay
+		if _result_4 ~= nil then
+			_result_4 = _result_4.Parent
+		end
+		if not _result_4 then
+			return nil
+		end
+		if not animated then
+			overlay:Destroy()
+			return nil
+		end
+		tweenService:Create(overlay, TweenInfo.new(0.14, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1,
+		}):Play()
+		task.delay(0.15, function()
+			if overlay.Parent then
+				overlay:Destroy()
+			end
+		end)
+	end
+	local function showCredits()
+		closeCredits(false)
+		local overlay = Instance.new("Frame")
+		creditsOverlay = overlay
+		overlay.Position = UDim2.fromOffset(12, 44)
+		overlay.Size = UDim2.new(1, -24, 1, -58)
+		overlay.BackgroundColor3 = theme.surface
+		overlay.BackgroundTransparency = 1
+		overlay.BorderSizePixel = 0
+		overlay.ZIndex = 30
+		overlay.Parent = root
+		stylizeBox(overlay, true)
+		local title = Instance.new("TextLabel")
+		title.Position = UDim2.fromOffset(14, 10)
+		title.Size = UDim2.new(1, -56, 0, 24)
+		title.BackgroundTransparency = 1
+		title.Font = Enum.Font.Code
+		title.Text = "credits"
+		title.TextColor3 = theme.text
+		title.TextSize = 18
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.TextYAlignment = Enum.TextYAlignment.Center
+		title.ZIndex = 32
+		title.Parent = overlay
+		accentGradient(title)
+		local close = Instance.new("TextButton")
+		close.AnchorPoint = Vector2.new(1, 0)
+		close.Position = UDim2.new(1, -10, 0, 8)
+		close.Size = UDim2.fromOffset(34, 26)
+		close.BackgroundColor3 = theme.surface
+		close.BorderSizePixel = 0
+		close.Font = Enum.Font.Code
+		close.Text = "<"
+		close.TextColor3 = theme.text
+		close.TextSize = 16
+		close.AutoButtonColor = false
+		close.ZIndex = 33
+		close.Parent = overlay
+		stylizeBox(close)
+		local lines = { { "kobold (@koboldpaws on discord)", "NBF9000 direction, testing, and script concept" }, { "wlwaw / zzz (@wlwaw on discord)", "mobile script testing" }, { "STEVE-916-create / Uhhhhhh", "theme references and broad UI inspiration" }, { "AnthonyIsntHere", "original SkidFling method/reference" } }
+		for i = 0, #lines - 1 do
+			local name = Instance.new("TextLabel")
+			name.Position = UDim2.fromOffset(16, 50 + i * 54)
+			name.Size = UDim2.new(1, -32, 0, 20)
+			name.BackgroundTransparency = 1
+			name.Font = Enum.Font.Code
+			name.Text = lines[i + 1][1]
+			name.TextColor3 = theme.text
+			name.TextSize = 15
+			name.TextXAlignment = Enum.TextXAlignment.Left
+			name.TextYAlignment = Enum.TextYAlignment.Center
+			name.ZIndex = 32
+			name.Parent = overlay
+			local detail = Instance.new("TextLabel")
+			detail.Position = UDim2.fromOffset(16, 72 + i * 54)
+			detail.Size = UDim2.new(1, -32, 0, 18)
+			detail.BackgroundTransparency = 1
+			detail.Font = Enum.Font.Code
+			detail.Text = lines[i + 1][2]
+			detail.TextColor3 = theme.muted
+			detail.TextSize = 12
+			detail.TextXAlignment = Enum.TextXAlignment.Left
+			detail.TextYAlignment = Enum.TextYAlignment.Center
+			detail.TextWrapped = true
+			detail.ZIndex = 32
+			detail.Parent = overlay
+		end
+		tweenService:Create(overlay, TweenInfo.new(0.18, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 0.04,
+		}):Play()
+		settingsTrack(close.Activated:Connect(function()
+			return closeCredits(true)
+		end))
+	end
+	local function makeActionButton(text, onActivated)
+		local item = row(42)
+		local button = Instance.new("TextButton")
+		button.Position = UDim2.fromOffset(8, 7)
+		button.Size = UDim2.new(1, -16, 0, 28)
+		button.BackgroundTransparency = 0
+		button.BorderSizePixel = 0
+		button.Font = Enum.Font.Code
+		button.Text = text
+		button.TextColor3 = theme.text
+		button.TextSize = 14
+		button.AutoButtonColor = false
+		button.ZIndex = 7
+		button.Parent = item
+		stylizeBox(button)
+		settingsTrack(button.MouseEnter:Connect(function()
+			return tweenService:Create(button, TweenInfo.new(0.14), {
+				BackgroundTransparency = 0.08,
+			}):Play()
+		end))
+		settingsTrack(button.MouseLeave:Connect(function()
+			return tweenService:Create(button, TweenInfo.new(0.18), {
+				BackgroundTransparency = 0,
+			}):Play()
+		end))
+		settingsTrack(button.Activated:Connect(onActivated))
+	end
+	local openDropdown
+	local closeOpenDropdown
+	local function makeDropdown(text, key, values, fallback)
+		local closedHeight = 42
+		local optionHeight = 24
+		local dropdownClosedHeight = 26
+		local longestValue = #fallback
+		for _, value in values do
+			longestValue = math.max(longestValue, #value)
+		end
+		local dropdownWidth = math.clamp(math.ceil(longestValue * 7.5 + 40), 132, 194)
+		local dropdownOpenHeight = dropdownClosedHeight + #values * optionHeight + 8
+		local openHeight = 8 + dropdownOpenHeight + 6
+		local item = Instance.new("Frame")
+		item.Size = UDim2.new(1, 0, 0, closedHeight)
+		item.BackgroundTransparency = 1
+		item.BorderSizePixel = 0
+		item.ClipsDescendants = false
+		item.ZIndex = 5
+		item.Parent = page
+		local card = Instance.new("Frame")
+		card.Size = UDim2.new(1, 0, 0, closedHeight)
+		card.BackgroundTransparency = 0.14
+		card.BorderSizePixel = 0
+		card.ZIndex = 5
+		card.Parent = item
+		stylizeBox(card, true)
+		local caption = Instance.new("TextLabel")
+		caption.Position = UDim2.fromOffset(10, 0)
+		caption.Size = UDim2.new(1, -dropdownWidth - 26, 0, closedHeight)
+		caption.BackgroundTransparency = 1
+		caption.Font = Enum.Font.Code
+		caption.Text = text
+		caption.TextColor3 = theme.text
+		caption.TextSize = 15
+		caption.TextXAlignment = Enum.TextXAlignment.Left
+		caption.TextYAlignment = Enum.TextYAlignment.Center
+		caption.TextWrapped = true
+		caption.ZIndex = 6
+		caption.Parent = card
+		local dropdown = Instance.new("Frame")
+		dropdown.AnchorPoint = Vector2.new(1, 0)
+		dropdown.Position = UDim2.new(1, -10, 0, 8)
+		dropdown.Size = UDim2.fromOffset(dropdownWidth, dropdownClosedHeight)
+		dropdown.BackgroundTransparency = 0
+		dropdown.BorderSizePixel = 0
+		dropdown.ClipsDescendants = true
+		dropdown.ZIndex = 8
+		dropdown.Parent = item
+		stylizeBox(dropdown)
+		local button = Instance.new("TextButton")
+		button.Size = UDim2.new(1, -18, 0, dropdownClosedHeight)
+		button.BackgroundTransparency = 1
+		button.BorderSizePixel = 0
+		button.Font = Enum.Font.Code
+		button.TextColor3 = theme.text
+		button.TextSize = 13
+		button.Text = configString(key, fallback)
+		button.TextXAlignment = Enum.TextXAlignment.Center
+		button.TextTruncate = Enum.TextTruncate.AtEnd
+		button.AutoButtonColor = false
+		button.ZIndex = 9
+		button.Parent = dropdown
+		local arrow = Instance.new("TextLabel")
+		arrow.AnchorPoint = Vector2.new(1, 0)
+		arrow.Position = UDim2.new(1, -4, 0, 0)
+		arrow.Size = UDim2.fromOffset(16, dropdownClosedHeight)
+		arrow.BackgroundTransparency = 1
+		arrow.Font = Enum.Font.Code
+		arrow.Text = "v"
+		arrow.TextColor3 = theme.muted
+		arrow.TextSize = 12
+		arrow.TextXAlignment = Enum.TextXAlignment.Center
+		arrow.TextYAlignment = Enum.TextYAlignment.Center
+		arrow.ZIndex = 10
+		arrow.Parent = dropdown
+		local separator = Instance.new("Frame")
+		separator.Position = UDim2.new(0, 7, 0, dropdownClosedHeight)
+		separator.Size = UDim2.new(1, -14, 0, 1)
+		separator.BackgroundColor3 = Color3.new(1, 1, 1)
+		separator.BackgroundTransparency = 1
+		separator.BorderSizePixel = 0
+		separator.ZIndex = 10
+		separator.Parent = dropdown
+		accentGradient(separator)
+		local optionBox = Instance.new("Frame")
+		optionBox.Position = UDim2.fromOffset(0, dropdownClosedHeight)
+		optionBox.Size = UDim2.new(1, 0, 0, #values * optionHeight + 8)
+		optionBox.BackgroundTransparency = 1
+		optionBox.BorderSizePixel = 0
+		optionBox.ZIndex = 10
+		optionBox.Parent = dropdown
+		local optionPadding = Instance.new("UIPadding")
+		optionPadding.PaddingTop = UDim.new(0, 3)
+		optionPadding.PaddingBottom = UDim.new(0, 4)
+		optionPadding.PaddingLeft = UDim.new(0, 5)
+		optionPadding.PaddingRight = UDim.new(0, 5)
+		optionPadding.Parent = optionBox
+		local optionLayout = Instance.new("UIListLayout")
+		optionLayout.FillDirection = Enum.FillDirection.Vertical
+		optionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		optionLayout.Parent = optionBox
+		local options = {}
+		for i = 0, #values - 1 do
+			local value = values[i + 1]
+			local option = Instance.new("TextButton")
+			option.Size = UDim2.new(1, 0, 0, optionHeight)
+			option.BackgroundColor3 = theme.depth
+			option.BackgroundTransparency = 1
+			option.BorderSizePixel = 0
+			option.Font = Enum.Font.Code
+			option.Text = value
+			option.TextColor3 = theme.text
+			option.TextSize = 13
+			option.TextXAlignment = Enum.TextXAlignment.Center
+			option.TextTruncate = Enum.TextTruncate.AtEnd
+			option.Visible = false
+			option.ZIndex = 11
+			option.LayoutOrder = i
+			option.AutoButtonColor = false
+			option.Parent = optionBox
+			local optionCorner = Instance.new("UICorner")
+			optionCorner.CornerRadius = UDim.new(0, 5)
+			optionCorner.Parent = option
+			table.insert(options, option)
+			settingsTrack(option.MouseEnter:Connect(function()
+				return tweenService:Create(option, TweenInfo.new(0.12), {
+					BackgroundTransparency = 0.12,
+				}):Play()
+			end))
+			settingsTrack(option.MouseLeave:Connect(function()
+				return tweenService:Create(option, TweenInfo.new(0.14), {
+					BackgroundTransparency = 1,
+				}):Play()
+			end))
+			settingsTrack(option.Activated:Connect(function()
+				setConfigValue(key, value)
+				button.Text = value
+				if closeOpenDropdown then
+					closeOpenDropdown()
+				end
+			end))
+		end
+		local itemTween
+		local dropdownTween
+		local listOpen = false
+		local function closeList()
+			if itemTween then
+				itemTween:Cancel()
+			end
+			if dropdownTween then
+				dropdownTween:Cancel()
+			end
+			listOpen = false
+			if openDropdown == item then
+				openDropdown = nil
+				closeOpenDropdown = nil
+			end
+			for _, option in options do
+				option.Visible = false
+			end
+			itemTween = tweenService:Create(item, TweenInfo.new(0.18, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+				Size = UDim2.new(1, 0, 0, closedHeight),
+			})
+			dropdownTween = tweenService:Create(dropdown, TweenInfo.new(0.16, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+				Size = UDim2.fromOffset(dropdownWidth, dropdownClosedHeight),
+				BackgroundTransparency = 0,
+			})
+			tweenService:Create(separator, TweenInfo.new(0.12), {
+				BackgroundTransparency = 1,
+			}):Play()
+			tweenService:Create(arrow, TweenInfo.new(0.16, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				Rotation = 0,
+			}):Play()
+			itemTween:Play()
+			dropdownTween:Play()
+		end
+		local function openList()
+			if openDropdown and openDropdown ~= item and closeOpenDropdown then
+				closeOpenDropdown()
+			end
+			if itemTween then
+				itemTween:Cancel()
+			end
+			if dropdownTween then
+				dropdownTween:Cancel()
+			end
+			listOpen = true
+			openDropdown = item
+			closeOpenDropdown = closeList
+			for _, option in options do
+				option.Visible = true
+			end
+			itemTween = tweenService:Create(item, TweenInfo.new(0.22, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, openHeight),
+			})
+			dropdownTween = tweenService:Create(dropdown, TweenInfo.new(0.22, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				Size = UDim2.fromOffset(dropdownWidth, dropdownOpenHeight),
+				BackgroundTransparency = 0,
+			})
+			tweenService:Create(separator, TweenInfo.new(0.18), {
+				BackgroundTransparency = 0.72,
+			}):Play()
+			tweenService:Create(arrow, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				Rotation = 180,
+			}):Play()
+			itemTween:Play()
+			dropdownTween:Play()
+		end
+		settingsTrack(dropdown.MouseEnter:Connect(function()
+			return tweenService:Create(dropdown, TweenInfo.new(0.14), {
+				BackgroundTransparency = 0.08,
+			}):Play()
+		end))
+		settingsTrack(dropdown.MouseLeave:Connect(function()
+			return tweenService:Create(dropdown, TweenInfo.new(0.18), {
+				BackgroundTransparency = 0,
+			}):Play()
+		end))
+		settingsTrack(button.Activated:Connect(function()
+			if listOpen then
+				closeList()
+			else
+				openList()
+			end
+		end))
+	end
+	local function makeKeybind(text, key, fallback)
+		local item = row(42)
+		local caption = Instance.new("TextLabel")
+		caption.Position = UDim2.fromOffset(10, 0)
+		caption.Size = UDim2.new(1, -150, 1, 0)
+		caption.BackgroundTransparency = 1
+		caption.Font = Enum.Font.Code
+		caption.Text = text
+		caption.TextColor3 = theme.text
+		caption.TextSize = 15
+		caption.TextXAlignment = Enum.TextXAlignment.Left
+		caption.TextYAlignment = Enum.TextYAlignment.Center
+		caption.TextWrapped = true
+		caption.ZIndex = 6
+		caption.Parent = item
+		local button = Instance.new("TextButton")
+		button.AnchorPoint = Vector2.new(1, 0.5)
+		button.Position = UDim2.new(1, -10, 0.5, 0)
+		button.Size = UDim2.fromOffset(132, 26)
+		button.BackgroundTransparency = 0
+		button.BorderSizePixel = 0
+		button.Font = Enum.Font.Code
+		button.TextColor3 = theme.text
+		button.TextSize = 13
+		button.Text = configString(key, fallback)
+		button.TextXAlignment = Enum.TextXAlignment.Center
+		button.AutoButtonColor = false
+		button.ZIndex = 7
+		button.Parent = item
+		stylizeBox(button)
+		local listening = false
+		local pendingCtrl = false
+		local function setButtonText(value)
+			button.Text = value
+			button.TextTransparency = if listening then 0.18 else 0
+			caption.TextTransparency = if listening then 0.08 else 0
+		end
+		settingsTrack(button.MouseEnter:Connect(function()
+			return tweenService:Create(button, TweenInfo.new(0.14), {
+				BackgroundTransparency = 0.08,
+			}):Play()
+		end))
+		settingsTrack(button.MouseLeave:Connect(function()
+			return tweenService:Create(button, TweenInfo.new(0.18), {
+				BackgroundTransparency = 0,
+			}):Play()
+		end))
+		settingsTrack(button.Activated:Connect(function()
+			if listening then
+				return nil
+			end
+			listening = true
+			settingsKeyListening = true
+			pendingCtrl = false
+			setButtonText("press key")
+		end))
+		settingsTrack(inputService.InputBegan:Connect(function(input, gameProcessed)
+			if not listening then
+				return nil
+			end
+			if gameProcessed and input.KeyCode ~= Enum.KeyCode.Escape then
+				return nil
+			end
+			if input.KeyCode == Enum.KeyCode.Escape then
+				listening = false
+				settingsKeyListening = false
+				pendingCtrl = false
+				setButtonText(configString(key, fallback))
+				return nil
+			end
+			local base = baseInputName(input)
+			if isCtrlName(base) then
+				pendingCtrl = true
+				setButtonText("Ctrl+...")
+				return nil
+			end
+			local value = if pendingCtrl or ctrlDownFor(input) then `Ctrl+{base}` else base
+			setConfigValue(key, value)
+			listening = false
+			settingsKeyListening = false
+			pendingCtrl = false
+			setButtonText(value)
+		end))
+	end
+	section("targeting")
+	makeDropdown("Target priority", "targetPriority", { "mouse", "closest", "camera" }, "mouse")
+	makeToggle("Click through walls", "clickThroughWalls", false)
+	makeToggle("Require alive players", "requireAliveTarget", true)
+	makeToggle("Ignore teammates", "teamCheck", false)
+	makeTextInput("Whitelist players", "whitelist", "", "names or userids, comma separated")
+	section("fling")
+	makeDropdown("Fling method", "method", { "Overflow", "skidfling" }, "Overflow")
+	makeToggle("Predict target movement", "flingPrediction", true)
+	local setManualFlingDurationVisible
+	makeToggle("Auto stop after fling", "autoDetectFling", true, function(on)
+		local _result_4 = setManualFlingDurationVisible
+		if _result_4 ~= nil then
+			_result_4 = _result_4(not on, true)
+		end
+		return _result_4
+	end)
+	local manualFlingDuration = makeSlider("Manual fling time", "manualFlingDuration", 2, 0.25, 8, 0.05, "s")
+	setManualFlingDurationVisible = manualFlingDuration.setVisible
+	setManualFlingDurationVisible(config.autoDetectFling ~= true, false)
+	makeToggle("Keep flinging same target", "repeatSameTarget", false)
+	makeToggle("Retry if target escapes", "autoRefling", true)
+	makeToggle("Anti fling", "antiFling", false)
+	section("handoff")
+	makeToggle("Hide avatar", "hideRealCharacter", true)
+	makeToggle("Clear movement on menu", "clearInputOnMenu", true)
+	section("visuals")
+	makeDropdown("Theme", "theme", themeNames, "Tokyo Night")
+	makeToggle("Intro animation", "intro", true)
+	makeToggle("HRP outlines", "showHRPs", false)
+	makeToggle("Local HRP outline", "showGuide", true)
+	makeToggle("Watermark", "showWatermark", true)
+	makeToggle("Reduced motion", "lowMotion", false)
+	section("mobile")
+	makeInfo("Detected input", detectedPlatform())
+	makeDropdown("Input platform mode", "platformMode", { "auto", "pc", "mobile" }, "auto")
+	makeToggle("Mobile fling tool", "mobileFlingTool", true)
+	makeToggle("Mobile fling all tool", "mobileFlingAllTool", true)
+	makeToggle("Mobile cancel tool", "mobileCancelTool", true)
+	section("credits")
+	makeActionButton("Credits", showCredits)
+	section("keybinds")
+	makeKeybind("Menu toggle keybind", "menuKey", "RightShift")
+	makeKeybind("Click fling keybind", "flingKey", "Ctrl+MouseButton1")
+	makeKeybind("Fling all keybind", "flingAllKey", "Ctrl+F")
+	makeKeybind("Clear queue keybind", "clearQueueKey", "Backspace")
+	makeKeybind("Cancel fling keybind", "cancelFlingKey", "Q")
+	local minimized = false
+	local titleFull = title.Text
+	local function syncGlow()
+		if not settingsGlow or not settingsRoot then
+			return nil
+		end
+		settingsGlow.AnchorPoint = settingsRoot.AnchorPoint
+		settingsGlow.Position = settingsRoot.Position
+		settingsGlow.Size = UDim2.fromOffset(settingsRoot.AbsoluteSize.X + 26, settingsRoot.AbsoluteSize.Y + 26)
+		settingsGlow.Visible = settingsRoot.Visible
+	end
+	settingsTrack(root:GetPropertyChangedSignal("Position"):Connect(syncGlow))
+	settingsTrack(root:GetPropertyChangedSignal("Size"):Connect(syncGlow))
+	task.defer(syncGlow)
+	dragify(root, top)
+	settingsTrack(mini.Activated:Connect(function()
+		minimized = not minimized
+		if closeOpenDropdown then
+			closeOpenDropdown()
+		end
+		if minimized then
+			closeCredits(false)
+			rootSize.MinSize = Vector2.new(220, 36)
+			content.Visible = false
+			mathStrip.Visible = false
+			topFill.Visible = false
+			title.Text = "NBF9000"
+			title.Size = UDim2.fromOffset(86, 36)
+			for _, line in scanlines do
+				line.Visible = false
+			end
+			tweenService:Create(root, TweenInfo.new(0.25, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				Size = UDim2.fromOffset(230, 36),
+			}):Play()
+			tweenService:Create(miniBar, TweenInfo.new(0.2), {
+				Rotation = 180,
+			}):Play()
+		else
+			title.Text = titleFull
+			title.Size = UDim2.fromOffset(176, 36)
+			tweenService:Create(root, TweenInfo.new(0.25, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				Size = fullSize,
+			}):Play()
+			tweenService:Create(miniBar, TweenInfo.new(0.2), {
+				Rotation = 0,
+			}):Play()
+			task.delay(0.13, function()
+				content.Visible = true
+				mathStrip.Visible = true
+				topFill.Visible = true
+				rootSize.MinSize = Vector2.new(330, 304)
+				for _, line in scanlines do
+					line.Visible = true
+				end
+			end)
+		end
+	end))
+	local started = os.clock()
+	settingsConn = runService.RenderStepped:Connect(function()
+		local _result_4 = settingsRoot
+		if _result_4 ~= nil then
+			_result_4 = _result_4.Parent
+		end
+		if not _result_4 then
+			return nil
+		end
+		local t = os.clock() - started
+		local motion = if config.lowMotion == true then 0.2 else 1
+		local pulse = math.sin(t * 1.8 * motion)
+		rootStroke.Transparency = 0.05 + pulse * 0.03
+		local strokeGrad = rootStroke:FindFirstChildOfClass("UIGradient")
+		if strokeGrad then
+			strokeGrad.Rotation = (t * 42 * motion) % 360
+		end
+		glowGrad.Rotation = (t * -34 * motion) % 360
+		glowStroke.Transparency = 0.58 + pulse * 0.05
+		if titleGrad then
+			titleGrad.Offset = Vector2.new(math.sin(t * 1.6 * motion) * 0.25, 0)
+		end
+		local width = math.max(24, mathStrip.AbsoluteSize.X)
+		local height = math.max(10, mathStrip.AbsoluteSize.Y)
+		local points = {}
+		local phase = t * 4.2 * motion
+		for i = 0, #mathNodes - 1 do
+			local u = if #mathNodes == 1 then 0.5 else i / (#mathNodes - 1)
+			local xPhase = u * math.pi * 4
+			local wave = math.sin(xPhase - phase) * 0.74 + math.sin(xPhase * 2 - phase * 1.35) * 0.12
+			local point = Vector2.new(3 + u * (width - 6), height * 0.5 + wave * height * 0.26)
+			table.insert(points, point)
+			local dot = mathNodes[i + 1]
+			dot.Position = UDim2.fromOffset(point.X, point.Y)
+			dot.BackgroundColor3 = accentColor(t * 0.13 + u * 0.55)
+		end
+		for i = 0, #mathLines - 1 do
+			local a = points[i + 1]
+			local b = points[i + 2]
+			local line = mathLines[i + 1]
+			if not a or not b then
+				continue
+			end
+			local delta = b - a
+			line.Position = UDim2.fromOffset((a.X + b.X) * 0.5, (a.Y + b.Y) * 0.5)
+			line.Size = UDim2.fromOffset(math.max(1, delta.Magnitude), 1)
+			local angle = if delta.X == 0 then (if delta.Y >= 0 then 90 else -90) else math.atan(delta.Y / delta.X) * 180 / math.pi
+			if delta.X < 0 then
+				angle += 180
+			end
+			line.Rotation = angle
+			line.BackgroundColor3 = accentColor(t * 0.13 + i / math.max(1, #mathLines))
+		end
+		syncGlow()
+	end)
+	if from then
+		tweenService:Create(root, TweenInfo.new(0.34, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = fullSize,
+		}):Play()
+		task.delay(0.2, function()
+			if not root.Parent then
+				return nil
+			end
+			content.Visible = true
+			for _, line in scanlines do
+				line.Visible = true
+			end
+			rootSize.MinSize = Vector2.new(330, 304)
+		end)
+	else
+		tweenService:Create(rootScale, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+			Scale = 1,
+		}):Play()
+	end
+	updateMobileTools()
+end
+local function toggleSettingsMenu()
+	local _result = settingsGui
+	if _result ~= nil then
+		_result = _result.Parent
+	end
+	local _condition_1 = not _result
+	if not _condition_1 then
+		_condition_1 = not settingsRoot
+	end
+	if _condition_1 then
+		showSettingsMenu()
+		return nil
+	end
+	local visible = not settingsRoot.Visible
+	settingsRoot.Visible = visible
+	if settingsGlow then
+		settingsGlow.Visible = visible
+	end
+end
+local function playIntro()
+	killIntro()
+	local theme = currentTheme()
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "nbf9000Intro"
+	screenGui.IgnoreGuiInset = true
+	screenGui.ResetOnSpawn = false
+	screenGui.DisplayOrder = 2147483647
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.Parent = gethui()
+	introGui = screenGui
+	local asset = introAsset()
+	if asset ~= "" and asset then
+		local snd = Instance.new("Sound")
+		snd.Name = "nbf9000Intro"
+		snd.SoundId = asset
+		snd.Volume = 3
+		snd.Looped = false
+		snd.PlaybackSpeed = 1
+		snd.Parent = soundService
+		task.spawn(function()
+			if not snd.Parent then
+				return nil
+			end
+			do
+				local i = 0
+				local _shouldIncrement = false
+				while true do
+					if _shouldIncrement then
+						i += 1
+					else
+						_shouldIncrement = true
+					end
+					if not (i < 180 and not snd.IsLoaded) then
+						break
+					end
+					runService.RenderStepped:Wait()
+				end
+			end
+			snd:Stop()
+			task.wait()
+			snd.TimePosition = 0
+			task.wait()
+			soundService:PlayLocalSound(snd)
+		end)
+		introSound = snd
+	end
+	local shade = Instance.new("Frame")
+	shade.Size = UDim2.fromScale(1, 1)
+	shade.BackgroundColor3 = theme.surface
+	shade.BackgroundTransparency = 1
+	shade.BorderSizePixel = 0
+	shade.ZIndex = 1
+	shade.Parent = screenGui
+	local borderFrames = {}
+	local borderGrads = {}
+	local borderSpecs = { {
+		pos = UDim2.new(0, 0, 0, 0),
+		size = UDim2.new(1, 0, 0, 2),
+		rot = 0,
+	}, {
+		pos = UDim2.new(0, 0, 1, -2),
+		size = UDim2.new(1, 0, 0, 2),
+		rot = 180,
+	}, {
+		pos = UDim2.new(0, 0, 0, 0),
+		size = UDim2.new(0, 2, 1, 0),
+		rot = 90,
+	}, {
+		pos = UDim2.new(1, -2, 0, 0),
+		size = UDim2.new(0, 2, 1, 0),
+		rot = 270,
+	} }
+	for _, spec in borderSpecs do
+		local frame = Instance.new("Frame")
+		frame.Position = spec.pos
+		frame.Size = spec.size
+		frame.BackgroundColor3 = Color3.new(1, 1, 1)
+		frame.BackgroundTransparency = 1
+		frame.BorderSizePixel = 0
+		frame.ZIndex = 2
+		frame.Parent = screenGui
+		table.insert(borderFrames, frame)
+		local grad = Instance.new("UIGradient")
+		grad.Color = accentSequence()
+		grad.Rotation = spec.rot
+		grad.Parent = frame
+		table.insert(borderGrads, grad)
+	end
+	local card = Instance.new("Frame")
+	card.AnchorPoint = Vector2.new(0.5, 0.5)
+	card.Position = UDim2.fromScale(0.5, 0.5)
+	card.Size = UDim2.new(0.82, 0, 0, 136)
+	card.BackgroundColor3 = theme.bg
+	card.BackgroundTransparency = 1
+	card.BorderSizePixel = 0
+	card.ClipsDescendants = true
+	card.ZIndex = 3
+	card.Parent = screenGui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 7)
+	corner.Parent = card
+	local cardSize = Instance.new("UISizeConstraint")
+	cardSize.MinSize = Vector2.new(260, 136)
+	cardSize.MaxSize = Vector2.new(390, 136)
+	cardSize.Parent = card
+	local scale = Instance.new("UIScale")
+	scale.Scale = 0.94
+	scale.Parent = card
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 1
+	stroke.Color = Color3.new(1, 1, 1)
+	stroke.Transparency = 1
+	stroke.Parent = card
+	local edge = Instance.new("UIGradient")
+	edge.Color = accentSequence()
+	edge.Parent = stroke
+	local top = Instance.new("Frame")
+	top.Position = UDim2.new(0, 0, 0, 0)
+	top.Size = UDim2.new(1, 0, 0, 18)
+	top.BackgroundColor3 = theme.top
+	top.BackgroundTransparency = 1
+	top.BorderSizePixel = 0
+	top.ZIndex = 4
+	top.Parent = card
+	local topCorner = Instance.new("UICorner")
+	topCorner.CornerRadius = UDim.new(0, 7)
+	topCorner.Parent = top
+	local topFill = Instance.new("Frame")
+	topFill.Position = UDim2.new(0, 0, 0, 7)
+	topFill.Size = UDim2.new(1, 0, 1, -7)
+	topFill.BackgroundColor3 = top.BackgroundColor3
+	topFill.BackgroundTransparency = 1
+	topFill.BorderSizePixel = 0
+	topFill.ZIndex = 4
+	topFill.Parent = top
+	local title = makeIntroText(card, "NBF9000", 28, 45, true)
+	local sub = makeIntroText(card, ":3 :3 :3 :3 :3 :3 :3", 13, 78)
+	local introTextIsLight = theme.text.R * 0.2126 + theme.text.G * 0.7152 + theme.text.B * 0.0722 >= 0.45
+	title.TextTransparency = 1
+	title.TextStrokeTransparency = 1
+	sub.TextTransparency = 1
+	sub.TextStrokeTransparency = 1
+	local boot = makeIntroText(card, "ctrl+mb1 / tap player", 12, 100)
+	boot.TextTransparency = 1
+	boot.TextStrokeTransparency = 1
+	local titleGrad = if introTextIsLight then accentGradient(title) else nil
+	local subGrad = if introTextIsLight then accentGradient(sub) else nil
+	local barBox = Instance.new("Frame")
+	barBox.AnchorPoint = Vector2.new(0.5, 1)
+	barBox.Position = UDim2.new(0.5, -2, 1, 0)
+	barBox.Size = UDim2.new(1, -22, 0, 42)
+	barBox.BackgroundTransparency = 1
+	barBox.BorderSizePixel = 0
+	barBox.ZIndex = 4
+	barBox.Parent = card
+	local bars = {}
+	local barGoal = {}
+	for i = 0, 26 do
+		local bar = Instance.new("Frame")
+		bar.AnchorPoint = Vector2.new(0, 1)
+		bar.Position = UDim2.new(i / 26, 0, 1, 0)
+		bar.Size = UDim2.new(0, 7, 0, 3)
+		bar.BackgroundColor3 = Color3.new(1, 1, 1)
+		bar.BackgroundTransparency = 0.18
+		bar.BorderSizePixel = 0
+		bar.ZIndex = 4
+		bar.Parent = barBox
+		table.insert(bars, bar)
+		table.insert(barGoal, 8)
+	end
+	local scanlines = {}
+	for i = 0, 8 do
+		local line = Instance.new("Frame")
+		line.Position = UDim2.new(0, 0, 0, 24 + i * 13)
+		line.Size = UDim2.new(1, 0, 0, 1)
+		line.BackgroundColor3 = Color3.new(1, 1, 1)
+		line.BackgroundTransparency = 0.94
+		line.BorderSizePixel = 0
+		line.ZIndex = 3
+		line.Parent = card
+		table.insert(scanlines, line)
+	end
+	local flash = Instance.new("Frame")
+	flash.Size = UDim2.fromScale(1, 1)
+	flash.BackgroundColor3 = Color3.new(1, 1, 1)
+	flash.BackgroundTransparency = 1
+	flash.BorderSizePixel = 0
+	flash.ZIndex = 20
+	flash.Parent = screenGui
+	tweenService:Create(scale, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		Scale = 1,
+	}):Play()
+	tweenService:Create(shade, TweenInfo.new(0.12), {
+		BackgroundTransparency = 0.18,
+	}):Play()
+	tweenService:Create(card, TweenInfo.new(0.12), {
+		BackgroundTransparency = 0.04,
+	}):Play()
+	tweenService:Create(top, TweenInfo.new(0.12), {
+		BackgroundTransparency = 0,
+	}):Play()
+	tweenService:Create(topFill, TweenInfo.new(0.12), {
+		BackgroundTransparency = 0,
+	}):Play()
+	tweenService:Create(stroke, TweenInfo.new(0.12), {
+		Transparency = 0,
+	}):Play()
+	for _, frame in borderFrames do
+		tweenService:Create(frame, TweenInfo.new(0.12), {
+			BackgroundTransparency = 0.18,
+		}):Play()
+	end
+	tweenService:Create(title, TweenInfo.new(0.12), {
+		TextTransparency = 0,
+		TextStrokeTransparency = if introTextIsLight then 0.25 else 0.18,
+	}):Play()
+	tweenService:Create(sub, TweenInfo.new(0.12), {
+		TextTransparency = 0.12,
+		TextStrokeTransparency = if introTextIsLight then 0.55 else 0.34,
+	}):Play()
+	tweenService:Create(boot, TweenInfo.new(0.12), {
+		TextTransparency = 0.26,
+		TextStrokeTransparency = if introTextIsLight then 0.55 else 0.34,
+	}):Play()
+	local start = os.clock()
+	local lastBar = 0
+	local lastUi = 0
+	local lastLoud = 0
+	local loud = 0.35
+	local closing = false
+	introConn = runService.RenderStepped:Connect(function()
+		local t = os.clock() - start
+		if t - lastLoud > 0.08 then
+			lastLoud = t
+			loud = if introSound then math.clamp(introSound.PlaybackLoudness / 650, 0, 1) else 0.35
+		end
+		if t - lastUi < 1 / 30 then
+			if t <= 2.75 or closing then
+				return nil
+			end
+		else
+			lastUi = t
+		end
+		local borderThick = math.floor(2 + loud * 2)
+		borderFrames[1].Size = UDim2.new(1, 0, 0, borderThick)
+		borderFrames[2].Position = UDim2.new(0, 0, 1, -borderThick)
+		borderFrames[2].Size = UDim2.new(1, 0, 0, borderThick)
+		borderFrames[3].Size = UDim2.new(0, borderThick, 1, 0)
+		borderFrames[4].Position = UDim2.new(1, -borderThick, 0, 0)
+		borderFrames[4].Size = UDim2.new(0, borderThick, 1, 0)
+		for i, grad in ipairs(borderGrads) do
+			grad.Offset = Vector2.new(math.sin(t * 0.42 + i * 0.6) * 0.18, math.cos(t * 0.31 + i * 0.45) * 0.08)
+		end
+		for _, frame in borderFrames do
+			frame.BackgroundTransparency = 0.24 - loud * 0.08
+		end
+		edge.Rotation = (edge.Rotation + 1.4) % 360
+		edge.Offset = Vector2.new(math.sin(t * 0.26) * 0.25, 0)
+		local textOffset = Vector2.new(math.sin(t * 4) * 0.28, 0)
+		if titleGrad then
+			titleGrad.Offset = textOffset
+		end
+		if subGrad then
+			subGrad.Offset = textOffset
+		end
+		boot.TextColor3 = theme.muted
+		if t - lastBar > 0.055 then
+			lastBar = t
+			for i = 0, #bars - 1 do
+				local wave = math.abs(math.sin(t * 5.5 + i * 0.42))
+				barGoal[i + 1] = 6 + math.random(0, 12) + wave * 8 + loud * (14 + wave * 30 + math.random(0, 12))
+			end
+		end
+		for i, bar in ipairs(bars) do
+			local _condition_1 = barGoal[i]
+			if _condition_1 == nil then
+				_condition_1 = 8
+			end
+			local h = _condition_1
+			bar.Size = UDim2.new(0, 7, 0, h)
+			bar.BackgroundColor3 = accentColor(t * 0.32 + i * 0.065)
+		end
+		if t > 2.75 and introGui and not closing then
+			closing = true
+			local con = introConn
+			introConn = nil
+			if con then
+				con:Disconnect()
+			end
+			showSettingsMenu(card)
+			tweenService:Create(shade, TweenInfo.new(0.28), {
+				BackgroundTransparency = 1,
+			}):Play()
+			for _, frame in borderFrames do
+				tweenService:Create(frame, TweenInfo.new(0.2), {
+					BackgroundTransparency = 1,
+				}):Play()
+			end
+			tweenService:Create(card, TweenInfo.new(0.2), {
+				BackgroundTransparency = 1,
+			}):Play()
+			tweenService:Create(top, TweenInfo.new(0.2), {
+				BackgroundTransparency = 1,
+			}):Play()
+			tweenService:Create(topFill, TweenInfo.new(0.2), {
+				BackgroundTransparency = 1,
+			}):Play()
+			tweenService:Create(flash, TweenInfo.new(0.22), {
+				BackgroundTransparency = 1,
+			}):Play()
+			tweenService:Create(stroke, TweenInfo.new(0.22), {
+				Transparency = 1,
+			}):Play()
+			for _, label in { title, sub, boot } do
+				tweenService:Create(label, TweenInfo.new(0.18), {
+					TextTransparency = 1,
+					TextStrokeTransparency = 1,
+				}):Play()
+			end
+			tweenService:Create(barBox, TweenInfo.new(0.18), {
+				BackgroundTransparency = 1,
+			}):Play()
+			for _, bar in bars do
+				tweenService:Create(bar, TweenInfo.new(0.18), {
+					BackgroundTransparency = 1,
+				}):Play()
+			end
+			for _, line in scanlines do
+				tweenService:Create(line, TweenInfo.new(0.18), {
+					BackgroundTransparency = 1,
+				}):Play()
+			end
+			tweenService:Create(scale, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				Scale = 0.985,
+			}):Play()
+			local snd = introSound
+			if snd then
+				task.spawn(function()
+					local vol = snd.Volume
+					do
+						local i = 1
+						local _shouldIncrement = false
+						while true do
+							if _shouldIncrement then
+								i += 1
+							else
+								_shouldIncrement = true
+							end
+							if not (i <= 6 and snd.Parent) then
+								break
+							end
+							snd.Volume = vol * (1 - i / 6)
+							runService.RenderStepped:Wait()
+						end
+					end
+					if snd.Parent then
+						snd.Volume = 0
+					end
+				end)
+			end
+			task.delay(0.42, function()
+				if introGui == screenGui then
+					killIntro()
+				elseif screenGui.Parent then
+					screenGui:Destroy()
+				end
+			end)
+		end
+	end)
+end
+local function updateGuide()
+	if config.showGuide ~= true then
+		clearGuide()
+		return nil
+	end
+	local hum, rp = charParts(localPlayer.Character)
+	if isDead(hum) then
+		releaseGuide()
+		return nil
+	end
+	local _, sessionRoot = charParts(sessionModel)
+	local root = if queue[1] ~= nil or busy then rp or sessionRoot else sessionRoot or rp
+	if not root then
+		clearGuide()
+		return nil
+	end
+	local t = os.clock()
+	local spin = CFrame.Angles(math.sin(t * 2.7 + guideSpinOffset.X) * 2.6 + t * 108, math.cos(t * 3.4 + guideSpinOffset.Y) * 3.4 + t * 156, math.sin(t * 4.3 + guideSpinOffset.Z) * 2.2 + t * 92)
+	local wanted = root.CFrame * spin
+	if not guidePart then
+		local p = Instance.new("Part")
+		p.Name = "HRP"
+		p.Size = Vector3.new(2, 2, 1)
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanTouch = false
+		p.CanQuery = false
+		p.Massless = true
+		p.Transparency = 1
+		p.CFrame = wanted
+		local box = Instance.new("SelectionBox")
+		box.Name = "HRP Outline"
+		box.Adornee = p
+		box.LineThickness = 0.03
+		box.SurfaceTransparency = 1
+		box.Parent = p
+		local boxAlt = Instance.new("SelectionBox")
+		boxAlt.Name = "HRP Outline Alt"
+		boxAlt.Adornee = p
+		boxAlt.LineThickness = 0.015
+		boxAlt.SurfaceTransparency = 1
+		boxAlt.Parent = p
+		p.Parent = world
+		guidePart = p
+		guideOutline = box
+		guideOutlineAlt = boxAlt
+		guideTick = t
+	end
+	local dt = math.min(t - guideTick, 1 / 15)
+	guideTick = t
+	local _position = wanted.Position
+	local _position_1 = guidePart.Position
+	local diff = _position - _position_1
+	local dist = diff.Magnitude
+	if dist > 3 then
+		local move = math.min(dist, math.max(650, dist * 40) * dt)
+		local _position_2 = guidePart.Position
+		local _arg0_1 = diff.Unit * move
+		local pos = _position_2 + _arg0_1
+		local _cFrame = CFrame.new(pos)
+		local _rotation = wanted.Rotation
+		guidePart.CFrame = _cFrame * _rotation
+	else
+		guidePart.CFrame = wanted
+	end
+	local color = accentColor(os.clock() * 0.55)
+	if guideOutline then
+		guideOutline.Color3 = color
+	end
+	if guideOutlineAlt then
+		guideOutlineAlt.Color3 = accentColor(os.clock() * 0.55 + 0.26)
+	end
+end
+local zeroPartVelocity
+local function resetRoot()
+	skidHoldCFrame = nil
+	skidTweenLastClock = os.clock()
+	if runtime.simRadiusActive == true then
+		pcall(function()
+			local _condition_1 = runtime.simulationRadius
+			if _condition_1 == nil then
+				_condition_1 = 1000
+			end
+			return sethiddenproperty(localPlayer, "SimulationRadius", _condition_1)
+		end)
+		pcall(function()
+			local _condition_1 = runtime.maximumSimulationRadius
+			if _condition_1 == nil then
+				_condition_1 = 1000
+			end
+			return sethiddenproperty(localPlayer, "MaximumSimulationRadius", _condition_1)
+		end)
+		runtime.simRadiusActive = false
+		runtime.simulationRadius = nil
+		runtime.maximumSimulationRadius = nil
+	end
+	local hum, rp = charParts(localPlayer.Character)
+	local _result = localPlayer.Character
+	if _result ~= nil then
+		_result = _result:GetDescendants()
+	end
+	local _condition_1 = _result
+	if _condition_1 == nil then
+		_condition_1 = {}
+	end
+	for _, obj in _condition_1 do
+		if obj:IsA("BasePart") then
+			zeroPartVelocity(obj)
+		end
+	end
+	if rp then
+		pcall(function()
+			return sethiddenproperty(rp, "PhysicsRepRootPart", nil)
+		end)
+		rp.AssemblyLinearVelocity = Vector3.zero
+		rp.AssemblyAngularVelocity = Vector3.zero
+		rp.Velocity = Vector3.zero
+		rp.RotVelocity = Vector3.zero
+	end
+	if hum then
+		hum.AutoRotate = true
+		pcall(function()
+			return sethiddenproperty(hum, "MoveDirectionInternal", Vector3.zero)
+		end)
+		pcall(function()
+			return sethiddenproperty(hum, "NetworkHumanoidState", Enum.HumanoidStateType.Running)
+		end)
+	end
+end
+local function saveHumanoidState(hum)
+	local _result = savedHumanoidState
+	if _result ~= nil then
+		_result = _result.hum
+	end
+	if _result == hum then
+		return nil
+	end
+	savedHumanoidState = {
+		hum = hum,
+		autoRotate = hum.AutoRotate,
+		walkSpeed = hum.WalkSpeed,
+		jumpPower = hum.JumpPower,
+		jumpHeight = hum.JumpHeight,
+		useJumpPower = hum.UseJumpPower,
+		requiresNeck = hum.RequiresNeck,
+		breakJointsOnDeath = hum.BreakJointsOnDeath,
+	}
+end
+local function restoreHumanoidState()
+	local state = savedHumanoidState
+	savedHumanoidState = nil
+	if not state or not state.hum.Parent then
+		return nil
+	end
+	state.hum.AutoRotate = state.autoRotate
+	state.hum.WalkSpeed = state.walkSpeed
+	state.hum.UseJumpPower = state.useJumpPower
+	state.hum.JumpPower = state.jumpPower
+	state.hum.JumpHeight = state.jumpHeight
+	state.hum.RequiresNeck = state.requiresNeck
+	state.hum.BreakJointsOnDeath = state.breakJointsOnDeath
+end
+local function restoreAlpha()
+	for p, state in savedPartState do
+		if p.Parent then
+			p.LocalTransparencyModifier = state.transparency
+			p.CanCollide = state.collision
+		end
+	end
+	table.clear(savedPartState)
+	maskedChar = nil
+end
+local function suspendAnimate(char)
+	if not char then
+		return nil
+	end
+	for _, obj in char:GetDescendants() do
+		if obj:IsA("LocalScript") and obj.Name == "Animate" then
+			if not (savedScriptDisabled[obj] ~= nil) then
+				local _disabled = obj.Disabled
+				savedScriptDisabled[obj] = _disabled
+			end
+			obj.Disabled = true
+		end
+	end
+end
+local isAirAnimationId, trackAnimationId
+local function stopTracks(hum, airOnly)
+	if airOnly == nil then
+		airOnly = false
+	end
+	local _animator = hum
+	if _animator ~= nil then
+		_animator = _animator:FindFirstChildOfClass("Animator")
+	end
+	local animator = _animator
+	if not animator then
+		return nil
+	end
+	for _, track in animator:GetPlayingAnimationTracks() do
+		if not airOnly or isAirAnimationId(trackAnimationId(track)) then
+			track:Stop(0)
+		end
+	end
+end
+local function restoreAnimate()
+	for script, disabled in savedScriptDisabled do
+		if script.Parent then
+			script.Disabled = disabled
+		end
+	end
+	table.clear(savedScriptDisabled)
+end
+local function restoreTargetCollision()
+	for p, c in targetCollision do
+		if p.Parent then
+			p.CanCollide = c
+		end
+	end
+	table.clear(targetCollision)
+end
+function restoreAntiFlingCollision()
+	for _, constraints in antiFlingNoCollision do
+		for _1, constraint in constraints do
+			if constraint.Parent then
+				constraint:Destroy()
+			end
+		end
+	end
+	table.clear(antiFlingNoCollision)
+	for p, c in antiFlingCollision do
+		if not p.Parent then
+			antiFlingCollision[p] = nil
+		elseif not (targetCollision[p] ~= nil) then
+			p.CanCollide = c
+			antiFlingCollision[p] = nil
+		end
+	end
+end
+local charFromPart
+local function noCollideTarget(tgt)
+	local _tgt = tgt
+	if not (typeof(_tgt) == "Instance") then
+		return nil
+	end
+	local char = if tgt:IsA("Model") then tgt else (if tgt:IsA("BasePart") then charFromPart(tgt) else nil)
+	if not char or char == localPlayer.Character or char == sessionModel then
+		return nil
+	end
+	for _, obj in char:GetDescendants() do
+		if obj:IsA("BasePart") then
+			if not (targetCollision[obj] ~= nil) then
+				local _canCollide = obj.CanCollide
+				targetCollision[obj] = _canCollide
+			end
+			obj.CanCollide = false
+		end
+	end
+end
+local function updateAntiFling()
+	if config.antiFling ~= true or queue[1] ~= nil then
+		restoreAntiFlingCollision()
+		return nil
+	end
+	local localChar = localPlayer.Character
+	if not localChar then
+		return nil
+	end
+	local localParts = {}
+	for _, obj in localChar:GetDescendants() do
+		if obj:IsA("BasePart") then
+			table.insert(localParts, obj)
+		end
+	end
+	local live = {}
+	for _, player in players:GetPlayers() do
+		if player == localPlayer then
+			continue
+		end
+		local char = player.Character
+		if not char then
+			continue
+		end
+		for _1, obj in char:GetDescendants() do
+			if obj:IsA("BasePart") then
+				live[obj] = true
+				if not (antiFlingCollision[obj] ~= nil) then
+					local _canCollide = obj.CanCollide
+					antiFlingCollision[obj] = _canCollide
+				end
+				if obj.CanCollide ~= false then
+					obj.CanCollide = false
+				end
+				local constraints = antiFlingNoCollision[obj]
+				local rebuild = not constraints or #constraints ~= #localParts
+				if constraints then
+					for _2, constraint in constraints do
+						local _condition_1 = not constraint.Parent
+						if not _condition_1 then
+							local _result = constraint.Part0
+							if _result ~= nil then
+								_result = _result.Parent
+							end
+							_condition_1 = not _result
+							if not _condition_1 then
+								local _result_1 = constraint.Part1
+								if _result_1 ~= nil then
+									_result_1 = _result_1.Parent
+								end
+								_condition_1 = not _result_1
+							end
+						end
+						if _condition_1 then
+							rebuild = true
+							break
+						end
+					end
+				end
+				if rebuild then
+					if constraints then
+						for _2, constraint in constraints do
+							if constraint.Parent then
+								constraint:Destroy()
+							end
+						end
+					end
+					constraints = {}
+					local _constraints = constraints
+					antiFlingNoCollision[obj] = _constraints
+					for _2, localPart in localParts do
+						local ncc = Instance.new("NoCollisionConstraint")
+						ncc.Part0 = localPart
+						ncc.Part1 = obj
+						ncc.Parent = localChar
+						table.insert(constraints, ncc)
+					end
+				end
+			end
+		end
+	end
+	for part in antiFlingCollision do
+		if not part.Parent or not (live[part] ~= nil) then
+			local constraints = antiFlingNoCollision[part]
+			if constraints then
+				for _, constraint in constraints do
+					if constraint.Parent then
+						constraint:Destroy()
+					end
+				end
+				antiFlingNoCollision[part] = nil
+			end
+			if part.Parent and not (targetCollision[part] ~= nil) then
+				local _condition_1 = antiFlingCollision[part]
+				if _condition_1 == nil then
+					_condition_1 = part.CanCollide
+				end
+				part.CanCollide = _condition_1
+			end
+			antiFlingCollision[part] = nil
+		end
+	end
+end
+local function maskChar(char)
+	if not char then
+		return nil
+	end
+	if maskedChar and maskedChar ~= char then
+		restoreAlpha()
+	end
+	maskedChar = char
+	for _, obj in char:GetDescendants() do
+		if obj:IsA("BasePart") then
+			if not (savedPartState[obj] ~= nil) then
+				local _arg1 = {
+					transparency = obj.LocalTransparencyModifier,
+					collision = obj.CanCollide,
+				}
+				savedPartState[obj] = _arg1
+			end
+			if config.hideRealCharacter ~= false then
+				obj.LocalTransparencyModifier = 1
+			end
+			obj.CanCollide = false
+			zeroPartVelocity(obj)
+		end
+	end
+	suspendAnimate(char)
+	stopTracks(char:FindFirstChildOfClass("Humanoid"))
+end
+local function enableSkidFlingCollision(char)
+	if not char then
+		return nil
+	end
+	for _, obj in char:GetDescendants() do
+		if obj:IsA("BasePart") then
+			obj.CanCollide = true
+		end
+	end
+end
+function zeroPartVelocity(part)
+	part.AssemblyLinearVelocity = Vector3.zero
+	part.AssemblyAngularVelocity = Vector3.zero
+	part.Velocity = Vector3.zero
+	part.RotVelocity = Vector3.zero
+end
+function trackAnimationId(track)
+	local anim = track.Animation
+	local _id = anim
+	if _id ~= nil then
+		_id = _id.AnimationId
+	end
+	local id = _id
+	return if type(id) == "string" and #id > 0 then id else nil
+end
+function isAirAnimationId(id)
+	return id == anims.R6.jump or id == anims.R6.fall or id == anims.R15.jump or id == anims.R15.fall
+end
+local function snapshotTrackPhases(model)
+	local _hum = model
+	if _hum ~= nil then
+		_hum = _hum:FindFirstChildOfClass("Humanoid")
+	end
+	local hum = _hum
+	local _animator = hum
+	if _animator ~= nil then
+		_animator = _animator:FindFirstChildOfClass("Animator")
+	end
+	local animator = _animator
+	local phases = {}
+	if not animator then
+		return phases
+	end
+	local bestPhase
+	local bestWeight = -1
+	for _, track in animator:GetPlayingAnimationTracks() do
+		local id = trackAnimationId(track)
+		if id ~= "" and id then
+			local _timePosition = track.TimePosition
+			phases[id] = _timePosition
+		end
+		if not isAirAnimationId(id) and track.WeightCurrent >= bestWeight then
+			bestPhase = track.TimePosition
+			bestWeight = track.WeightCurrent
+		end
+	end
+	if bestPhase ~= nil then
+		local _bestPhase = bestPhase
+		phases[mainTrackPhaseKey] = _bestPhase
+	end
+	return phases
+end
+local function applyTrackPhases(hum, phases)
+	if not hum or not phases then
+		return nil
+	end
+	local _animator = hum
+	if _animator ~= nil then
+		_animator = _animator:FindFirstChildOfClass("Animator")
+	end
+	local animator = _animator
+	if not animator then
+		return nil
+	end
+	for _, track in animator:GetPlayingAnimationTracks() do
+		local id = trackAnimationId(track)
+		local _condition_1 = (if id ~= "" and id then phases[id] else nil)
+		if _condition_1 == nil then
+			_condition_1 = (if not isAirAnimationId(id) then phases[mainTrackPhaseKey] else nil)
+		end
+		local time = _condition_1
+		if time ~= nil then
+			pcall(function()
+				local len = track.Length
+				track.TimePosition = if len > 0 then time % len else time
+			end)
+		end
+	end
+end
+local function snapshotPose(model)
+	local pose = {}
+	if not model then
+		return pose
+	end
+	for _, obj in model:GetDescendants() do
+		if obj:IsA("Motor6D") then
+			local _name = obj.Name
+			local _transform = obj.Transform
+			pose[_name] = _transform
+		end
+	end
+	return pose
+end
+local function applyPose(model, pose)
+	if not model or not pose then
+		return nil
+	end
+	for _, obj in model:GetDescendants() do
+		if obj:IsA("Motor6D") then
+			local _pose = pose
+			local _name = obj.Name
+			local transform = _pose[_name]
+			if transform then
+				obj.Transform = transform
+			end
+		end
+	end
+end
+local function setCameraSubject(subject)
+	cam = world.CurrentCamera
+	if not cam then
+		return nil
+	end
+	local cf = cam.CFrame
+	cam.CameraSubject = subject
+	cam.CFrame = cf
+end
+local function setSessionRootAnchored(anchored)
+	local _, root = charParts(sessionModel)
+	if not root then
+		return nil
+	end
+	root.Anchored = anchored
+	sessionRootAnchored = anchored
+	if anchored then
+		zeroPartVelocity(root)
+	else
+		zeroPartVelocity(root)
+		local hum = charParts(sessionModel)
+		if hum then
+			hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+		end
+	end
+end
+local function tickSessionSpawnAnchor()
+	if not sessionRootAnchored then
+		return nil
+	end
+	if sessionAnchorFrames > 0 then
+		sessionAnchorFrames -= 1
+		return nil
+	end
+	setSessionRootAnchored(false)
+end
+local function clearSessionModel(sync)
+	local model = sessionModel
+	local _, sessionRoot = charParts(model)
+	local char = localPlayer.Character
+	local hum, rp = charParts(char)
+	local retCf = if sync and sessionRoot then sessionRoot.CFrame else nil
+	local retVelRaw = if sync and sessionRoot then sessionRoot.AssemblyLinearVelocity else Vector3.zero
+	local retVel = if retVelRaw.Y < 0.5 then Vector3.new(retVelRaw.X, 0, retVelRaw.Z) else retVelRaw
+	local retPose = if sync then snapshotPose(model) else nil
+	local retPhases = if sync then snapshotTrackPhases(model) else nil
+	busy = false
+	if model then
+		model:Destroy()
+	end
+	sessionModel = nil
+	runtime.sessionModel = nil
+	sessionRootAnchored = false
+	sessionAnchorFrames = 0
+	restoreTargetCollision()
+	resetRoot()
+	restoreHumanoidState()
+	stopTracks(hum, true)
+	applyTrackPhases(hum, retPhases)
+	applyPose(char, retPose)
+	if retCf and rp then
+		rp.CFrame = retCf
+		rp.AssemblyLinearVelocity = retVel
+		rp.AssemblyAngularVelocity = Vector3.zero
+		rp.Velocity = retVel
+		rp.RotVelocity = Vector3.zero
+	end
+	if sync and hum then
+		hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+		hum.Jump = false
+		hum.Sit = false
+		hum.PlatformStand = false
+		pcall(function()
+			return sethiddenproperty(hum, "MoveDirectionInternal", Vector3.zero)
+		end)
+		pcall(function()
+			return sethiddenproperty(hum, "NetworkHumanoidState", Enum.HumanoidStateType.Running)
+		end)
+		hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+		task.defer(function()
+			if not hum.Parent then
+				restoreAnimate()
+				restoreAlpha()
+				return nil
+			end
+			hum.Jump = false
+			hum.Sit = false
+			hum.PlatformStand = false
+			pcall(function()
+				return sethiddenproperty(hum, "MoveDirectionInternal", Vector3.zero)
+			end)
+			pcall(function()
+				return sethiddenproperty(hum, "NetworkHumanoidState", Enum.HumanoidStateType.Running)
+			end)
+			stopTracks(hum, true)
+			applyTrackPhases(hum, retPhases)
+			hum:ChangeState(Enum.HumanoidStateType.Running)
+			applyPose(char, retPose)
+			restoreAlpha()
+			setCameraSubject(hum)
+			task.spawn(function()
+				if runService.PreAnimation then
+					runService.PreAnimation:Wait()
+				else
+					runService.RenderStepped:Wait()
+				end
+				if not hum.Parent then
+					return nil
+				end
+				pcall(function()
+					return sethiddenproperty(hum, "NetworkHumanoidState", Enum.HumanoidStateType.Running)
+				end)
+				hum:ChangeState(Enum.HumanoidStateType.Running)
+				applyTrackPhases(hum, retPhases)
+				applyPose(char, retPose)
+				restoreAnimate()
+			end)
+		end)
+	else
+		if hum then
+			hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+		end
+		restoreAnimate()
+		restoreAlpha()
+	end
+	setDestroyH(originalDestroyHeight)
+	destroyHeightSet = false
+	if (not sync or not hum) and hum then
+		setCameraSubject(hum)
+	end
+end
+local function dropDeadChar(char)
+	if not char then
+		return nil
+	end
+	table.clear(queue)
+	table.clear(cooldowns)
+	busy = false
+	releaseGuide()
+	clearSessionModel(false)
+end
+local function stop()
+	for _, c in connections do
+		c:Disconnect()
+	end
+	table.clear(connections)
+	if deathConn then
+		deathConn:Disconnect()
+		deathConn = nil
+	end
+	table.clear(queue)
+	table.clear(cooldowns)
+	runService:UnbindFromRenderStep("nbf9000")
+	clearSessionModel(false)
+	restoreAntiFlingCollision()
+	clearGuide()
+	clearHrpOutlines()
+	killIntro()
+	destroySettingsMenu()
+	clearMobileTools()
+	clearWatermark()
+end
+local function bindCharacter(char)
+	if deathConn then
+		deathConn:Disconnect()
+		deathConn = nil
+	end
+	setDestroyH(originalDestroyHeight)
+	destroyHeightSet = false
+	if not char then
+		return nil
+	end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		return nil
+	end
+	deathConn = hum.Died:Connect(function()
+		dropDeadChar(char)
+	end)
+end
+local function prepareSessionModel(char)
+	for _, obj in char:GetDescendants() do
+		if obj:IsA("Script") or obj:IsA("LocalScript") then
+			obj:Destroy()
+		elseif obj:IsA("BasePart") then
+			obj.Anchored = false
+			obj.CanTouch = false
+			obj.CanQuery = false
+			obj.LocalTransparencyModifier = 0
+		elseif obj:IsA("ForceField") then
+			obj.Visible = false
+		end
+	end
+end
+local function createTrack(anim, id, pri, loop)
+	if not (id ~= "" and id) or #id == 0 then
+		return nil
+	end
+	local a = Instance.new("Animation")
+	a.AnimationId = id
+	local ok, t = pcall(function()
+		return anim:LoadAnimation(a)
+	end)
+	a:Destroy()
+	if ok and t then
+		t.Priority = pri
+		t.Looped = loop
+		return t
+	end
+end
+local function animateSessionModel(char, hum, phases)
+	local anim = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator")
+	anim.Parent = hum
+	local isR15 = hum.RigType == Enum.HumanoidRigType.R15
+	local set = if isR15 then anims.R15 else anims.R6
+	local idlePriority = if isR15 then Enum.AnimationPriority.Idle else Enum.AnimationPriority.Core
+	local movePriority = if isR15 then Enum.AnimationPriority.Movement else Enum.AnimationPriority.Core
+	local actionPriority = if isR15 then Enum.AnimationPriority.Action else Enum.AnimationPriority.Core
+	local currentName
+	local currentTrack
+	local function animationId(name)
+		if name == "idle" and not isR15 then
+			return if math.random(1, 10) == 10 then anims.R6.idleAlt else anims.R6.idle
+		end
+		if name == "walk" then
+			return set.walk
+		end
+		if name == "run" then
+			return set.run
+		end
+		if name == "jump" then
+			return set.jump
+		end
+		if name == "fall" then
+			return set.fall
+		end
+		return set.idle
+	end
+	local function animationPriority(name)
+		if name == "walk" or name == "run" then
+			return movePriority
+		end
+		if name == "jump" or name == "fall" then
+			return actionPriority
+		end
+		return idlePriority
+	end
+	local function animationLooped(name)
+		return name ~= "jump"
+	end
+	local function play(name, fade)
+		local _condition_1 = currentName == name
+		if _condition_1 then
+			local _result = currentTrack
+			if _result ~= nil then
+				_result = _result.IsPlaying
+			end
+			_condition_1 = _result
+		end
+		if _condition_1 then
+			return nil
+		end
+		local id = animationId(name)
+		local track = createTrack(anim, id, animationPriority(name), animationLooped(name))
+		if not track then
+			return nil
+		end
+		if currentTrack then
+			currentTrack:Stop(fade)
+			currentTrack:Destroy()
+		end
+		currentName = name
+		currentTrack = track
+		track:Play(fade)
+		local _result
+		if id ~= "" and id then
+			local _result_1 = phases
+			if _result_1 ~= nil then
+				_result_1 = _result_1[id]
+			end
+			_result = _result_1
+		else
+			_result = nil
+		end
+		local _condition_2 = _result
+		if _condition_2 == nil then
+			local _result_1
+			if not isAirAnimationId(id) then
+				local _result_2 = phases
+				if _result_2 ~= nil then
+					_result_2 = _result_2[mainTrackPhaseKey]
+				end
+				_result_1 = _result_2
+			else
+				_result_1 = nil
+			end
+			_condition_2 = _result_1
+		end
+		local phase = _condition_2
+		if phase ~= nil then
+			pcall(function()
+				local len = track.Length
+				track.TimePosition = if len > 0 then phase % len else phase
+			end)
+		end
+	end
+	local function setAnimationSpeed(speed)
+		local _result = currentTrack
+		if _result ~= nil then
+			_result:AdjustSpeed(speed)
+		end
+	end
+	local function moveSpeed()
+		local _, root = charParts(char)
+		local flatVelocity = if root then Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude else 0
+		local inputSpeed = hum.WalkSpeed * math.min(keys.move.Magnitude, 1)
+		return math.max(flatVelocity, inputSpeed)
+	end
+	local function playMove(speed)
+		if speed == nil then
+			speed = moveSpeed()
+		end
+		if not isR15 then
+			play("walk", 0.1)
+			setAnimationSpeed(math.max(speed / 14.5, 0.1))
+			return nil
+		end
+		local _value = speed > 7 and set.run
+		local name = if _value ~= "" and _value then "run" else "walk"
+		play(name, 0.15)
+		setAnimationSpeed(math.max(speed / 16, 0.1))
+	end
+	local jumpTime = 0
+	local lastTick = os.clock()
+	local cn
+	cn = runService.PreAnimation:Connect(function()
+		if not sessionModel or not sessionModel.Parent or not hum.Parent then
+			cn:Disconnect()
+			return nil
+		end
+		local now = os.clock()
+		local dt = now - lastTick
+		lastTick = now
+		if jumpTime > 0 then
+			jumpTime = math.max(jumpTime - dt, 0)
+		end
+		local st = hum:GetState()
+		local speed = moveSpeed()
+		local inputMoving = keys.move.Magnitude > 0.05
+		if sessionRootAnchored then
+			if inputMoving then
+				playMove(speed)
+			else
+				play("idle", 0.1)
+			end
+			return nil
+		end
+		local moving = inputMoving or speed > (if busy then 3.4 else 4.2)
+		if st == Enum.HumanoidStateType.Jumping or hum.Jump then
+			jumpTime = 0.3
+			play("jump", 0.1)
+		elseif st == Enum.HumanoidStateType.Freefall or st == Enum.HumanoidStateType.FallingDown then
+			if jumpTime > 0 then
+				play("jump", 0.1)
+				return nil
+			end
+			play("fall", 0.2)
+		elseif moving then
+			playMove(speed)
+		else
+			play("idle", 0.2)
+		end
+	end)
+	char.Destroying:Once(function()
+		cn:Disconnect()
+		if currentTrack then
+			currentTrack:Stop(0)
+			currentTrack:Destroy()
+		end
+	end)
+end
+local function spawnSessionModel()
+	local char = localPlayer.Character
+	local _, rp = charParts(char)
+	if not char or not rp then
+		return nil
+	end
+	local spawnPivot = char:GetPivot()
+	local spawnPose = snapshotPose(char)
+	local spawnPhases = snapshotTrackPhases(char)
+	if sessionModel then
+		sessionModel:Destroy()
+	end
+	local arc = char.Archivable
+	char.Archivable = true
+	local g = char:Clone()
+	char.Archivable = arc
+	if not g then
+		return nil
+	end
+	g.Name = "nbf9000Rig"
+	prepareSessionModel(g)
+	g.Parent = world
+	g:PivotTo(spawnPivot)
+	local sessionHum, sessionRoot = charParts(g)
+	if not sessionHum or not sessionRoot then
+		g:Destroy()
+		return nil
+	end
+	sessionHum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	sessionHum.RequiresNeck = false
+	sessionHum.BreakJointsOnDeath = false
+	sessionHum.UseJumpPower = true
+	sessionHum.WalkSpeed = math.max(sessionHum.WalkSpeed, 16)
+	sessionHum.JumpPower = math.max(sessionHum.JumpPower, 50)
+	sessionHum.Health = sessionHum.MaxHealth
+	sessionHum.AutoRotate = true
+	sessionHum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+	sessionRoot.RootPriority = 67
+	g:PivotTo(spawnPivot)
+	zeroPartVelocity(sessionRoot)
+	sessionRoot.Anchored = true
+	sessionRootAnchored = true
+	sessionAnchorFrames = 1
+	sessionHum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+	sessionModel = g
+	runtime.sessionModel = g
+	animateSessionModel(g, sessionHum, spawnPhases)
+	applyPose(g, spawnPose)
+	return g, sessionHum, sessionRoot
+end
+local function targetPart(char)
+	local _, root = charParts(char)
+	if root then
+		return root
+	end
+	if char.PrimaryPart then
+		return char.PrimaryPart
+	end
+	local best
+	local bestSize = 0
+	for _1, obj in char:GetDescendants() do
+		if obj:IsA("BasePart") and not obj:FindFirstAncestorOfClass("Accessory") then
+			local size = obj.Size.X * obj.Size.Y * obj.Size.Z
+			if size > bestSize then
+				best = obj
+				bestSize = size
+			end
+		end
+	end
+	return best or root
+end
+local function flingPart(tgt)
+	local _tgt = tgt
+	if typeof(_tgt) == "Instance" then
+		if tgt:IsA("Model") then
+			return targetPart(tgt)
+		end
+		if tgt:IsA("BasePart") then
+			local char = charFromPart(tgt)
+			return if char then targetPart(char) or tgt else tgt
+		end
+	end
+end
+function playerFromTarget(tgt)
+	local _tgt = tgt
+	if not (typeof(_tgt) == "Instance") then
+		return nil
+	end
+	local char = if tgt:IsA("Model") then tgt else (if tgt:IsA("BasePart") then charFromPart(tgt) else nil)
+	return if char then players:GetPlayerFromCharacter(char) else nil
+end
+local function repeatPart(item)
+	local player = item.player
+	if not player or not player.Parent then
+		return nil
+	end
+	if playerWhitelisted(player) then
+		return nil
+	end
+	local char = player.Character
+	if not char then
+		return nil
+	end
+	local hum, root = charParts(char)
+	if not root or (config.requireAliveTarget ~= false and isDead(hum)) then
+		return nil
+	end
+	local part = targetPart(char) or root
+	item.tgt = part
+	return part
+end
+local function predict(tgt, item)
+	local _result = item
+	if _result ~= nil then
+		_result = _result["repeat"]
+	end
+	if _result then
+		local part = repeatPart(item)
+		if not part then
+			local _, sessionRoot = charParts(sessionModel)
+			local _condition_1 = item.lastCFrame
+			if _condition_1 == nil then
+				local _result_1 = sessionRoot
+				if _result_1 ~= nil then
+					_result_1 = _result_1.CFrame
+				end
+				_condition_1 = _result_1
+				if _condition_1 == nil then
+					_condition_1 = CFrame.identity
+				end
+			end
+			return _condition_1, item.player ~= nil and (not item.player.Parent or playerWhitelisted(item.player))
+		end
+		tgt = part
+	end
+	local _tgt = tgt
+	if typeof(_tgt) == "Instance" then
+		local part = flingPart(tgt)
+		if part then
+			if not part:IsDescendantOf(world) then
+				local _result_1 = item
+				if _result_1 ~= nil then
+					_result_1 = _result_1.lastCFrame
+				end
+				local _condition_1 = _result_1
+				if _condition_1 == nil then
+					_condition_1 = CFrame.identity
+				end
+				local _result_2 = item
+				if _result_2 ~= nil then
+					_result_2 = _result_2["repeat"]
+				end
+				return _condition_1, if _result_2 == true then false else true
+			end
+			local lead = if config.flingPrediction == true and method == "skidfling" then 0.045 else 0
+			local cf = part.CFrame
+			local _oldPos = item
+			if _oldPos ~= nil then
+				_oldPos = _oldPos.lastPosition
+			end
+			local oldPos = _oldPos
+			if oldPos and (part.Position - oldPos).Magnitude > 200 then
+				if item then
+					item.lastPosition = part.Position
+					item.lastCFrame = cf
+				end
+				local _exp = cf
+				local _result_1 = item
+				if _result_1 ~= nil then
+					_result_1 = _result_1["repeat"]
+				end
+				return _exp, if _result_1 == true then false else true
+			end
+			if item then
+				item.lastPosition = part.Position
+			end
+			if lead > 0 then
+				local _cf = cf
+				local _arg0_1 = part.AssemblyLinearVelocity * lead
+				cf = _cf + _arg0_1
+			end
+			if item then
+				item.lastCFrame = cf
+			end
+			return cf, false
+		end
+	end
+	local _tgt_1 = tgt
+	if typeof(_tgt_1) == "CFrame" then
+		return tgt, false
+	end
+	local _tgt_2 = tgt
+	if typeof(_tgt_2) == "Vector3" then
+		return CFrame.new(tgt), false
+	end
+	return CFrame.identity, true
+end
+local getPart
+local function shouldBackOff(item)
+	local now = os.clock()
+	local _condition_1 = item.start
+	if _condition_1 == nil then
+		_condition_1 = now
+	end
+	item.start = _condition_1
+	local _condition_2 = item["end"]
+	if _condition_2 == nil then
+		local _condition_3 = item.dur
+		if _condition_3 == nil then
+			_condition_3 = 2
+		end
+		_condition_2 = now + _condition_3
+	end
+	item["end"] = _condition_2
+	if not item["repeat"] and now > item["end"] then
+		return true
+	end
+	local part = if item["repeat"] then repeatPart(item) else getPart(item.tgt)
+	if item["repeat"] and item.player ~= nil and not item.player.Parent then
+		return true
+	end
+	if not part then
+		return false
+	end
+	if not part:IsDescendantOf(world) then
+		return if item["repeat"] then false else true
+	end
+	if item["repeat"] then
+		return false
+	end
+	if config.autoDetectFling == false then
+		return false
+	end
+	item.startPos = item.startPos or part.Position
+	if now - item.start < 0.12 then
+		return false
+	end
+	local velocity = part.AssemblyLinearVelocity
+	if method == "skidfling" then
+		if now - item.start < 0.22 then
+			return false
+		end
+		if velocity.Magnitude > 500 then
+			return true
+		end
+		local _position = part.Position
+		local _startPos = item.startPos
+		if (_position - _startPos).Magnitude > 150 then
+			return true
+		end
+		return false
+	end
+	if velocity.Magnitude > 150 or math.abs(velocity.Y) > 115 then
+		return true
+	end
+	local _position = part.Position
+	local _startPos = item.startPos
+	if (_position - _startPos).Magnitude > 80 then
+		return true
+	end
+	return false
+end
+function getPart(tgt)
+	local _tgt = tgt
+	if typeof(_tgt) == "Instance" then
+		if tgt:IsA("Model") then
+			return targetPart(tgt)
+		end
+		if tgt:IsA("BasePart") then
+			local char = charFromPart(tgt)
+			return if char then targetPart(char) or tgt else tgt
+		end
+	end
+end
+local function canTargetPlayer(player)
+	if player == localPlayer then
+		return false
+	end
+	if playerWhitelisted(player) then
+		return false
+	end
+	if config.teamCheck == true and localPlayer.Team ~= nil and player.Team == localPlayer.Team then
+		return false
+	end
+	local hum, root = charParts(player.Character)
+	if not root then
+		return false
+	end
+	if config.requireAliveTarget ~= false and isDead(hum) then
+		return false
+	end
+	return true
+end
+local function usableTargetPart(part)
+	if not part then
+		return nil
+	end
+	local char = charFromPart(part)
+	if not char then
+		return nil
+	end
+	local player = players:GetPlayerFromCharacter(char)
+	if player and not canTargetPlayer(player) then
+		return nil
+	end
+	local hum = charParts(char)
+	if config.requireAliveTarget ~= false and isDead(hum) then
+		return nil
+	end
+	return targetPart(char) or part
+end
+local function throughWallTarget(pos, radius)
+	if radius == nil then
+		radius = 46
+	end
+	if config.clickThroughWalls ~= true then
+		return nil
+	end
+	cam = world.CurrentCamera
+	if not cam then
+		return nil
+	end
+	local best
+	local bestScore = radius
+	for _, player in players:GetPlayers() do
+		if not canTargetPlayer(player) then
+			continue
+		end
+		local char = player.Character
+		local hum, root = charParts(char)
+		if not char or not root or (config.requireAliveTarget ~= false and isDead(hum)) then
+			continue
+		end
+		local screen, visible = cam:WorldToViewportPoint(root.Position)
+		if not visible or screen.Z <= 0 then
+			continue
+		end
+		local dist = Vector2.new(screen.X - pos.X, screen.Y - pos.Y).Magnitude
+		if dist < bestScore then
+			best = root
+			bestScore = dist
+		end
+	end
+	return best
+end
+local function doHighlight(tgt)
+	local _tgt = tgt
+	if not (typeof(_tgt) == "Instance") then
+		return nil
+	end
+	local char = if tgt:IsA("Model") then tgt else (if tgt:IsA("BasePart") then charFromPart(tgt) else nil)
+	if not char then
+		return nil
+	end
+	local hl = Instance.new("Highlight")
+	hl.Adornee = char
+	hl.FillColor = accentColor(0)
+	hl.OutlineColor = accentColor(0.3)
+	hl.FillTransparency = 0.72
+	hl.OutlineTransparency = 0
+	hl.Parent = tgt
+	local born = os.clock()
+	local conn
+	conn = runService.RenderStepped:Connect(function()
+		if not hl.Parent then
+			conn:Disconnect()
+			return nil
+		end
+		local t = os.clock() - born
+		hl.FillColor = accentColor(t * 0.55)
+		hl.OutlineColor = accentColor(t * 0.55 + 0.22)
+	end)
+	hl.Destroying:Once(function()
+		return conn:Disconnect()
+	end)
+	tweenService:Create(hl, TweenInfo.new(5), {
+		FillTransparency = 1,
+		OutlineTransparency = 1,
+	}):Play()
+	debrisService:AddItem(hl, 5)
+end
+local function queueFlingTarget(tgt, dur, repeatMode, batch, batchToken)
+	if not tgt then
+		return false
+	end
+	local _tgt = tgt
+	local normalized = if typeof(_tgt) == "Instance" then getPart(tgt) else nil
+	local target = normalized or tgt
+	for _, q in queue do
+		if q.tgt == target then
+			return false
+		end
+	end
+	if target == sessionModel or target == localPlayer.Character then
+		return false
+	end
+	if typeof(target) == "Instance" then
+		if localPlayer.Character and target:IsDescendantOf(localPlayer.Character) then
+			return false
+		end
+		if sessionModel and target:IsDescendantOf(sessionModel) then
+			return false
+		end
+	end
+	local targetPlayer = playerFromTarget(target)
+	if targetPlayer and playerWhitelisted(targetPlayer) then
+		return false
+	end
+	if typeof(target) == "Instance" then
+		if cooldowns[target] ~= nil then
+			return false
+		end
+		cooldowns[target] = true
+		task.delay(1, function()
+			-- ▼ Set.delete ▼
+			local _valueExisted = cooldowns[target] ~= nil
+			cooldowns[target] = nil
+			-- ▲ Set.delete ▲
+			return _valueExisted
+		end)
+	end
+	local _result
+	if config.autoDetectFling == false then
+		local _condition_1 = dur
+		if _condition_1 == nil then
+			_condition_1 = math.clamp(configNumber("manualFlingDuration", 2), 0.25, 8)
+		end
+		_result = _condition_1
+	else
+		_result = dur
+	end
+	local effectiveDur = _result
+	local _arg0_1 = {
+		tgt = target,
+		dur = effectiveDur,
+		["repeat"] = repeatMode,
+		batch = batch,
+		batchToken = batchToken,
+		player = if repeatMode then targetPlayer else nil,
+	}
+	table.insert(queue, _arg0_1)
+	doHighlight(target)
+	return true
+end
+local function activateFlingSession()
+	busy = true
+	if not sessionModel then
+		spawnSessionModel()
+	end
+	resetRoot()
+	maskChar(localPlayer.Character)
+	local sessionHum = charParts(sessionModel)
+	if sessionHum then
+		setCameraSubject(sessionHum)
+	end
+end
+local function fling(tgt, dur)
+	if not queueFlingTarget(tgt, dur, config.repeatSameTarget == true, false) then
+		return false
+	end
+	activateFlingSession()
+	return true
+end
+function charFromPart(part)
+	local _m = part
+	if _m ~= nil then
+		_m = _m.Parent
+	end
+	local m = _m
+	if not m then
+		return nil
+	end
+	if m:IsA("Accessory") then
+		m = m.Parent
+	end
+	if m and m:FindFirstChildOfClass("Humanoid") then
+		return m
+	end
+end
+local function rayTarget(pos)
+	cam = world.CurrentCamera
+	if not cam then
+		return nil
+	end
+	local rp = RaycastParams.new()
+	rp.FilterType = Enum.RaycastFilterType.Exclude
+	local ignore = {}
+	if localPlayer.Character then
+		local _character = localPlayer.Character
+		table.insert(ignore, _character)
+	end
+	if sessionModel then
+		local _sessionModel = sessionModel
+		table.insert(ignore, _sessionModel)
+	end
+	rp.FilterDescendantsInstances = ignore
+	rp.IgnoreWater = true
+	local ray = cam:ViewportPointToRay(pos.X, pos.Y)
+	local hit = world:Raycast(ray.Origin, ray.Direction * 1000, rp)
+	return if hit then usableTargetPart(hit.Instance) else nil
+end
+local function clicked(pos, touchFirst)
+	local direct = if mouse.Target then usableTargetPart(mouse.Target) else nil
+	local ray = rayTarget(pos)
+	local through = throughWallTarget(pos, if touchFirst then 64 else 46)
+	local priority = config.targetPriority or "mouse"
+	if priority == "closest" then
+		return through or direct or ray
+	end
+	if priority == "camera" or touchFirst then
+		return ray or through or direct
+	end
+	return direct or ray or through
+end
+local function tryFlingTap(pos, touchFirst)
+	local t = clicked(pos, touchFirst)
+	if t then
+		fling(t)
+	end
+end
+local function clearFlingQueue(sync)
+	if sync == nil then
+		sync = true
+	end
+	table.clear(queue)
+	table.clear(cooldowns)
+	restoreTargetCollision()
+	busy = false
+	if sessionModel then
+		clearSessionModel(sync)
+	else
+		resetRoot()
+	end
+end
+local function scheduleFlingAllWatchdog(token, count)
+	local timeout = math.clamp(count * 2.5 + 1, 4, 22)
+	task.delay(timeout, function()
+		for _, item in queue do
+			if item.batchToken == token then
+				clearFlingQueue(true)
+				return nil
+			end
+		end
+	end)
+end
+local function enqueueFlingAllBatch()
+	local did = false
+	local count = 0
+	flingAllToken += 1
+	local token = flingAllToken
+	for _, player in players:GetPlayers() do
+		if not canTargetPlayer(player) then
+			continue
+		end
+		local part = if player.Character then targetPart(player.Character) else nil
+		if part and queueFlingTarget(part, nil, false, true, token) then
+			did = true
+			count += 1
+		end
+	end
+	if did then
+		activateFlingSession()
+		scheduleFlingAllWatchdog(token, count)
+	end
+	return did
+end
+local function flingAll()
+	if #queue > 0 or sessionModel then
+		clearFlingQueue(true)
+		task.defer(enqueueFlingAllBatch)
+		return true
+	end
+	return enqueueFlingAllBatch()
+end
+local function unequipMobileTools()
+	local _hum = localPlayer.Character
+	if _hum ~= nil then
+		_hum = _hum:FindFirstChildOfClass("Humanoid")
+	end
+	local hum = _hum
+	if hum then
+		hum:UnequipTools()
+	end
+end
+local function runMobileToolAction(tool, onActivated)
+	if not tool.Enabled then
+		return nil
+	end
+	tool.Enabled = false
+	unequipMobileTools()
+	task.defer(function()
+		onActivated()
+		unequipMobileTools()
+		task.delay(0.35, function()
+			if tool.Parent then
+				tool.Enabled = true
+			end
+		end)
+	end)
+end
+local function addMobileTool(name, onActivated)
+	local backpack = localPlayer:FindFirstChild("Backpack")
+	if not backpack then
+		return nil
+	end
+	local tool = Instance.new("Tool")
+	tool.Name = name
+	tool.RequiresHandle = false
+	tool.CanBeDropped = false
+	tool.ManualActivationOnly = false
+	tool.Parent = backpack
+	table.insert(mobileTools, tool)
+	local _arg0_1 = tool.Activated:Connect(function()
+		return runMobileToolAction(tool, onActivated)
+	end)
+	table.insert(mobileToolConnections, _arg0_1)
+end
+function updateMobileTools()
+	clearMobileTools()
+	if not wantsMobileControls() then
+		return nil
+	end
+	if config.mobileFlingTool == true then
+		addMobileTool("NBF Fling", function()
+			tryFlingTap(Vector3.new(mouse.X, mouse.Y, 0), false)
+		end)
+	end
+	if config.mobileFlingAllTool == true then
+		addMobileTool("NBF Fling All", flingAll)
+	end
+	if config.mobileCancelTool == true then
+		addMobileTool("NBF Cancel", function()
+			return clearFlingQueue(true)
+		end)
+	end
+end
+local function ctrlDown()
+	return ctrlDownFor()
+end
+local function calcMove()
+	local v = Vector3.zero
+	if keys.w then
+		local _v = v
+		local _vector3_1 = Vector3.new(0, 0, -1)
+		v = _v + _vector3_1
+	end
+	if keys.s then
+		local _v = v
+		local _vector3_1 = Vector3.new(0, 0, 1)
+		v = _v + _vector3_1
+	end
+	if keys.a then
+		local _v = v
+		local _vector3_1 = Vector3.new(-1, 0, 0)
+		v = _v + _vector3_1
+	end
+	if keys.d then
+		local _v = v
+		local _vector3_1 = Vector3.new(1, 0, 0)
+		v = _v + _vector3_1
+	end
+	if keys.stick.Magnitude > 0.2 then
+		local _v = v
+		local _vector3_1 = Vector3.new(keys.stick.X, 0, keys.stick.Y)
+		v = _v + _vector3_1
+	end
+	if v.Magnitude > 1 then
+		v = v.Unit
+	end
+	keys.move = v
+	keys.wantJump = keys.jump or keys.padJump
+end
+local function clearMove()
+	keys.w = false
+	keys.a = false
+	keys.s = false
+	keys.d = false
+	keys.jump = false
+	keys.stick = Vector2.zero
+	keys.padJump = false
+	keys.move = Vector3.zero
+	keys.wantJump = false
+end
+-- input
+track(inputService.InputBegan:Connect(function(inp, gp)
+	if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+		lastInput = inp
+		lastWasGui = gp
+		lastTapTime = os.clock()
+		lastTapPos = inp.Position
+	end
+	local blocked = guiService.MenuIsOpen or inputService:GetFocusedTextBox()
+	if not settingsKeyListening and not blocked and not gp then
+		if bindMatches(inp, config.menuKey) then
+			toggleSettingsMenu()
+			return nil
+		end
+		if bindMatches(inp, config.flingAllKey) then
+			flingAll()
+			return nil
+		end
+		if bindMatches(inp, config.clearQueueKey) or bindMatches(inp, config.cancelFlingKey) then
+			clearFlingQueue(true)
+			return nil
+		end
+	end
+	if blocked then
+		return nil
+	end
+	if inp.UserInputType == Enum.UserInputType.Keyboard then
+		if inp.KeyCode == Enum.KeyCode.W or inp.KeyCode == Enum.KeyCode.Up then
+			keys.w = true
+		end
+		if inp.KeyCode == Enum.KeyCode.S or inp.KeyCode == Enum.KeyCode.Down then
+			keys.s = true
+		end
+		if inp.KeyCode == Enum.KeyCode.A then
+			keys.a = true
+		end
+		if inp.KeyCode == Enum.KeyCode.D then
+			keys.d = true
+		end
+		if inp.KeyCode == Enum.KeyCode.Space then
+			keys.jump = true
+		end
+	end
+	if inp.KeyCode == Enum.KeyCode.ButtonA then
+		keys.padJump = true
+	end
+end))
+track(inputService.InputChanged:Connect(function(inp)
+	if guiService.MenuIsOpen or inputService:GetFocusedTextBox() then
+		return nil
+	end
+	if inp.KeyCode == Enum.KeyCode.Thumbstick1 then
+		keys.stick = Vector2.new(inp.Position.X, -inp.Position.Y)
+	end
+end))
+track(inputService.InputEnded:Connect(function(inp)
+	if lastInput and lastInput == inp and not settingsKeyListening and not guiService.MenuIsOpen and not inputService:GetFocusedTextBox() then
+		local click = inp.UserInputType == Enum.UserInputType.MouseButton1 and not lastWasGui and bindMatches(inp, config.flingKey)
+		local _condition_1 = inp.UserInputType == Enum.UserInputType.Touch and not lastWasGui and os.clock() - lastTapTime < 0.3
+		if _condition_1 then
+			local _position = inp.Position
+			local _lastTapPos = lastTapPos
+			_condition_1 = (_position - _lastTapPos).Magnitude < 10
+		end
+		local tap = _condition_1
+		if click or tap then
+			tryFlingTap(inp.Position, inp.UserInputType == Enum.UserInputType.Touch)
+		end
+	end
+	if guiService.MenuIsOpen or inputService:GetFocusedTextBox() then
+		return nil
+	end
+	if inp.UserInputType == Enum.UserInputType.Keyboard then
+		if inp.KeyCode == Enum.KeyCode.W or inp.KeyCode == Enum.KeyCode.Up then
+			keys.w = false
+		end
+		if inp.KeyCode == Enum.KeyCode.S or inp.KeyCode == Enum.KeyCode.Down then
+			keys.s = false
+		end
+		if inp.KeyCode == Enum.KeyCode.A then
+			keys.a = false
+		end
+		if inp.KeyCode == Enum.KeyCode.D then
+			keys.d = false
+		end
+		if inp.KeyCode == Enum.KeyCode.Space then
+			keys.jump = false
+		end
+	end
+	if inp.KeyCode == Enum.KeyCode.ButtonA then
+		keys.padJump = false
+	end
+	if inp.KeyCode == Enum.KeyCode.Thumbstick1 then
+		keys.stick = Vector2.zero
+	end
+end))
+track(inputService.TouchTap:Connect(function(touchPositions, gp)
+	if gp or guiService.MenuIsOpen or inputService:GetFocusedTextBox() then
+		return nil
+	end
+	local pos = touchPositions[1]
+	if not pos then
+		return nil
+	end
+	tryFlingTap(Vector3.new(pos.X, pos.Y, 0), true)
+end))
+track(runService.Stepped:Connect(function()
+	return updateAntiFling()
+end))
+track(runService.PostSimulation:Connect(function()
+	local wanted = skidHoldCFrame
+	if not wanted or queue[1] == nil or not sessionModel then
+		skidHoldCFrame = nil
+		return nil
+	end
+	local char = localPlayer.Character
+	local _, rp = charParts(char)
+	if not char or not rp then
+		skidHoldCFrame = nil
+		return nil
+	end
+	pivotRootTo(char, rp, wanted)
+end))
+-- render
+runService:BindToRenderStep("nbf9000", Enum.RenderPriority.Last.Value, function()
+	updateGuide()
+	updateHrpOutlines()
+	if sessionModel then
+		maskChar(localPlayer.Character)
+	end
+	if config.clearInputOnMenu ~= false and (guiService.MenuIsOpen or inputService:GetFocusedTextBox()) then
+		clearMove()
+	else
+		calcMove()
+	end
+end)
+track(runService.PreAnimation:Connect(function()
+	local sessionHum, sessionRoot = charParts(sessionModel)
+	if not sessionModel or not sessionHum or not sessionRoot then
+		return nil
+	end
+	cam = world.CurrentCamera
+	if cam and cam.CameraSubject ~= sessionHum then
+		setCameraSubject(sessionHum)
+	end
+	local _result = cam
+	if _result ~= nil then
+		_result = _result.CFrame
+	end
+	local _condition_1 = _result
+	if _condition_1 == nil then
+		_condition_1 = sessionRoot.CFrame
+	end
+	local cf = _condition_1
+	local _, yaw = cf:ToEulerAnglesYXZ()
+	if config.clearInputOnMenu ~= false and inputService:GetFocusedTextBox() then
+		clearMove()
+	else
+		calcMove()
+	end
+	tickSessionSpawnAnchor()
+	sessionHum:Move(CFrame.Angles(0, yaw, 0):VectorToWorldSpace(keys.move))
+	sessionHum.Jump = keys.wantJump
+end))
+local function nextItem()
+	local now = os.clock()
+	while queue[1] do
+		local q = queue[1]
+		if not q["repeat"] and q["end"] ~= nil and now > q["end"] then
+			table.remove(queue, 1)
+			restoreTargetCollision()
+		else
+			return q
+		end
+	end
+end
+local function finishCurrentItem(sync)
+	local item = table.remove(queue, 1)
+	skidHoldCFrame = nil
+	skidTweenLastClock = os.clock()
+	restoreTargetCollision()
+	local _result = item
+	if _result ~= nil then
+		_result = _result.batch
+	end
+	local _condition_1 = _result
+	if _condition_1 then
+		local _result_1 = queue[1]
+		if _result_1 ~= nil then
+			_result_1 = _result_1.batch
+		end
+		_condition_1 = _result_1
+	end
+	if _condition_1 then
+		busy = true
+		return nil
+	end
+	clearSessionModel(sync)
+end
+local function skidTargetPart(tgt)
+	local _tgt = tgt
+	if not (typeof(_tgt) == "Instance") then
+		return getPart(tgt)
+	end
+	local char = if tgt:IsA("Model") then tgt else (if tgt:IsA("BasePart") then charFromPart(tgt) else nil)
+	if not char then
+		return getPart(tgt)
+	end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local _root = hum
+	if _root ~= nil then
+		_root = _root.RootPart
+	end
+	local root = _root
+	local head = char:FindFirstChild("Head")
+	local handle
+	local accessory = char:FindFirstChildOfClass("Accessory")
+	local _accessoryHandle = accessory
+	if _accessoryHandle ~= nil then
+		_accessoryHandle = _accessoryHandle:FindFirstChild("Handle")
+	end
+	local accessoryHandle = _accessoryHandle
+	local _result = accessoryHandle
+	if _result ~= nil then
+		_result = _result:IsA("BasePart")
+	end
+	if _result then
+		handle = accessoryHandle
+	end
+	local _result_1 = root
+	if _result_1 ~= nil then
+		_result_1 = _result_1:IsA("BasePart")
+	end
+	if _result_1 then
+		return root
+	end
+	local _result_2 = head
+	if _result_2 ~= nil then
+		_result_2 = _result_2:IsA("BasePart")
+	end
+	if _result_2 then
+		return head
+	end
+	return handle or getPart(tgt)
+end
+local flingPredictionOffset
+local function skidTargetCFrame(base)
+	local _position = base.Position
+	local _arg0_1 = flingPredictionOffset(base, 0.14, 6)
+	return CFrame.new(_position + _arg0_1)
+end
+function flingPredictionOffset(base, maxLead, maxHorizontal)
+	if config.flingPrediction ~= true then
+		return Vector3.zero
+	end
+	local t = os.clock()
+	local lead = math.clamp((math.sin(t * 15) + 1) * (maxLead * 0.5), 0, maxLead)
+	local velocity = base.AssemblyLinearVelocity
+	local horizontal = Vector3.new(velocity.X, 0, velocity.Z) * lead
+	if horizontal.Magnitude > maxHorizontal then
+		local _unit = horizontal.Unit
+		local _maxHorizontal = maxHorizontal
+		horizontal = _unit * _maxHorizontal
+	end
+	local y = math.clamp(velocity.Y * lead - world.Gravity * 0.5 * lead * lead + math.sin(t * 60) * 0.08, -1, 1.25)
+	local _horizontal = horizontal
+	local _vector3_1 = Vector3.new(0, y, 0)
+	return _horizontal + _vector3_1
+end
+local function tweenSkidCFrame(wanted)
+	local now = os.clock()
+	local dt = math.clamp(now - skidTweenLastClock, 0, 1 / 15)
+	skidTweenLastClock = now
+	local current = skidHoldCFrame
+	if not current then
+		return wanted
+	end
+	local _position = current.Position
+	local _position_1 = wanted.Position
+	if (_position - _position_1).Magnitude > 40 then
+		return wanted
+	end
+	local alpha = math.clamp(dt * 30, 0.24, 0.86)
+	return current:Lerp(wanted, alpha)
+end
+runtime.doFling = function(rp, hum, tgt, cf)
+	local tp = getPart(tgt)
+	local t = os.clock()
+	if method == "skidfling" then
+		local base = skidTargetPart(tgt) or tp
+		if base then
+			local wanted = tweenSkidCFrame(skidTargetCFrame(base))
+			pivotRootTo(localPlayer.Character, rp, wanted)
+			skidHoldCFrame = wanted
+			restoreAntiFlingCollision()
+			enableSkidFlingCollision(localPlayer.Character)
+		else
+			skidHoldCFrame = nil
+		end
+		local huge = Vector3.new(9e7, 9e8, 9e7)
+		local spin = Vector3.new(9e8, 9e8, 9e8)
+		local _result = localPlayer.Character
+		if _result ~= nil then
+			_result = _result:GetDescendants()
+		end
+		local _condition_1 = _result
+		if _condition_1 == nil then
+			_condition_1 = {}
+		end
+		for _, obj in _condition_1 do
+			if obj:IsA("BasePart") then
+				obj.Velocity = huge
+				obj.RotVelocity = spin
+				obj.AssemblyLinearVelocity = huge
+				obj.AssemblyAngularVelocity = spin
+			end
+		end
+		hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+		pcall(function()
+			return sethiddenproperty(hum, "MoveDirectionInternal", Vector3.new(0 / 0, 0 / 0, 0 / 0))
+		end)
+		pcall(function()
+			return sethiddenproperty(hum, "NetworkHumanoidState", Enum.HumanoidStateType.Freefall)
+		end)
+		return nil
+	end
+	if tp ~= nil then
+		pcall(function()
+			return sethiddenproperty(rp, "PhysicsRepRootPart", tp)
+		end)
+	end
+	if runtime.simRadiusActive ~= true then
+		local simOk, sim = pcall(function()
+			return gethiddenproperty(localPlayer, "SimulationRadius")
+		end)
+		local maxOk, max = pcall(function()
+			return gethiddenproperty(localPlayer, "MaximumSimulationRadius")
+		end)
+		if simOk and type(sim) == "number" then
+			runtime.simulationRadius = sim
+		end
+		if maxOk and type(max) == "number" then
+			runtime.maximumSimulationRadius = max
+		end
+		runtime.simRadiusActive = true
+	end
+	pcall(function()
+		return sethiddenproperty(localPlayer, "SimulationRadius", 1e9)
+	end)
+	pcall(function()
+		return sethiddenproperty(localPlayer, "MaximumSimulationRadius", 1e9)
+	end)
+	local _result = tp
+	if _result ~= nil then
+		_result = _result.CFrame
+	end
+	local _condition_1 = _result
+	if _condition_1 == nil then
+		_condition_1 = cf
+	end
+	local wanted = _condition_1
+	pivotRootTo(localPlayer.Character, rp, wanted)
+	skidHoldCFrame = wanted
+	restoreAntiFlingCollision()
+	enableSkidFlingCollision(localPlayer.Character)
+	local huge = Vector3.new(if math.sin(t * 160) >= 0 then 1e25 else -1e25, 1e25, if math.cos(t * 160) >= 0 then 1e25 else -1e25)
+	local spin = Vector3.new(huge.Z * 2e6, huge.X * 2e6, -2e31)
+	local _result_1 = localPlayer.Character
+	if _result_1 ~= nil then
+		_result_1 = _result_1:GetDescendants()
+	end
+	local _condition_2 = _result_1
+	if _condition_2 == nil then
+		_condition_2 = {}
+	end
+	for _, obj in _condition_2 do
+		if obj:IsA("BasePart") then
+			obj.Velocity = huge
+			obj.RotVelocity = spin
+			obj.AssemblyLinearVelocity = huge
+			obj.AssemblyAngularVelocity = spin
+		end
+	end
+	hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+	pcall(function()
+		return sethiddenproperty(hum, "MoveDirectionInternal", Vector3.zero)
+	end)
+	pcall(function()
+		return sethiddenproperty(hum, "NetworkHumanoidState", Enum.HumanoidStateType.Freefall)
+	end)
+end
+-- sim
+track(runService.PreSimulation:Connect(function()
+	local char = localPlayer.Character
+	local hum, rp = charParts(char)
+	if not char or not hum or not rp then
+		return nil
+	end
+	if isDead(hum) then
+		dropDeadChar(char)
+		return nil
+	end
+	if not queue[1] and not sessionModel then
+		return nil
+	end
+	if queue[1] and not sessionModel then
+		spawnSessionModel()
+	end
+	local sessionHum, sessionRoot = charParts(sessionModel)
+	if not sessionModel or not sessionHum or not sessionRoot then
+		return nil
+	end
+	setFlingDestroyH()
+	saveHumanoidState(hum)
+	maskChar(char)
+	hum.AutoRotate = false
+	hum.RequiresNeck = false
+	hum.BreakJointsOnDeath = false
+	if hum.WalkSpeed < 1 then
+		hum.WalkSpeed = 16
+	end
+	if hum.JumpPower < 1 then
+		hum.JumpPower = 50
+	end
+	hum:ChangeState(Enum.HumanoidStateType.Freefall)
+	local item = nextItem()
+	if not item then
+		clearSessionModel(true)
+		return nil
+	end
+	if shouldBackOff(item) then
+		finishCurrentItem(true)
+		return nil
+	end
+	local cf, done = predict(item.tgt, item)
+	if done then
+		finishCurrentItem(true)
+		return nil
+	end
+	busy = true
+	local _result = runtime.doFling
+	if _result ~= nil then
+		_result(rp, hum, item.tgt, cf)
+	end
+end))
+runtime.stop = stop
+runtime.fling = fling
+runtime.clear = resetRoot
+runtime.oldDestroyHeight = originalDestroyHeight
+runtime.sessionModel = sessionModel
+runtime.util = {
+	predict = predict,
+	getPart = getPart,
+}
+env.nbf9000 = runtime
+bindCharacter(localPlayer.Character)
+track(localPlayer.CharacterAdded:Connect(function(char)
+	bindCharacter(char)
+	task.defer(updateMobileTools)
+end))
+track(players.PlayerAdded:Connect(function()
+	return updateWatermark()
+end))
+track(players.PlayerRemoving:Connect(function()
+	return task.defer(updateWatermark)
+end))
+if config.intro ~= false then
+	playIntro()
+else
+	task.defer(function()
+		return showSettingsMenu()
+	end)
+end
+updateWatermark()
+updateMobileTools()
+-- congrats you read all of it
