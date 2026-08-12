@@ -1,0 +1,365 @@
+do
+    local Translations = {
+        -- ==================== 基础导航栏与菜单 (Left Menu & General Tabs) ====================
+        ["Animation hub"] = "动画 Hub",
+        ["By khengie_slayer"] = "作者: khengie_slayer",
+        ["Main"] = "主页",
+        ["credit"] = "制作者信息",
+        ["Saitama"] = "琦玉",
+        ["Garou"] = "饿狼",
+        ["Monster Garou"] = "怪人饿狼",
+        ["Destructive Cyborg"] = "毁灭杰诺斯",
+        ["Sonic"] = "音速索尼克",
+        ["Brutal Demon"] = "金属棒球",
+        ["Blade Master"] = "原子武士",
+        ["Wild Psychic"] = "龙卷",
+        ["Martial Artist"] = "水龙 (武术家)",
+        ["Animations"] = "动画预设",
+        ["Teleports"] = "地图传送",
+        ["Auto Tech"] = "自动连招/技巧",
+        ["Effects Preset"] = "特效预设",
+        ["universal tsb tab"] = "通用 TSB 标签",
+        ["Anti Lag"] = "防卡顿/优化",
+        ["Information"] = "信息",
+        ["made by"] = "制作人",
+        ["khengie_slayerQ"] = "khengie_slayerQ",
+
+        -- ==================== 通用副文本 (Sub-descriptions) ====================
+        ["it changes your m1 effect"] = "修改你的普攻(M1)效果",
+        ["Plays the custom animation track"] = "播放自定义动画轨迹",
+        ["Plays the custom animation sequence"] = "播放自定义动画序列",
+        ["Plays the custom 3-step animation sequence"] = "播放自定义三阶段动画序列",
+        ["make your hunter grasp finisher slam the player ar the last"] = "使猎人抓取终结技在最后重摔玩家",
+
+        -- ==================== Aimbot / 瞄准辅助 ====================
+        ["aimbot"] = "自瞄/修正",
+        ["aimbot v1"] = "自瞄/修正 v1",
+        ["aimbot v2"] = "自瞄/修正 v2",
+        ["aimbot v3"] = "自瞄/修正 v3",
+
+        -- ==================== 琦玉 (Saitama) ====================
+        ["spawn animation"] = "出生/登场动画",
+        ["saitama spawn"] = "琦玉登场",
+        ["normal skill"] = "普通技能",
+        ["normal punch"] = "普通拳",
+        ["consecutive punch"] = "连续普通拳",
+        ["shove"] = "推搡",
+        ["uppercut"] = "上勾拳",
+        ["ultimate skills"] = "大招技能",
+        ["death counter"] = "死亡反击",
+        ["table flip"] = "掀桌",
+        ["serious punch"] = "认真一拳",
+        ["omni Directional punch"] = "全方位认真一拳",
+        ["flamewave cannon"] = "火焰炮",
+        ["incinerate"] = "焚烧",
+        ["downslam+normal punch"] = "下砸 + 普通拳",
+        ["downslam reflex"] = "下砸反击",
+        ["invisible tableflip"] = "隐形掀桌",
+        ["reflex"] = "反射/反击",
+
+        -- ==================== 饿狼 (Garou) ====================
+        ["Garou kyoto"] = "饿狼 京都连招",
+        ["kyoto v1"] = "京都 v1",
+        ["kyoto v2"] = "京都 v2",
+        ["kyoto v3"] = "京都 v3",
+        ["flowing water and ir will lethal"] = "流水岩碎拳 (带致死效果)",
+        ["Garou Tech"] = "饿狼 技巧/连招",
+        ["Flowing + Grasp"] = "流水 + 抓取",
+        ["Whirlwind Dunk Auto-Teleport"] = "旋风扣杀 自动传送",
+        ["garou spawn"] = "饿狼登场",
+        ["flowing water"] = "流水岩碎拳",
+        ["flowing water 2"] = "流水岩碎拳 2",
+        ["hunter grasp"] = "猎人抓取",
+        ["hunter grasp hit"] = "猎人抓取 击中",
+        ["prey peril"] = "猎物危机",
+        ["water stream"] = "水流飞溅",
+        ["rock splitting"] = "碎石拳",
+        ["final hunt"] = "最终狩猎",
+        ["final hunt finisher"] = "最终狩猎 终结技",
+        ["crush rock"] = "粉碎岩石",
+        ["crush rock hit"] = "粉碎岩石 击中",
+        ["crush rock variant"] = "粉碎岩石 变体",
+        ["four blade strike"] = "四刃斩",
+        ["death blow"] = "致命一击",
+        ["hunter slam"] = "猎人重摔",
+        ["Surf Tech Auto-Boost"] = "滑行技巧 自动加速",
+        ["Kiba Lethal"] = "牙致死连招",
+        ["Upper + Grasp"] = "上勾拳 + 抓取",
+        ["Lethal Tech"] = "致死连招技巧",
+
+        -- ==================== 怪人饿狼 (Monster Garou) ====================
+        ["doom dive"] = "毁灭俯冲",
+        ["doom dive hit"] = "毁灭俯冲 击中",
+        ["crowd buster"] = "人群破除",
+        ["hammer reel"] = "锤击卷轴",
+        ["hammer reel variant"] = "锤击卷轴 变体",
+        ["binding cloth"] = "束缚之布",
+
+        -- ==================== 毁灭杰诺斯 (Destructive Cyborg) ====================
+        ["destructive cyborg spawn"] = "毁灭杰诺斯登场",
+        ["machine blows"] = "机关枪连拳",
+        ["ignition burst"] = "点火喷发",
+        ["blitz shot"] = "闪光炮",
+        ["jet dive"] = "喷气俯冲",
+        ["thunder kick"] = "雷霆踢",
+        ["thunder kick hit"] = "雷霆踢 击中",
+        ["speed blitz"] = "极速闪击",
+        ["speed blitz hit"] = "极速闪击 击中",
+
+        -- ==================== 音速索尼克 (Sonic) ====================
+        ["scatter"] = "散落/千本樱",
+        ["explosive shuriken"] = "爆炸手里剑",
+        ["twinblade"] = "双刀斩",
+        ["straight on"] = "直击",
+        ["carnage"] = "大屠杀",
+
+        -- ==================== 金属棒球 (Brutal Demon) ====================
+        ["brutal demon spawn"] = "金属棒球登场",
+        ["homerun"] = "本垒打",
+        ["homerun hit"] = "本垒打 击中",
+        ["brutal beatdown"] = "暴打/残暴痛击",
+        ["grand slam"] = "满贯轰炸",
+        ["foul ball"] = "界外球",
+        ["savega tornado"] = "野蛮风暴",
+        ["strengt difference"] = "力量差距",
+        ["stength difference hit"] = "力量差距 击中",
+        ["death blow counter"] = "致死反击",
+
+        -- ==================== 原子武士 (Blade Master) ====================
+        ["blade master spawn"] = "原子武士登场",
+        ["quick slice"] = "飞天斩/快斩",
+        ["atmos cleave"] = "大气斩",
+        ["pinpoint cut"] = "精密斩击",
+        ["pinpoint cut variant"] = "精密斩击 变体",
+        ["split counter"] = "分裂反击",
+        ["sunset"] = "落日",
+        ["cleave"] = "斩击",
+        ["sunrise"] = "旭日",
+        ["sunrise hit"] = "旭日 击中",
+        ["atomic slash"] = "原子斩",
+        ["atomic slash hit"] = "原子斩 击中",
+
+        -- ==================== 龙卷 (Wild Psychic) ====================
+        ["tatsumaki animation"] = "龙卷登场动画",
+        ["crushing pool"] = "念力压制",
+        ["crushing pool variant"] = "念力压制 变体",
+        ["windstorm fury"] = "暴风怒号",
+        ["stone coffin"] = "巨石压顶/石棺",
+        ["explosive push"] = "爆发推力",
+        ["explosive push variant"] = "爆发推力 变体",
+        ["cosmic strike"] = "宇宙打击",
+        ["Psychic Ricochet"] = "念力反弹",
+        ["Psychic Ricochet caught"] = "念力反弹 命中",
+        ["Terrible Tornado"] = "战栗的龙卷",
+        ["Terrible Tornado Caught"] = "战栗的龙卷 命中",
+        ["sky snatcher"] = "天空掠夺者",
+        ["sky snatcher caught"] = "天空掠夺者 命中",
+
+        -- ==================== 水龙 (Martial Artist) ====================
+        ["Suiryu spawn"] = "水龙登场",
+        ["bullet barrage"] = "飞弹连打",
+        ["vanishing kick"] = "闪现踢",
+        ["vanishing kick variant"] = "闪现踢 变体",
+        ["whirlwind drop"] = "旋风下砸",
+        ["head first"] = "头部撞击",
+        ["head first hit"] = "头部撞击 击中",
+        ["Grandmaster fishure"] = "宗师裂地斩",
+        ["Grandmaster fisshure"] = "宗师裂地斩",
+        ["twin fang"] = "双牙斩",
+        ["earth splitting"] = "裂地打击",
+        ["earth splitting hit"] = "裂地打击 击中",
+        ["final breath"] = "最终吐息",
+        ["last breath hit"] = "最终吐息 击中",
+
+        -- ==================== 自动技巧/连招 (Auto Tech) ====================
+        ["wall combo changer"] = "墙角连招修改器",
+        ["Wall Combo Preset"] = "墙角连招预设",
+        ["None"] = "无",
+        ["Shenji"] = "神技",
+        ["Gojo"] = "五条悟",
+        ["Gojo Tech"] = "五条悟技巧",
+        ["Mini Supa Tech"] = "微型超强技巧",
+        ["Supa Tech"] = "超强技巧",
+        ["Loop Dash Tech"] = "循环冲刺技巧",
+        ["Instant Twisted"] = "瞬间扭曲",
+        ["crazy tech"] = "疯狂技巧",
+        ["Auto Wall Combo"] = "自动墙角连招",
+        ["Tornado Tech"] = "龙卷风技巧",
+        ["Lix Tech"] = "Lix 技巧",
+        ["Omine Tech"] = "Omine 技巧",
+        ["Crystal Oreo"] = "水晶奥利奥技巧",
+        ["LoopDash"] = "循环冲刺",
+        ["Dripz Tech v2"] = "Dripz 技巧 v2",
+        ["Dripz Tech"] = "Dripz 技巧",
+        ["Auto Uppercut"] = "自动上勾拳",
+        ["macro"] = "宏/自动连招",
+        ["Nigger Tech"] = "暗影/黑科技",
+        ["K1ng Tech"] = "K1ng 技巧",
+        ["Oreo v2 Utility"] = "奥利奥 v2 实用工具",
+        ["Twinnie v2 Utility"] = "Twinnie v2 实用工具",
+        ["FreezeTech"] = "冻结/停滞技巧",
+        ["Auto Void Kill"] = "自动虚空杀(掉落)",
+        ["Auto Down Slam"] = "自动下砸",
+
+        -- ==================== 动画预设与动作 (Animations & Presets) ====================
+        ["Animation Presets"] = "动画预设",
+        ["Stop Current Animation"] = "停止当前动画",
+        ["Custom Animation ID"] = "自定义动画 ID",
+        ["Enter Asset ID here"] = "在此输入资源 ID",
+        ["Play Custom Animation ID"] = "播放自定义动画 ID",
+        ["Select Idle Preset"] = "选择待机动作预设",
+        ["Select Walk Preset"] = "选择行走动作预设",
+        ["Invisible Counters"] = "隐形反击",
+        ["Invisible Block"] = "隐形格挡",
+        ["Fly"] = "飞行",
+        ["Helicopter"] = "直升机",
+        ["Girly Walk"] = "少女步",
+        ["Kazotsky"] = "哥萨克骑兵舞",
+        ["Hop Walk"] = "单脚跳跃步",
+        ["Sword Walk"] = "持剑行走",
+        ["Sassy Walk"] = "时装/傲娇步",
+        ["Hunter"] = "猎人姿态",
+        ["March"] = "行军步",
+        ["Yandere"] = "病娇步",
+
+        -- ==================== 特效预设 (Effects Preset) ====================
+        ["Combat Cosmetics"] = "战斗特效/装扮",
+        ["Select Effect"] = "选择特效",
+        ["Killua"] = "奇犽",
+        ["Itadori"] = "虎杖悠仁",
+        ["Fire"] = "火焰",
+
+        -- ==================== 防卡顿优化 (Anti Lag) ====================
+        ["Hide Parts"] = "隐藏部件 (防卡顿)",
+        ["Trees"] = "树木",
+        ["Walls"] = "墙壁",
+        ["Grass"] = "草地",
+        ["Benches"] = "长椅",
+        ["debris remover"] = "清理碎片/建筑垃圾",
+
+        -- ==================== 地图传送 (Map Teleports) ====================
+        ["Map Teleports"] = "地图传送",
+        ["Select Destination"] = "选择目的地",
+        ["Atomic samurai"] = "原子武士生成点",
+        ["Atomic samurai top"] = "原子武士顶部",
+        ["Death counter"] = "死亡反击点",
+        ["Death counter top"] = "死亡反击点顶部",
+        ["Edge of the map"] = "地图边缘",
+        ["Prison"] = "监狱",
+        ["mountain 1"] = "高山 1",
+        ["mountain 2"] = "高山 2",
+        ["mountain 3"] = "高山 3"
+    }
+
+    local function translateText(text)
+        if not text or type(text) ~= "string" then return text end
+        
+        if Translations[text] then
+            return Translations[text]
+        end
+        
+        for en, cn in pairs(Translations) do
+            if text:find(en) then
+                return text:gsub(en, cn)
+            end
+        end
+        
+        return text
+    end
+
+    local function setupTranslationEngine()
+        local success, err = pcall(function()
+            local oldIndex = getrawmetatable(game).__newindex
+            setreadonly(getrawmetatable(game), false)
+            
+            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
+                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
+                    v = translateText(tostring(v))
+                end
+                return oldIndex(t, k, v)
+            end)
+            
+            setreadonly(getrawmetatable(game), true)
+        end)
+        
+        if not success then
+            warn("元表劫持失败:", err)
+           
+            local translated = {}
+            local function scanAndTranslate()
+                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+                    if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                        pcall(function()
+                            local text = gui.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    gui.Text = translatedText
+                                    translated[gui] = true
+                                end
+                            end
+                        end)
+                    end
+                end
+                
+                local player = game:GetService("Players").LocalPlayer
+                if player and player:FindFirstChild("PlayerGui") then
+                    for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
+                        if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                            pcall(function()
+                                local text = gui.Text
+                                if text and text ~= "" then
+                                    local translatedText = translateText(text)
+                                    if translatedText ~= text then
+                                        gui.Text = translatedText
+                                        translated[gui] = true
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+            
+            local function setupDescendantListener(parent)
+                parent.DescendantAdded:Connect(function(descendant)
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                        task.wait(0.1)
+                        pcall(function()
+                            local text = descendant.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    descendant.Text = translatedText
+                                end
+                            end
+                        end)
+                    end
+                end)
+            end
+            
+            pcall(setupDescendantListener, game:GetService("CoreGui"))
+            local player = game:GetService("Players").LocalPlayer
+            if player and player:FindFirstChild("PlayerGui") then
+                pcall(setupDescendantListener, player.PlayerGui)
+            end
+            
+            while true do
+                scanAndTranslate()
+                task.wait(3)
+            end
+        end
+    end
+
+    task.wait(2)
+    setupTranslationEngine()
+
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/khengieslayer-oss/Html/refs/heads/main/protected_max.lua.txt"))()
+    end)
+
+    if not success then
+        warn("加载失败:", err)
+    end
+end
+
