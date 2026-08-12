@@ -1,0 +1,230 @@
+do
+    local Translations = {
+        -- 顶部标题与侧边栏分类
+        ["Welcome to 小林汉化 V3.3"] = "小林汉化 YQANTG V3.3",
+        ["Welcome to YQANTG"] = "小林汉化 YQANTG",
+        ["Misc"] = "杂项",
+        ["New"] = "最新",
+        ["Auto Block"] = "自动格挡",
+        ["Camlock"] = "镜头锁人",
+        ["Local"] = "本地属性",
+        ["Other"] = "其他功能",
+        ["Tech"] = "技巧技术",
+        ["Movest"] = "招式修改",
+        ["Anti"] = "防封反制",
+        ["Server"] = "服务器",
+        ["Shader"] = "画质光影",
+        ["Farm"] = "挂机刷级",
+        ["Hub"] = "脚本中心",
+        ["Admin"] = "管理指令",
+        ["Esp"] = "透视",
+
+        -- New 菜单
+        ["New Ui"] = "全新 UI 界面",
+        ["Fix some bug"] = "修复部分已知 Bug",
+
+        -- Auto Block 菜单及子项
+        ["Auto Block V11"] = "自动格挡 V11",
+        ["Auto Block V6"] = "自动格挡 V6",
+        ["M1 After Block"] = "格挡后自动 M1",
+        ["M1 Range"] = "M1 攻击范围",
+        ["Dash Range"] = "冲刺范围",
+        ["Skill Range"] = "技能范围",
+        ["Reset Range"] = "重置范围",
+        ["Camlock + Silent aim"] = "锁人 + 静默自瞄",
+        ["Camlock + Slient aim"] = "锁人 + 静默自瞄",
+        ["No Collision"] = "无角色碰撞",
+        ["ESP Players"] = "玩家透视",
+
+        -- Camlock 菜单
+        ["Slient Aim Rework"] = "静默自瞄 (重构版)",
+        ["Bot Follow + Slient Aim"] = "假人跟随 + 静默自瞄",
+
+        -- Local 菜单
+        ["Free emote slots"] = "免费解锁表情槽位",
+        ["No Dash Cooldown"] = "无冲刺冷却",
+        ["Auto Respawn"] = "自动复活",
+        ["Auto Fake Out"] = "自动假动作(骗招)",
+        ["Invisible Block"] = "隐形格挡",
+        ["No Stun"] = "无受击硬直",
+        ["No Slowed"] = "无减速效果",
+        ["No Slide Dash Endlag"] = "无滑行冲刺后摇",
+        ["Free Rotate Ult"] = "大招自由旋转镜头",
+        ["Death Counter Indicator"] = "死亡反击(Death Counter)提示",
+        ["Auto Counter"] = "自动反击",
+
+        -- Other 菜单
+        ["Orbit Gui!"] = "环绕 UI 菜单!",
+        ["Auto Toxic"] = "自动嘲讽(喷人)",
+        ["M1 Reach"] = "M1 攻击距离延伸",
+        ["Auto WallCombo Under"] = "自动下击上墙连",
+        ["Auto WallCombo Upper"] = "自动上击上墙连",
+
+        -- Tech 菜单
+        ["M1 Reset"] = "M1 重置连招",
+        ["Kai Tech"] = "凯/凯皇技巧 (Kai Tech)",
+        ["BackDash (Mobile)"] = "后撤冲刺 (移动端)",
+        ["BackDash (PC)"] = "后撤冲刺 (电脑端)",
+        ["Auto UpperPunch"] = "自动上勾拳",
+        ["Tornado Tech"] = "龙卷风技巧",
+        ["Kiba Tech V1"] = "牙/Kiba技巧 V1",
+        ["Kiba Tech V2.1"] = "牙/Kiba技巧 V2.1",
+        ["Freeze Tech"] = "冻结/定身技巧",
+        ["Tornado Twisted"] = "扭曲龙卷风",
+        ["Loop dash old"] = "循环冲刺 (旧版)",
+        ["All in one"] = "技巧合集 (All In One)",
+
+        -- Movest 菜单
+        ["Basic Emote"] = "基础表情动作",
+        ["Emerge Emote"] = "出场/涌现表情",
+        ["Sukuna Emote"] = "宿傩动作/表情",
+        ["MIUI"] = "MIUI 界面/动作",
+        ["Gojo v2 (Saitama)"] = "五条悟 v2 (改埼玉)",
+        ["Overhaul (Saitama)"] = "解修师/治崎廻 (改埼玉)",
+        ["Movest UI"] = "招式修改 UI 界面",
+        ["Wally West (Saitama)"] = "沃利·韦斯特/闪电侠 (改埼玉)",
+        ["Orbitical Warrior (Saitama)"] = "轨道战士/星轨战士 (改埼玉)",
+        ["Sukuna v2 (Saitama)"] = "宿傩 v2 (改埼玉)",
+
+        -- Anti 菜单
+        ["Anti Afk"] = "防挂机踢出 (Anti-AFK)",
+        ["Anti Ragdoll"] = "防击倒/防倒地硬直",
+        ["Anti Camlock"] = "防对方镜头锁定",
+        ["Anti lag ( Remove effect )"] = "防卡顿 (移除特效/提升FPS)",
+
+        -- Server 菜单
+        ["Rejoin"] = "重新连接当前服务器",
+        ["Server Hop"] = "换服/切换服务器",
+        ["Small Server"] = "寻找人少的小服",
+        ["Check Ping"] = "检查延迟 (Ping)",
+
+        -- Shader 菜单
+        ["Select Shader"] = "选择光影/滤镜",
+        ["Apply Shader"] = "应用选中的光影",
+        ["Morning"] = "早晨/晨光",
+        ["Afternoon"] = "下午/夕阳",
+        ["Ultra Shader Pro (HD+)"] = "顶级超清光影 Pro (HD+)",
+
+        -- Farm 菜单
+        ["Auto Farm Near"] = "自动挂机打附近玩家",
+        ["Under"] = "位于下方 (挂机姿势)",
+        ["Behind"] = "位于身后 (挂机姿势)",
+        ["Upper"] = "位于上方 (挂机姿势)",
+
+        -- Hub & Admin 菜单
+        ["Our Hub ( by IDK )"] = "专属 Hub (由 IDK 制作)",
+        ["Infinite Yield"] = "IY 管理员指令脚本 (Infinite Yield)",
+        ["Nameless"] = "Nameless 无名脚本/指令"
+    }
+
+    local function translateText(text)
+        if not text or type(text) ~= "string" then return text end
+        
+        if Translations[text] then
+            return Translations[text]
+        end
+        
+        for en, cn in pairs(Translations) do
+            if text:find(en) then
+                return text:gsub(en, cn)
+            end
+        end
+        
+        return text
+    end
+
+    local function setupTranslationEngine()
+        local success, err = pcall(function()
+            local oldIndex = getrawmetatable(game).__newindex
+            setreadonly(getrawmetatable(game), false)
+            
+            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
+                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
+                    v = translateText(tostring(v))
+                end
+                return oldIndex(t, k, v)
+            end)
+            
+            setreadonly(getrawmetatable(game), true)
+        end)
+        
+        if not success then
+            warn("元表劫持失败:", err)
+           
+            local translated = {}
+            local function scanAndTranslate()
+                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+                    if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                        pcall(function()
+                            local text = gui.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    gui.Text = translatedText
+                                    translated[gui] = true
+                                end
+                            end
+                        end)
+                    end
+                end
+                
+                local player = game:GetService("Players").LocalPlayer
+                if player and player:FindFirstChild("PlayerGui") then
+                    for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
+                        if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                            pcall(function()
+                                local text = gui.Text
+                                if text and text ~= "" then
+                                    local translatedText = translateText(text)
+                                    if translatedText ~= text then
+                                        gui.Text = translatedText
+                                        translated[gui] = true
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+            
+            local function setupDescendantListener(parent)
+                parent.DescendantAdded:Connect(function(descendant)
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                        task.wait(0.1)
+                        pcall(function()
+                            local text = descendant.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    descendant.Text = translatedText
+                                end
+                            end
+                        end)
+                    end
+                end)
+            end
+            
+            pcall(setupDescendantListener, game:GetService("CoreGui"))
+            local player = game:GetService("Players").LocalPlayer
+            if player and player:FindFirstChild("PlayerGui") then
+                pcall(setupDescendantListener, player.PlayerGui)
+            end
+            
+            while true do
+                scanAndTranslate()
+                task.wait(3)
+            end
+        end
+    end
+
+    task.wait(2)
+    setupTranslationEngine()
+
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://rawscripts.net/raw/The-Strongest-Battlegrounds-GOOD-TECH-SCRIPT-102534"))()
+    end)
+
+    if not success then
+        warn("加载失败:", err)
+    end
+end
