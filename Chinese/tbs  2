@@ -1,6 +1,9 @@
 do
     local Translations = {
         -- ==================== 基础导航栏与菜单 (Left Menu & General Tabs) ====================
+        ["tec hub settin"] = "点这个",
+        ["toggle hub"] = "这个别点",
+        ["ANIMATON HUB"] = "动作脚本可以点",
         ["Animation hub"] = "动画 Hub",
         ["By khengie_slayer"] = "作者: khengie_slayer",
         ["Main"] = "主页",
