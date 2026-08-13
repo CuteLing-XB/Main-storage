@@ -1,0 +1,245 @@
+do
+    local Translations = {
+        ["BagahHub"] = "BagahHub",
+        ["Select version"] = "选择版本",
+        ["Gakuran"] = "学兰",
+        ["Full feature script"] = "完整功能脚本",
+        ["Loading Gakuran"] = "正在加载学兰...",
+        ["Bagah Hub - Gakuran"] = "Bagah Hub - 学兰",
+        ["Player"] = "玩家",
+        ["Combat"] = "战斗",
+        ["Auto Fight"] = "自动战斗",
+        ["Visuals"] = "视觉",
+        ["Misc"] = "杂项",
+        ["Server"] = "服务器",
+        ["Settings"] = "设置",
+        ["General"] = "通用",
+        ["Enable Target Lock"] = "开启目标锁定",
+        ["Ignore Friends"] = "忽略好友",
+        ["Infinite Stamina"] = "无限体力",
+        ["No Dodge Cooldown"] = "无闪避冷却",
+        ["No Stun Animation"] = "无眩晕动画",
+        ["Anti-Ragdoll"] = "防布娃娃",
+        ["Dodge Cooldown"] = "闪避冷却",
+        ["Movement"] = "移动",
+        ["No Combat Slowdown"] = "战斗无减速",
+        ["Infinite Jump"] = "无限跳跃",
+        ["Auto Sprint"] = "自动冲刺",
+        ["WalkSpeed Modifier"] = "移动速度修改",
+        ["Enable Speed Hack"] = "开启速度修改",
+        ["Fly"] = "飞行",
+        ["Fly Speed"] = "飞行速度",
+        ["No Clip"] = "穿墙",
+        ["Teleport"] = "传送",
+        ["Select Player"] = "选择玩家",
+        ["Teleport to Player"] = "传送到玩家",
+        ["Refresh Player List"] = "刷新玩家列表",
+        ["Auto Parry"] = "自动弹刀",
+        ["Perfect Auto Parry"] = "完美自动弹刀",
+        ["Show Mobile Toggle Button"] = "显示手机切换按钮",
+        ["Animation Sync"] = "动作同步",
+        ["Parry Facing"] = "弹刀朝向",
+        ["Grapple-Aware Combat"] = "抓取感知战斗",
+        ["Auto Punish"] = "自动惩罚",
+        ["Face Lock"] = "锁定朝向",
+        ["Block M1 Until Parry"] = "持续格挡直至弹刀",
+        ["Hold Through Combo"] = "连招期间保持格挡",
+        ["Facing Check"] = "朝向检查",
+        ["Parry Settings"] = "弹刀设置",
+        ["Max Distance"] = "最大距离",
+        ["Face Target Range"] = "面向目标范围",
+        ["Parry Timing"] = "弹刀时机",
+        ["Block Hold Time"] = "格挡按住时间",
+        ["Ping Adjust %"] = "延迟调整%",
+        ["Fallback Safety Block"] = "后备安全格挡",
+        ["Fallback Block Duration"] = "后备格挡时长",
+        ["Fallback Block Range"] = "后备格挡范围",
+        ["AI Settings"] = "AI设置",
+        ["Enable Auto Fight"] = "开启自动战斗",
+        ["Fighting Style"] = "战斗风格",
+        ["Normal"] = "普通",
+        ["Idk"] = "未知",
+        ["Goku"] = "悟空",
+        ["Configuration"] = "配置",
+        ["Target Lock Range"] = "目标锁定范围",
+        ["Wraith TP Distance"] = "幽灵传送距离",
+        ["ESP"] = "透视",
+        ["Show Box"] = "显示方框",
+        ["Health Bar"] = "血条",
+        ["Stamina Bar"] = "体力条",
+        ["Name & Info"] = "名字与信息",
+        ["Highlight / Chams"] = "高亮透视",
+        ["ESP Distance"] = "透视距离",
+        ["Player HUD"] = "玩家HUD",
+        ["Show Health"] = "显示血量",
+        ["Show Stamina"] = "显示体力",
+        ["Music Game Rhythm"] = "音游节奏",
+        ["Rhythm Auto"] = "自动节奏",
+        ["Timing Mode"] = "判定模式",
+        ["Always Perfect"] = "总是 Perfect",
+        ["Custom Mix"] = "自定义混合",
+        ["Press Lead (ms)"] = "按键提前(毫秒)",
+        ["Hold Extend (ms)"] = "长按延长(毫秒)",
+        ["PERFECT %"] = "PERFECT 概率%",
+        ["GOOD %"] = "GOOD 概率%",
+        ["OK %"] = "OK 概率%",
+        ["Auto Piano"] = "自动钢琴",
+        ["Online Song Player"] = "在线歌曲播放器",
+        ["Search songs from NanoMidi, convert..."] = "从 NanoMidi 搜索歌曲转换...",
+        ["Song Source"] = "歌曲来源",
+        ["NanoMidi"] = "NanoMidi",
+        ["My Songs"] = "我的歌曲",
+        ["Search Song"] = "搜索歌曲",
+        ["e.g. interstellar, aizo, bad apple"] = "例如：interstellar, aizo, bad apple",
+        ["Select Song"] = "选择歌曲",
+        ["Search / Load Songs"] = "搜索 / 加载歌曲",
+        ["Play Selected Song"] = "播放所选歌曲",
+        ["Stop Piano"] = "停止钢琴",
+        ["Show Piano Buttons (Mobile)"] = "显示钢琴按键 (手机)",
+        ["Performance"] = "性能",
+        ["Anti Lag"] = "防卡顿",
+        ["FPS Display"] = "显示 FPS",
+        ["Anti AFK"] = "防挂机",
+        ["Server Info"] = "服务器信息",
+        ["Server ID"] = "服务器 ID",
+        ["Place ID"] = "游戏 ID",
+        ["Quick Actions"] = "快捷操作",
+        ["Copy Server Link"] = "复制服务器链接",
+        ["Rejoin Server"] = "重新加入服务器",
+        ["Server Hop"] = "换服",
+        ["Hop to Small Server"] = "切换人少服",
+        ["Menu"] = "菜单",
+        ["Menu Keybind"] = "菜单按键",
+        ["RightShift"] = "右Shift键",
+        ["Script"] = "脚本",
+        ["Unload Bagah"] = "卸载脚本",
+        ["Information"] = "信息",
+        ["Project: Bagah Project"] = "项目：Bagah Project",
+        ["Script by: ahmuq"] = "作者：ahmuq",
+        ["Copy Discord Invite"] = "复制 Discord 邀请",
+        ["Config name"] = "配置名称",
+        ["Create config"] = "创建配置",
+        ["Config list"] = "配置列表",
+        ["Load config"] = "加载配置",
+        ["Overwrite config"] = "覆盖配置",
+        ["Delete config"] = "删除配置",
+        ["Refresh list"] = "刷新列表",
+        ["Set as autoload"] = "设为自动加载",
+        ["Reset autoload"] = "重置自动加载",
+        ["Current autoload config: none"] = "当前自动加载配置：无",
+        ["Config JSON"] = "配置 JSON",
+        ["Bagah Project | Gakuran v0.3.1"] = "Bagah Project | 学兰 v0.3.1"
+    }
+
+    local function translateText(text)
+        if not text or type(text) ~= "string" then return text end
+        
+        if Translations[text] then
+            return Translations[text]
+        end
+        
+        for en, cn in pairs(Translations) do
+            if text:find(en) then
+                return text:gsub(en, cn)
+            end
+        end
+        
+        return text
+    end
+
+    local function setupTranslationEngine()
+        local success, err = pcall(function()
+            local oldIndex = getrawmetatable(game).__newindex
+            setreadonly(getrawmetatable(game), false)
+            
+            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
+                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
+                    v = translateText(tostring(v))
+                end
+                return oldIndex(t, k, v)
+            end)
+            
+            setreadonly(getrawmetatable(game), true)
+        end)
+        
+        if not success then
+            warn("元表劫持失败:", err)
+           
+            local translated = {}
+            local function scanAndTranslate()
+                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+                    if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                        pcall(function()
+                            local text = gui.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    gui.Text = translatedText
+                                    translated[gui] = true
+                                end
+                            end
+                        end)
+                    end
+                end
+                
+                local player = game:GetService("Players").LocalPlayer
+                if player and player:FindFirstChild("PlayerGui") then
+                    for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
+                        if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                            pcall(function()
+                                local text = gui.Text
+                                if text and text ~= "" then
+                                    local translatedText = translateText(text)
+                                    if translatedText ~= text then
+                                        gui.Text = translatedText
+                                        translated[gui] = true
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+            
+            local function setupDescendantListener(parent)
+                parent.DescendantAdded:Connect(function(descendant)
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                        task.wait(0.1)
+                        pcall(function()
+                            local text = descendant.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    descendant.Text = translatedText
+                                end
+                            end
+                        end)
+                    end
+                end)
+            end
+            
+            pcall(setupDescendantListener, game:GetService("CoreGui"))
+            local player = game:GetService("Players").LocalPlayer
+            if player and player:FindFirstChild("PlayerGui") then
+                pcall(setupDescendantListener, player.PlayerGui)
+            end
+            
+            while true do
+                scanAndTranslate()
+                task.wait(3)
+            end
+        end
+    end
+
+    task.wait(2)
+    setupTranslationEngine()
+
+    local success, err = pcall(function()
+        loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Bagah-Project/bagah-hub-public/refs/heads/main/mainloader.lua"))()
+    end)
+
+    if not success then
+        warn("加载失败:", err)
+    end
+end
+
