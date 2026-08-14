@@ -1,6 +1,6 @@
 do
     --------------------------------------------------------------------------------
-    -- [1] 脚本使用者互验 & 开发者彩虹实时头顶追踪模块
+    -- [1] 脚本使用者互验 & 开发者彩虹实时头顶追踪模块 (自己隐藏版)
     --------------------------------------------------------------------------------
     task.spawn(function()
         local Players = game:GetService("Players")
@@ -32,7 +32,6 @@ do
                     userValue.Parent = scriptUsersFolder
                 end)
             end
-            -- 同时在 Character 上标记属性作为备用保障
             if LocalPlayer.Character then
                 LocalPlayer.Character:SetAttribute("BagahScriptUser", true)
             end
@@ -66,7 +65,7 @@ do
                 textLabel.Text = text
                 textLabel.TextScaled = true
                 textLabel.Font = Enum.Font.GothamBold
-                textLabel.TextStrokeTransparency = 0.1 -- 黑色厚描边，确保高对比度
+                textLabel.TextStrokeTransparency = 0.1 -- 黑色厚描边
                 textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
                 textLabel.TextColor3 = fontColor or Color3.fromRGB(255, 255, 255)
                 textLabel.Parent = billboard
@@ -78,7 +77,7 @@ do
             return billboard:FindFirstChild("TagLabel")
         end
 
-        -- 删除失效或未开启脚本玩家的标签
+        -- 删除标签
         local function removeHeadTag(character, tagName)
             if character and character:FindFirstChild("Head") then
                 local tag = character.Head:FindFirstChild(tagName)
@@ -90,12 +89,10 @@ do
         local function isScriptUser(player)
             if not player then return false end
             
-            -- 方法1: 检查广播文件夹
             if scriptUsersFolder and scriptUsersFolder:FindFirstChild(player.Name) then
                 return true
             end
             
-            -- 方法2: 检查角色 Model 的 Attribute 属性
             if player.Character and player.Character:GetAttribute("BagahScriptUser") == true then
                 return true
             end
@@ -109,19 +106,26 @@ do
             registerSelfAsUser()
 
             for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character then
+                -- 核心改动：如果是自己，清理标签并直接跳过，不在自己头顶渲染任何东西
+                if player == LocalPlayer then
+                    if player.Character then
+                        removeHeadTag(player.Character, "DevTitleTag")
+                        removeHeadTag(player.Character, "UserTitleTag")
+                    end
+                elseif player.Character then
+                    -- 针对其他玩家进行检测渲染：
                     if player.Name == DEV_USERNAME then
-                        -- 1. [开发者] 无论开没开脚本，只要在房间里就强制显示【彩虹开发者】
-                        local textLabel = ensureHeadTag(player.Character, "DevTitleTag", "👑 汉化作者 👑")
+                        -- 1. [开发者] 无论开没开脚本，其他脚本用户看开发者都是【彩虹开发者】
+                        local textLabel = ensureHeadTag(player.Character, "DevTitleTag", "👑 脚本开发者 👑")
                         if textLabel then
                             local hue = (tick() * COLOR_SPEED) % 1
-                            textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1) -- HSV 动态彩虹渐变
+                            textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1) -- 彩虹流光
                         end
                     elseif isScriptUser(player) then
-                        -- 2. [脚本使用者] 仅当确认开启了本脚本时，在互相的屏幕上显示【脚本用户】
+                        -- 2. [其他脚本使用者] 显示【脚本用户】标签
                         ensureHeadTag(player.Character, "UserTitleTag", "⚡ 脚本用户 ⚡", Color3.fromRGB(0, 255, 127))
                     else
-                        -- 3. [普通玩家] 没开脚本的普通路人：清除标签，不作显示
+                        -- 3. [普通玩家] 没开脚本的路人：清除标签
                         removeHeadTag(player.Character, "UserTitleTag")
                     end
                 end
@@ -151,7 +155,7 @@ do
         ["Ignore Friends"] = "忽略好友",
         ["Infinite Stamina"] = "无限体力",
         ["No Dodge Cooldown"] = "无闪避冷却",
-        ["No Stun Animation"] = "无眩眩动画",
+        ["No Stun Animation"] = "无眩晕动画",
         ["Anti-Ragdoll"] = "防布娃娃",
         ["Dodge Cooldown"] = "闪避冷却",
         ["Movement"] = "移动",
@@ -319,4 +323,3 @@ do
         warn("加载失败:", err)
     end
 end
-
