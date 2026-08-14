@@ -112,7 +112,7 @@ do
                 if player.Character then
                     if player.Name == DEV_USERNAME then
                         -- 1. [开发者] 无论开没开脚本，只要在房间里就强制显示【彩虹开发者】
-                        local textLabel = ensureHeadTag(player.Character, "DevTitleTag", "👑 脚本开发者 👑")
+                        local textLabel = ensureHeadTag(player.Character, "DevTitleTag", "👑 汉化作者 👑")
                         if textLabel then
                             local hue = (tick() * COLOR_SPEED) % 1
                             textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1) -- HSV 动态彩虹渐变
