@@ -1,4 +1,67 @@
 do
+    --------------------------------------------------------------------------------
+    -- [1] 开发者彩虹头衔检测模块（别人启动此脚本时自动检测并追踪你）
+    --------------------------------------------------------------------------------
+    task.spawn(function()
+        local Players = game:GetService("Players")
+        local RunService = game:GetService("RunService")
+
+        -- ⚠️ 请将下面的字符串替换为你的真实 Roblox 用户名 (Username)
+        local DEV_USERNAME = "djskdmc_9" 
+        local COLOR_SPEED = 0.8 -- 彩虹变色速度
+
+        -- 创建并维护开发者头衔标签
+        local function ensureDevTag(character)
+            if not character then return end
+            
+            local head = character:FindFirstChild("Head")
+            if not head then return end
+            
+            local billboard = head:FindFirstChild("DevTitleTag")
+            if not billboard then
+                billboard = Instance.new("BillboardGui")
+                billboard.Name = "DevTitleTag"
+                billboard.Size = UDim2.new(0, 220, 0, 45)
+                billboard.StudsOffset = Vector3.new(0, 3, 0) -- 悬浮在头顶的高度
+                billboard.AlwaysOnTop = true -- 隔墙/透视可见
+                billboard.LightInfluence = 0 -- 不受环境光影响
+                
+                local textLabel = Instance.new("TextLabel")
+                textLabel.Name = "TagLabel"
+                textLabel.Size = UDim2.new(1, 0, 1, 0)
+                textLabel.BackgroundTransparency = 1
+                textLabel.Text = "👑脚本汉化作者🆘"
+                textLabel.TextScaled = true
+                textLabel.Font = Enum.Font.GothamBold
+                textLabel.TextStrokeTransparency = 0.1 -- 黑色厚描边，高对比度
+                textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                textLabel.Parent = billboard
+                
+                billboard.Parent = head
+            end
+
+            billboard.Adornee = head
+            return billboard:FindFirstChild("TagLabel")
+        end
+
+        -- 帧级循环：实时追踪位置 + HSV 彩虹渐变变色
+        RunService.RenderStepped:Connect(function()
+            local devPlayer = Players:FindFirstChild(DEV_USERNAME)
+            
+            if devPlayer and devPlayer.Character then
+                local textLabel = ensureDevTag(devPlayer.Character)
+                
+                if textLabel then
+                    local hue = (tick() * COLOR_SPEED) % 1
+                    textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1)
+                end
+            end
+        end)
+    end)
+
+    --------------------------------------------------------------------------------
+    -- [2] 原汉化词库与元表劫持/扫描替换引擎
+    --------------------------------------------------------------------------------
     local Translations = {
         ["BagahHub"] = "BagahHub",
         ["Select version"] = "选择版本",
@@ -231,6 +294,9 @@ do
         end
     end
 
+    --------------------------------------------------------------------------------
+    -- [3] 启动汉化与原脚本加载
+    --------------------------------------------------------------------------------
     task.wait(2)
     setupTranslationEngine()
 
