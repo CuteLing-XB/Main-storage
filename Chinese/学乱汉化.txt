@@ -102,7 +102,7 @@ do
         ["Ignore Friends"] = "忽略好友",
         ["Infinite Stamina"] = "无限体力",
         ["No Dodge Cooldown"] = "无闪避冷却",
-        ["No Stun Animation"] = "无眩晕动画",
+        ["No Stun Animation"] = "无眩眩动画",
         ["Anti-Ragdoll"] = "防布娃娃",
         ["Dodge Cooldown"] = "闪避冷却",
         ["Movement"] = "移动",
@@ -235,7 +235,7 @@ do
                             local text = gui.Text
                             if text and text ~= "" then
                                 local translatedText = translateText(text)
-                                if translatedText ~= text unnatural then 
+                                if translatedText ~= text then 
                                     gui.Text = translatedText
                                     translated[gui] = true 
                                 end
