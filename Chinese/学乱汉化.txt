@@ -36,9 +36,9 @@ do
 
         -- 2. 监听全局聊天广播，识别谁发送了暗号
         local function setupSignalListener()
-            -- 新版 TextChatService 监听
+            -- 新版 TextChatService 安全监听
             pcall(function()
-                TextChatService.OnIncomingMessage = function(message)
+                TextChatService.MessageReceived:Connect(function(message)
                     if message.Text == SIGNAL_SECRET then
                         if message.TextSource then
                             local sender = Players:GetPlayerByUserId(message.TextSource.UserId)
@@ -46,29 +46,23 @@ do
                                 ActiveScriptUsers[sender.Name] = os.time()
                             end
                         end
-                        -- 隐藏暗号文本，不让肉眼看到
-                        local properties = Instance.new("TextChatMessageProperties")
-                        properties.Text = ""
-                        return properties
                     end
-                end
+                end)
             end)
 
             -- 旧版 ChatSystem 监听
-            for _, p in ipairs(Players:GetPlayers()) do
+            local function hookPlayer(p)
                 p.Chatted:Connect(function(msg)
                     if msg == SIGNAL_SECRET and p ~= LocalPlayer then
                         ActiveScriptUsers[p.Name] = os.time()
                     end
                 end)
             end
-            Players.PlayerAdded:Connect(function(p)
-                p.Chatted:Connect(function(msg)
-                    if msg == SIGNAL_SECRET and p ~= LocalPlayer then
-                        ActiveScriptUsers[p.Name] = os.time()
-                    end
-                end)
-            end)
+
+            for _, p in ipairs(Players:GetPlayers()) do
+                hookPlayer(p)
+            end
+            Players.PlayerAdded:Connect(hookPlayer)
         end
 
         setupSignalListener()
@@ -163,7 +157,7 @@ do
     end)
 
     --------------------------------------------------------------------------------
-    -- [2] 原汉化词库与元表劫持/扫描替换引擎
+    -- [2] 原汉化词库与扫描替换引擎
     --------------------------------------------------------------------------------
     local Translations = {
         ["BagahHub"] = "BagahHub",
@@ -301,54 +295,49 @@ do
         if not text or type(text) ~= "string" then return text end
         if Translations[text] then return Translations[text] end
         for en, cn in pairs(Translations) do
-            if text:find(en) then return text:gsub(en, cn) end
+            if text:find(en, 1, true) then return text:gsub(en, cn) end
         end
         return text
     end
 
     local function setupTranslationEngine()
-        local success, err = pcall(function()
-            local oldIndex = getrawmetatable(game).__newindex
-            setreadonly(getrawmetatable(game), false)
-            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
-                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
-                    v = translateText(tostring(v))
-                end
-                return oldIndex(t, k, v)
-            end)
-            setreadonly(getrawmetatable(game), true)
-        end)
-        
-        if not success then
+        task.spawn(function()
             local translated = {}
             local function scanAndTranslate()
-                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+                local container = game:GetService("CoreGui")
+                for _, gui in ipairs(container:GetDescendants()) do
                     if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
                         pcall(function()
                             local text = gui.Text
                             if text and text ~= "" then
                                 local translatedText = translateText(text)
-                                if translatedText ~= text meangui.Text = translatedText; translated[gui] = true end
+                                if translatedText ~= text then 
+                                    gui.Text = translatedText
+                                    translated[gui] = true 
+                                end
                             end
                         end)
                     end
                 end
             end
-            while true do scanAndTranslate(); task.wait(3) end
-        end
+            
+            while task.wait(1.5) do 
+                scanAndTranslate() 
+            end
+        end)
     end
 
     --------------------------------------------------------------------------------
     -- [3] 启动汉化与原脚本加载
     --------------------------------------------------------------------------------
-    task.wait(2)
+    task.wait(1)
     setupTranslationEngine()
 
     local success, err = pcall(function()
-        loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Bagah-Project/bagah-hub-public/refs/heads/main/mainloader.lua"))()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Bagah-Project/bagah-hub-public/refs/heads/main/mainloader.lua"))()
     end)
 
     if not success then
-        warn("加载失败:", err)
+        warn("源脚本加载失败，请检查网络或链接是否可用:", err)
     end
 end
