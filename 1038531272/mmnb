@@ -1,5 +1,5 @@
 -- ====================================================================
--- 手动点击加载器（多脚本支持 + 精准匹配 + 备注管理 + Win11叮咚音）
+-- 手动点击加载器（多脚本支持 + 缓冲延迟防卡 + 备注管理 + Win11叮咚音）
 -- 说明：每次手动运行只判定一次，绝不残留、绝不跨服自动运行
 -- ====================================================================
 
@@ -8,6 +8,8 @@ local SoundService = game:GetService("SoundService")
 --------------------------------------------------------------------------------
 -- 📍 1. 服务器管理区（单服务器支持填入 1 个或多个脚本链接）
 --------------------------------------------------------------------------------
+local DELAY_SECONDS = 3  -- ⏱️ 脚本之间的加载缓冲间隔时间（单位：秒，可自由修改）
+
 local Config = {
     -- 格式：[数字ID] = { name = "你的备注名字", scripts = { "脚本1", "脚本2", "脚本3" } },
 
@@ -51,36 +53,46 @@ local function playDingSound()
 end
 
 --------------------------------------------------------------------------------
--- 🚀 3. 核心判定与批量执行逻辑
+-- 🚀 3. 核心判定与批量延迟执行逻辑
 --------------------------------------------------------------------------------
 local function Loader()
     local target = Config[game.PlaceId]
     
     -- 匹配到了 ID 且脚本列表存在且不为空
     if target and target.scripts and #target.scripts > 0 then
-        local loadedCount = 0
-        
-        -- 遍历列表中的所有脚本链接并依次执行
-        for idx, scriptUrl in ipairs(target.scripts) do
-            if scriptUrl and scriptUrl ~= "" then
-                local success = pcall(function()
-                    return loadstring(game:HttpGet(scriptUrl))()
-                end)
-                
-                if success then
-                    loadedCount = loadedCount + 1
-                    print("[" .. target.name .. "] 脚本 " .. idx .. " 加载成功")
-                else
-                    warn("[" .. target.name .. "] 脚本 " .. idx .. " 执行失败，请检查链接或语法")
+        -- 使用 task.spawn 开启异步线程，防止 task.wait 阻塞其他 UI 或客户端主线程
+        task.spawn(function()
+            local loadedCount = 0
+            local totalScripts = #target.scripts
+            
+            -- 遍历列表中的所有脚本链接并依次执行
+            for idx, scriptUrl in ipairs(target.scripts) do
+                if scriptUrl and scriptUrl ~= "" then
+                    local success = pcall(function()
+                        return loadstring(game:HttpGet(scriptUrl))()
+                    end)
+                    
+                    if success then
+                        loadedCount = loadedCount + 1
+                        print("[" .. target.name .. "] 脚本 " .. idx .. " 加载成功")
+                    else
+                        warn("[" .. target.name .. "] 脚本 " .. idx .. " 执行失败，请检查链接或语法")
+                    end
+                    
+                    -- 💡 缓冲逻辑：如果不是最后一个脚本，则等待指定的秒数再加载下一个
+                    if idx < totalScripts then
+                        print("等待 " .. DELAY_SECONDS .. " 秒后加载下一个脚本...")
+                        task.wait(DELAY_SECONDS)
+                    end
                 end
             end
-        end
-        
-        -- 只要有至少一个脚本加载成功，就播放提示音
-        if loadedCount > 0 then
-            print("【" .. target.name .. "】共计 " .. loadedCount .. " 个脚本全部加载完毕！")
-            playDingSound()
-        end
+            
+            -- 只要有至少一个脚本加载成功，就播放提示音
+            if loadedCount > 0 then
+                print("【" .. target.name .. "】共计 " .. loadedCount .. " 个脚本全部加载完毕！")
+                playDingSound()
+            end
+        end)
     else
         -- 没在配置表里或没有可执行脚本
         print("该服务器不存在")
