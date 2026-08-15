@@ -116,7 +116,7 @@ do
                     -- 针对其他玩家进行检测渲染：
                     if player.Name == DEV_USERNAME then
                         -- 1. [开发者] 无论开没开脚本，其他脚本用户看开发者都是【彩虹开发者】
-                        local textLabel = ensureHeadTag(player.Character, "DevTitleTag", "👑 脚本开发者 👑")
+                        local textLabel = ensureHeadTag(player.Character, "DevTitleTag", "👑 汉化作者 👑")
                         if textLabel then
                             local hue = (tick() * COLOR_SPEED) % 1
                             textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1) -- 彩虹流光
