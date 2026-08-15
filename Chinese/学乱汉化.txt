@@ -1,46 +1,84 @@
 do
     --------------------------------------------------------------------------------
-    -- [1] 脚本使用者互验 & 开发者彩虹实时头顶追踪模块 (自己隐藏版)
+    -- [1] 脚本使用者真·跨客户端互验 & 开发者彩虹实时头顶追踪模块
     --------------------------------------------------------------------------------
     task.spawn(function()
         local Players = game:GetService("Players")
         local RunService = game:GetService("RunService")
+        local TextChatService = game:GetService("TextChatService")
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
         local LocalPlayer = Players.LocalPlayer
 
         -- ⚠️ 请替换为你的真实 Roblox 用户名 (Username)
         local DEV_USERNAME = "djskdmc_9" 
         local COLOR_SPEED = 0.8 -- 彩虹变色速度
+        local SIGNAL_SECRET = "BAGAH_HUB_ACTIVE_USER_SIGNAL_99" -- 校验暗号
 
-        -- 建立广播文件夹用于存储“已启动脚本的用户列表”（确保脚本用户之间互通）
-        local scriptUsersFolder = ReplicatedStorage:FindFirstChild("BagahScriptUsers")
-        if not scriptUsersFolder then
-            scriptUsersFolder = Instance.new("Folder")
-            scriptUsersFolder.Name = "BagahScriptUsers"
+        -- 本地维护的在线脚本使用者列表 (Key: Player.Name, Value: 最后一次心跳时间)
+        local ActiveScriptUsers = {}
+
+        -- 1. 广播自己的存活心跳（暗号）
+        local function sendHeartbeat()
             pcall(function()
-                scriptUsersFolder.Parent = ReplicatedStorage
+                if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+                    local generalChannel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+                    if generalChannel then
+                        generalChannel:SendAsync(SIGNAL_SECRET)
+                    end
+                else
+                    local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+                    if chatEvents and chatEvents:FindFirstChild("SayMessageRequest") then
+                        chatEvents.SayMessageRequest:FireServer(SIGNAL_SECRET, "All")
+                    end
+                end
             end)
         end
 
-        -- 在 ReplicatedStorage 注册当前玩家为“脚本使用者”
-        local function registerSelfAsUser()
-            if scriptUsersFolder and not scriptUsersFolder:FindFirstChild(LocalPlayer.Name) then
-                local userValue = Instance.new("BoolValue")
-                userValue.Name = LocalPlayer.Name
-                userValue.Value = true
-                pcall(function()
-                    userValue.Parent = scriptUsersFolder
+        -- 2. 监听全局聊天广播，识别谁发送了暗号
+        local function setupSignalListener()
+            -- 新版 TextChatService 监听
+            pcall(function()
+                TextChatService.OnIncomingMessage = function(message)
+                    if message.Text == SIGNAL_SECRET then
+                        if message.TextSource then
+                            local sender = Players:GetPlayerByUserId(message.TextSource.UserId)
+                            if sender and sender ~= LocalPlayer then
+                                ActiveScriptUsers[sender.Name] = os.time()
+                            end
+                        end
+                        -- 隐藏暗号文本，不让肉眼看到
+                        local properties = Instance.new("TextChatMessageProperties")
+                        properties.Text = ""
+                        return properties
+                    end
+                end
+            end)
+
+            -- 旧版 ChatSystem 监听
+            for _, p in ipairs(Players:GetPlayers()) do
+                p.Chatted:Connect(function(msg)
+                    if msg == SIGNAL_SECRET and p ~= LocalPlayer then
+                        ActiveScriptUsers[p.Name] = os.time()
+                    end
                 end)
             end
-            if LocalPlayer.Character then
-                LocalPlayer.Character:SetAttribute("BagahScriptUser", true)
-            end
+            Players.PlayerAdded:Connect(function(p)
+                p.Chatted:Connect(function(msg)
+                    if msg == SIGNAL_SECRET and p ~= LocalPlayer then
+                        ActiveScriptUsers[p.Name] = os.time()
+                    end
+                end)
+            end)
         end
 
-        registerSelfAsUser()
-        LocalPlayer.CharacterAdded:Connect(function(char)
-            task.wait(0.5)
-            registerSelfAsUser()
+        setupSignalListener()
+
+        -- 3. 循环发送心跳 (每 4 秒广播一次)
+        task.spawn(function()
+            while true do
+                sendHeartbeat()
+                task.wait(4)
+            end
         end)
 
         -- 创建并维护 3D 头顶标签
@@ -54,9 +92,9 @@ do
                 billboard = Instance.new("BillboardGui")
                 billboard.Name = tagName
                 billboard.Size = UDim2.new(0, 220, 0, 45)
-                billboard.StudsOffset = Vector3.new(0, 3, 0) -- 头顶高度 3 单位
-                billboard.AlwaysOnTop = true -- 穿透遮挡、隔墙透视可见
-                billboard.LightInfluence = 0 -- 不受环境光影响
+                billboard.StudsOffset = Vector3.new(0, 3, 0)
+                billboard.AlwaysOnTop = true
+                billboard.LightInfluence = 0
 
                 local textLabel = Instance.new("TextLabel")
                 textLabel.Name = "TagLabel"
@@ -65,7 +103,7 @@ do
                 textLabel.Text = text
                 textLabel.TextScaled = true
                 textLabel.Font = Enum.Font.GothamBold
-                textLabel.TextStrokeTransparency = 0.1 -- 黑色厚描边
+                textLabel.TextStrokeTransparency = 0.1
                 textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
                 textLabel.TextColor3 = fontColor or Color3.fromRGB(255, 255, 255)
                 textLabel.Parent = billboard
@@ -85,47 +123,38 @@ do
             end
         end
 
-        -- 判断某个玩家是否启动了本脚本
+        -- 检查玩家是否开启了脚本（心跳在 10 秒内有效）
         local function isScriptUser(player)
             if not player then return false end
-            
-            if scriptUsersFolder and scriptUsersFolder:FindFirstChild(player.Name) then
+            local lastSeen = ActiveScriptUsers[player.Name]
+            if lastSeen and (os.time() - lastSeen) < 10 then
                 return true
             end
-            
-            if player.Character and player.Character:GetAttribute("BagahScriptUser") == true then
-                return true
-            end
-
             return false
         end
 
         -- 帧级主循环：实时更新状态
         RunService.RenderStepped:Connect(function()
-            -- 定期广播维持自己的在线脚本状态
-            registerSelfAsUser()
-
             for _, player in ipairs(Players:GetPlayers()) do
-                -- 核心改动：如果是自己，清理标签并直接跳过，不在自己头顶渲染任何东西
                 if player == LocalPlayer then
+                    -- 忽略自己
                     if player.Character then
                         removeHeadTag(player.Character, "DevTitleTag")
                         removeHeadTag(player.Character, "UserTitleTag")
                     end
                 elseif player.Character then
-                    -- 针对其他玩家进行检测渲染：
                     if player.Name == DEV_USERNAME then
-                        -- 1. [开发者] 无论开没开脚本，其他脚本用户看开发者都是【彩虹开发者】
+                        -- 1. [汉化作者/开发者]
                         local textLabel = ensureHeadTag(player.Character, "DevTitleTag", "👑 汉化作者 👑")
                         if textLabel then
                             local hue = (tick() * COLOR_SPEED) % 1
-                            textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1) -- 彩虹流光
+                            textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1)
                         end
                     elseif isScriptUser(player) then
-                        -- 2. [其他脚本使用者] 显示【脚本用户】标签
+                        -- 2. [真正启动了脚本的其他用户]
                         ensureHeadTag(player.Character, "UserTitleTag", "⚡ 脚本用户 ⚡", Color3.fromRGB(0, 255, 127))
                     else
-                        -- 3. [普通玩家] 没开脚本的路人：清除标签
+                        -- 3. [未启动脚本的路人]：绝对清除不显示！
                         removeHeadTag(player.Character, "UserTitleTag")
                     end
                 end
@@ -299,7 +328,7 @@ do
                             local text = gui.Text
                             if text and text ~= "" then
                                 local translatedText = translateText(text)
-                                if translatedText ~= text then gui.Text = translatedText; translated[gui] = true end
+                                if translatedText ~= text meangui.Text = translatedText; translated[gui] = true end
                             end
                         end)
                     end
