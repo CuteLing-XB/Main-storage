@@ -1,79 +1,15 @@
 do
     --------------------------------------------------------------------------------
-    -- [1] 脚本使用者真·跨客户端互验 & 开发者彩虹实时头顶追踪模块
+    -- [1] 开发者彩虹实时头顶追踪模块（已移除心跳/暗号广播与互相验证逻辑）
     --------------------------------------------------------------------------------
     task.spawn(function()
         local Players = game:GetService("Players")
         local RunService = game:GetService("RunService")
-        local TextChatService = game:GetService("TextChatService")
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
         local LocalPlayer = Players.LocalPlayer
 
         -- ⚠️ 请替换为你的真实 Roblox 用户名 (Username)
         local DEV_USERNAME = "djskdmc_9" 
         local COLOR_SPEED = 0.8 -- 彩虹变色速度
-        local SIGNAL_SECRET = "BAGAH_HUB_ACTIVE_USER_SIGNAL_99" -- 校验暗号
-
-        -- 本地维护的在线脚本使用者列表 (Key: Player.Name, Value: 最后一次心跳时间)
-        local ActiveScriptUsers = {}
-
-        -- 1. 广播自己的存活心跳（暗号）
-        local function sendHeartbeat()
-            pcall(function()
-                if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-                    local generalChannel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
-                    if generalChannel then
-                        generalChannel:SendAsync(SIGNAL_SECRET)
-                    end
-                else
-                    local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-                    if chatEvents and chatEvents:FindFirstChild("SayMessageRequest") then
-                        chatEvents.SayMessageRequest:FireServer(SIGNAL_SECRET, "All")
-                    end
-                end
-            end)
-        end
-
-        -- 2. 监听全局聊天广播，识别谁发送了暗号
-        local function setupSignalListener()
-            -- 新版 TextChatService 安全监听
-            pcall(function()
-                TextChatService.MessageReceived:Connect(function(message)
-                    if message.Text == SIGNAL_SECRET then
-                        if message.TextSource then
-                            local sender = Players:GetPlayerByUserId(message.TextSource.UserId)
-                            if sender and sender ~= LocalPlayer then
-                                ActiveScriptUsers[sender.Name] = os.time()
-                            end
-                        end
-                    end
-                end)
-            end)
-
-            -- 旧版 ChatSystem 监听
-            local function hookPlayer(p)
-                p.Chatted:Connect(function(msg)
-                    if msg == SIGNAL_SECRET and p ~= LocalPlayer then
-                        ActiveScriptUsers[p.Name] = os.time()
-                    end
-                end)
-            end
-
-            for _, p in ipairs(Players:GetPlayers()) do
-                hookPlayer(p)
-            end
-            Players.PlayerAdded:Connect(hookPlayer)
-        end
-
-        setupSignalListener()
-
-        -- 3. 循环发送心跳 (每 4 秒广播一次)
-        task.spawn(function()
-            while true do
-                sendHeartbeat()
-                task.wait(4)
-            end
-        end)
 
         -- 创建并维护 3D 头顶标签
         local function ensureHeadTag(character, tagName, text, fontColor)
@@ -117,16 +53,6 @@ do
             end
         end
 
-        -- 检查玩家是否开启了脚本（心跳在 10 秒内有效）
-        local function isScriptUser(player)
-            if not player then return false end
-            local lastSeen = ActiveScriptUsers[player.Name]
-            if lastSeen and (os.time() - lastSeen) < 10 then
-                return true
-            end
-            return false
-        end
-
         -- 帧级主循环：实时更新状态
         RunService.RenderStepped:Connect(function()
             for _, player in ipairs(Players:GetPlayers()) do
@@ -138,17 +64,15 @@ do
                     end
                 elseif player.Character then
                     if player.Name == DEV_USERNAME then
-                        -- 1. [汉化作者/开发者]
+                        -- [汉化作者/开发者] 显示彩虹称号
                         local textLabel = ensureHeadTag(player.Character, "DevTitleTag", "👑 汉化作者 👑")
                         if textLabel then
                             local hue = (tick() * COLOR_SPEED) % 1
                             textLabel.TextColor3 = Color3.fromHSV(hue, 1, 1)
                         end
-                    elseif isScriptUser(player) then
-                        -- 2. [真正启动了脚本的其他用户]
-                        ensureHeadTag(player.Character, "UserTitleTag", "⚡ 脚本用户 ⚡", Color3.fromRGB(0, 255, 127))
                     else
-                        -- 3. [未启动脚本的路人]：绝对清除不显示！
+                        -- 其他玩家清理标签
+                        removeHeadTag(player.Character, "DevTitleTag")
                         removeHeadTag(player.Character, "UserTitleTag")
                     end
                 end
@@ -311,7 +235,7 @@ do
                             local text = gui.Text
                             if text and text ~= "" then
                                 local translatedText = translateText(text)
-                                if translatedText ~= text then 
+                                if translatedText ~= text unnatural then 
                                     gui.Text = translatedText
                                     translated[gui] = true 
                                 end
