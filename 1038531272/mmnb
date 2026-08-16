@@ -1,4 +1,3 @@
-===========================================================
 local SoundService = game:GetService("SoundService")
 
 local Config = {
