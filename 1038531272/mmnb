@@ -1,7 +1,6 @@
 local SoundService = game:GetService("SoundService")
 
 local Config = {
-
     [10449761463] = { 
         name = "最强战场", 
         scripts = {
@@ -25,9 +24,6 @@ local Config = {
     },
 }
 
---------------------------------------------------------------------------------
--- 🎵 2. Win11 提示音 (9114223297)
---------------------------------------------------------------------------------
 local function playDingSound()
     task.spawn(function()
         local sound = Instance.new("Sound")
@@ -41,42 +37,31 @@ local function playDingSound()
     end)
 end
 
---------------------------------------------------------------------------------
--- 🚀 3. 核心判定与批量执行逻辑
---------------------------------------------------------------------------------
 local function Loader()
-    local target = Config[game.PlaceId]
+    -- 自动匹配 PlaceId 或 GameId
+    local target = Config[game.PlaceId] or Config[game.GameId]
     
-    -- 匹配到了 ID 且脚本列表存在且不为空
-    if target and target.scripts and #target.scripts > 0 then
-        local loadedCount = 0
+    if target and target.scripts then
+        local loaded = false
         
-        -- 遍历列表中的所有脚本链接并依次执行
-        for idx, scriptUrl in ipairs(target.scripts) do
-            if scriptUrl and scriptUrl ~= "" then
-                local success = pcall(function()
-                    return loadstring(game:HttpGet(scriptUrl))()
+        for idx, url in ipairs(target.scripts) do
+            if url and url ~= "" then
+                -- 核心精简加载逻辑
+                pcall(function()
+                    loadstring(game:HttpGet(url))()
                 end)
-                
-                if success then
-                    loadedCount = loadedCount + 1
-                    print("[" .. target.name .. "] 脚本 " .. idx .. " 加载成功")
-                else
-                    warn("[" .. target.name .. "] 脚本 " .. idx .. " 执行失败，请检查链接或语法")
-                end
+                print("[" .. target.name .. "] 已加载脚本 " .. idx)
+                loaded = true
             end
         end
         
-        -- 只要有至少一个脚本加载成功，就播放提示音
-        if loadedCount > 0 then
-            print("【" .. target.name .. "】共计 " .. loadedCount .. " 个脚本全部加载完毕！")
+        if loaded then
+            print("【" .. target.name .. "] 所有脚本加载完成！")
             playDingSound()
         end
     else
-        -- 没在配置表里或没有可执行脚本
-        print("该服务器不存在")
+        print("未匹配到当前游戏配置 (PlaceId: " .. game.PlaceId .. " / GameId: " .. game.GameId .. ")")
     end
 end
 
--- 单次点击执行
 Loader()
