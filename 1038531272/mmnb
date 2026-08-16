@@ -18,8 +18,7 @@ local Config = {
     [128736949265057] = { 
         name = "学乱", 
         scripts = {
-            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/学乱汉化.txt",
-            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/学乱汉化1.txt"
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/学乱汉化.txt"
         }
     },
 }
