@@ -6,7 +6,7 @@ local Config = {
     [10449761463] = { 
         name = "最强战场", 
         scripts = {
-            https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/隐身重要.txt"
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/隐身重要.txt"
         }
     },
     
