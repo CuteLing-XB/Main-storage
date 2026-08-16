@@ -1,0 +1,235 @@
+-- ========================================================
+-- Roblox 学乱汉化 交互选择加载器 (CoreGui Modern UI)
+-- ========================================================
+
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+
+-- 销毁可能已存在的旧 UI
+if CoreGui:FindFirstChild("ChineseLoaderUI") then
+    CoreGui.ChineseLoaderUI:Destroy()
+end
+
+-- 汉化脚本链接
+local URL1 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/学乱汉化.txt"
+local URL2 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/学乱汉化1.txt"
+
+-- 创建基础 ScreenGui 容器
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ChineseLoaderUI"
+ScreenGui.ResetOnSpawn = false
+
+-- 兼容主流执行器的 GUI 保护机制
+if gethui then
+    ScreenGui.Parent = gethui()
+elseif syn and syn.protect_gui then
+    syn.protect_gui(ScreenGui)
+    ScreenGui.Parent = CoreGui
+else
+    ScreenGui.Parent = CoreGui
+end
+
+-- 主面板 (Frame)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 340, 0, 290)
+MainFrame.Position = UDim2.new(0.5, -170, 0.4, -145)
+MainFrame.BackgroundColor3 = Color3.fromRGB(24, 25, 38)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(60, 64, 92)
+MainStroke.Thickness = 1.5
+MainStroke.Parent = MainFrame
+
+-- 标题栏 Header
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Size = UDim2.new(1, 0, 0, 42)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 32, 48)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -50, 1, 0)
+TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+TitleLabel.Text = "学乱汉化 - 加载器"
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.TextSize = 18
+TitleLabel.TextColor3 = Color3.fromRGB(240, 240, 255)
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Parent = TitleBar
+
+-- 关闭按钮 Close Button
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -35, 0.5, -14)
+CloseBtn.Text = "×"
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.TextSize = 20
+CloseBtn.TextColor3 = Color3.fromRGB(180, 180, 200)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(45, 48, 70)
+CloseBtn.Parent = TitleBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+-- 状态栏 Status Label
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -30, 0, 25)
+StatusLabel.Position = UDim2.new(0, 15, 0, 52)
+StatusLabel.Text = "状态: 请选择需要加载的脚本"
+StatusLabel.Font = Enum.Font.SourceSans
+StatusLabel.TextSize = 14
+StatusLabel.TextColor3 = Color3.fromRGB(160, 170, 200)
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Parent = MainFrame
+
+-- 按钮容器 Layout Container
+local ButtonContainer = Instance.new("Frame")
+ButtonContainer.Size = UDim2.new(1, -30, 0, 195)
+ButtonContainer.Position = UDim2.new(0, 15, 0, 80)
+ButtonContainer.BackgroundTransparency = 1
+ButtonContainer.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 10)
+UIListLayout.Parent = ButtonContainer
+
+-- 辅助工具函数：按键创建
+local function createButton(text, order, color, callback)
+    local btn = Instance.new("TextButton")
+    btn.Name = "Btn_" .. tostring(order)
+    btn.Size = UDim2.new(1, 0, 0, 50)
+    btn.LayoutOrder = order
+    btn.Text = text
+    btn.Font = Enum.Font.SourceSansSemibold
+    btn.TextSize = 16
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundColor3 = color
+    btn.AutoButtonColor = false
+    btn.Parent = ButtonContainer
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = btn
+
+    -- 悬停 & 点击动效
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.15}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+    end)
+
+    btn.MouseButton1Click:Connect(function()
+        callback()
+    end)
+
+    return btn
+end
+
+-- 脚本加载逻辑封装
+local function safeLoad(url, name)
+    StatusLabel.Text = "状态: 正在下载 " .. name .. "..."
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+
+    task.spawn(function()
+        local success, code = pcall(function()
+            return game:HttpGet(url)
+        end)
+
+        if success and code then
+            StatusLabel.Text = "状态: 正在运行 " .. name .. "..."
+            local execSuccess, execErr = pcall(function()
+                loadstring(code)()
+            end)
+
+            if execSuccess then
+                StatusLabel.Text = "状态: " .. name .. " 加载完成！"
+                StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 150)
+            else
+                StatusLabel.Text = "状态: 运行错误 " .. tostring(execErr)
+                StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+            end
+        else
+            StatusLabel.Text = "状态: 网络获取失败 (检查连接)"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end
+    end)
+end
+
+-- 生成选择按钮
+createButton("仅加载：学乱汉化 (主包)", 1, Color3.fromRGB(59, 130, 246), function()
+    safeLoad(URL1, "学乱汉化")
+end)
+
+createButton("仅加载：学乱汉化 1 (副包)", 2, Color3.fromRGB(139, 92, 246), function()
+    safeLoad(URL2, "学乱汉化1")
+end)
+
+createButton("⚡ 一键加载全部 (两个都装)", 3, Color3.fromRGB(16, 185, 129), function()
+    StatusLabel.Text = "状态: 准备顺序加载全部..."
+    safeLoad(URL1, "学乱汉化")
+    task.wait(1)
+    safeLoad(URL2, "学乱汉化1")
+end)
+
+-- 实现 UI 拖拽功能 (Draggable)
+local dragging, dragInput, dragStart, startPos
+
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+TitleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+```eof
+
+I have generated the Roblox Lua loader script. 
+
+### Key Features Included:
+1. **Interactive UI Menu**: Features clear buttons to choose between loading the main package, the secondary package, or both.
+2. **Visual Status Updates**: Displays current state (downloading, executing, loaded, or error) so you know exactly what is happening.
+3. **Smooth Aesthetics & Dragging**: Includes rounded corners, hover visual effects, and mouse/touch drag capabilities.
+4. **Error Safety**: Uses `pcall` blocks to capture any network timeouts or code execution errors gracefully.
+
+Simply copy the script block and run it inside your executor. Feel free to reach out if you'd like to adjust any colors or features!
