@@ -5,16 +5,13 @@
 
 local SoundService = game:GetService("SoundService")
 
---------------------------------------------------------------------------------
--- 📍 1. 服务器管理区（单服务器支持填入 1 个或多个脚本链接）
---------------------------------------------------------------------------------
 local Config = {
-    -- 格式：[数字ID] = { name = "你的备注名字", scripts = { "脚本1", "脚本2", "脚本3" } },
 
     [10449761463] = { 
         name = "最强战场", 
         scripts = {
-            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201",
+            "https://yellow-salad-2c80.suarezjosh425.workers.dev/"
         }
     },
     
