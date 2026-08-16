@@ -1,8 +1,4 @@
--- ====================================================================
--- 手动点击加载器（多脚本支持 + 精准匹配 + 备注管理 + Win11叮咚音）
--- 说明：每次手动运行只判定一次，绝不残留、绝不跨服自动运行
--- ====================================================================
-
+===========================================================
 local SoundService = game:GetService("SoundService")
 
 local Config = {
@@ -10,8 +6,7 @@ local Config = {
     [10449761463] = { 
         name = "最强战场", 
         scripts = {
-            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201",
-            "https://yellow-salad-2c80.suarezjosh425.workers.dev/"
+            https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/隐身重要.txt"
         }
     },
     
