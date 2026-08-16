@@ -1,0 +1,249 @@
+-- 1. 服务引用克隆 (cloneref 防 Hook 检测)
+local cloneref = cloneref or function(service) return service end
+
+local Players = cloneref(game:GetService("Players"))
+local TweenService = cloneref(game:GetService("TweenService"))
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local HttpService = cloneref(game:GetService("HttpService"))
+local CoreGui = cloneref(game:GetService("CoreGui"))
+
+local LocalPlayer = Players.LocalPlayer
+
+-- 2. 组件名称随机化生成器 (Random String Generator)
+local function getRandomString(len)
+    len = len or math.random(10, 18)
+    local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    local result = {}
+    for i = 1, len do
+        local randIndex = math.random(1, #chars)
+        table.insert(result, string.sub(chars, randIndex, randIndex))
+    end
+    return table.concat(result)
+end
+
+-- 汉化脚本资源链接
+local URL1 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"
+local URL2 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"
+local URL3 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E9%9A%90%E8%BA%AB%E9%87%8D%E8%A6%81.txt"
+
+-- 3. 创建 ScreenGui 并挂载到受保护节点 (ProtectGui / gethui)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = getRandomString()
+ScreenGui.ResetOnSpawn = false
+
+if gethui then
+    ScreenGui.Parent = gethui()
+elseif syn and syn.protect_gui then
+    syn.protect_gui(ScreenGui)
+    ScreenGui.Parent = CoreGui
+elseif protectgui then
+    protectgui(ScreenGui)
+    ScreenGui.Parent = CoreGui
+else
+    -- 回退机制：挂载到 LocalPlayer 的 PlayerGui
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- 4. 主面板 (Main Frame)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = getRandomString()
+MainFrame.Size = UDim2.new(0, 340, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -170, 0.4, -175)
+MainFrame.BackgroundColor3 = Color3.fromRGB(24, 25, 38)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.Name = getRandomString()
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Name = getRandomString()
+MainStroke.Color = Color3.fromRGB(60, 64, 92)
+MainStroke.Thickness = 1.5
+MainStroke.Parent = MainFrame
+
+-- 5. 标题栏 (Title Bar)
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = getRandomString()
+TitleBar.Size = UDim2.new(1, 0, 0, 42)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 32, 48)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = getRandomString()
+TitleLabel.Size = UDim2.new(1, -50, 1, 0)
+TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+TitleLabel.Text = "最强战场选择器"
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.TextSize = 18
+TitleLabel.TextColor3 = Color3.fromRGB(240, 240, 255)
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Parent = TitleBar
+
+-- 关闭按钮
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = getRandomString()
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -35, 0.5, -14)
+CloseBtn.Text = "×"
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.TextSize = 20
+CloseBtn.TextColor3 = Color3.fromRGB(180, 180, 200)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(45, 48, 70)
+CloseBtn.Parent = TitleBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.Name = getRandomString()
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+-- 6. 状态指示器
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Name = getRandomString()
+StatusLabel.Size = UDim2.new(1, -30, 0, 25)
+StatusLabel.Position = UDim2.new(0, 15, 0, 52)
+StatusLabel.Text = "状态: 等待选择加载方案..."
+StatusLabel.Font = Enum.Font.SourceSans
+StatusLabel.TextSize = 14
+StatusLabel.TextColor3 = Color3.fromRGB(160, 170, 200)
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Parent = MainFrame
+
+-- 7. 按钮容器与布局
+local ButtonContainer = Instance.new("Frame")
+ButtonContainer.Name = getRandomString()
+ButtonContainer.Size = UDim2.new(1, -30, 0, 255)
+ButtonContainer.Position = UDim2.new(0, 15, 0, 80)
+ButtonContainer.BackgroundTransparency = 1
+ButtonContainer.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Name = getRandomString()
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 10)
+UIListLayout.Parent = ButtonContainer
+
+-- 按键构造工厂函数
+local function createStealthButton(text, order, color, callback)
+    local btn = Instance.new("TextButton")
+    btn.Name = getRandomString()
+    btn.Size = UDim2.new(1, 0, 0, 50)
+    btn.LayoutOrder = order
+    btn.Text = text
+    btn.Font = Enum.Font.SourceSansSemibold
+    btn.TextSize = 16
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundColor3 = color
+    btn.AutoButtonColor = false
+    btn.Parent = ButtonContainer
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.Name = getRandomString()
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = btn
+
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0.15}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+    end)
+
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+-- 8. 脚本安全加载机制 (pcall 防崩溃)
+local function safeLoadScript(url, scriptName)
+    StatusLabel.Text = "状态: 正在拉取 " .. scriptName .. "..."
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+
+    task.spawn(function()
+        local getSuccess, code = pcall(function()
+            return game:HttpGet(url)
+        end)
+
+        if getSuccess and code then
+            StatusLabel.Text = "状态: 执行 " .. scriptName .. " 中..."
+            local runSuccess, runError = pcall(function()
+                loadstring(code)()
+            end)
+
+            if runSuccess then
+                StatusLabel.Text = "状态: " .. scriptName .. " 加载成功!"
+                StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 150)
+            else
+                StatusLabel.Text = "状态: 运行错误 " .. tostring(runError)
+                StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+            end
+        else
+            StatusLabel.Text = "状态: 网络读取失败"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end
+    end)
+end
+
+-- 9. 绑定四大加载选项
+createStealthButton("加载：最强1", 1, Color3.fromRGB(59, 130, 246), function()
+    safeLoadScript(URL1, "最强1")
+end)
+
+createStealthButton("加载：最强2", 2, Color3.fromRGB(139, 92, 246), function()
+    safeLoadScript(URL2, "最强2")
+end)
+
+createStealthButton("加载：自动农场", 3, Color3.fromRGB(236, 72, 153), function()
+    safeLoadScript(URL3, "自动农场")
+end)
+
+createStealthButton("一键加载全部⚠️不推荐", 4, Color3.fromRGB(16, 185, 129), function()
+    StatusLabel.Text = "状态: 开始分时顺序装载..."
+    safeLoadScript(URL1, "最强1")
+    task.wait(1.5)
+    safeLoadScript(URL2, "最强2")
+    task.wait(1.5)
+    safeLoadScript(URL3, "自动农场")
+end)
+
+-- 10. 平滑拖拽交互实现
+local dragging, dragInput, dragStart, startPos
+
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+TitleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
