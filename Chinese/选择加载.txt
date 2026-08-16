@@ -76,7 +76,7 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Name = getRandomString()
 TitleLabel.Size = UDim2.new(1, -50, 1, 0)
 TitleLabel.Position = UDim2.new(0, 15, 0, 0)
-TitleLabel.Text = "学乱汉化 - 隐蔽加载器"
+TitleLabel.Text = "学乱汉化"
 TitleLabel.Font = Enum.Font.SourceSansBold
 TitleLabel.TextSize = 18
 TitleLabel.TextColor3 = Color3.fromRGB(240, 240, 255)
@@ -193,15 +193,15 @@ local function safeLoadScript(url, scriptName)
 end
 
 -- 9. 绑定三大加载选项
-createStealthButton("加载：学乱汉化 (主包)", 1, Color3.fromRGB(59, 130, 246), function()
+createStealthButton("加载：学乱汉化", 1, Color3.fromRGB(59, 130, 246), function()
     safeLoadScript(URL1, "学乱汉化")
 end)
 
-createStealthButton("加载：学乱汉化 1 (副包)", 2, Color3.fromRGB(139, 92, 246), function()
+createStealthButton("加载：学乱汉化 1", 2, Color3.fromRGB(139, 92, 246), function()
     safeLoadScript(URL2, "学乱汉化1")
 end)
 
-createStealthButton("⚡ 一键加载全部 (分时装载)", 3, Color3.fromRGB(16, 185, 129), function()
+createStealthButton("一键加载全部", 3, Color3.fromRGB(16, 185, 129), function()
     StatusLabel.Text = "状态: 开始分时顺序装载..."
     safeLoadScript(URL1, "学乱汉化")
     task.wait(1.5)
