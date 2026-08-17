@@ -1,0 +1,411 @@
+do
+    local Translations = {
+        -- ==================== 1. 侧边栏菜单 (Sidebar) ====================
+        ["Information"] = "信息说明",
+        ["Local Player"] = "本地玩家",
+        ["Exploits"] = "漏洞作弊",
+        ["Visuals"] = "视觉透视",
+        ["Commands"] = "指令列表",
+        ["Map"] = "地图功能",
+        ["Disguise"] = "身份伪装",
+        ["Miscallenous"] = "杂项设置",
+        ["UI Settings"] = "UI设置",
+
+        -- ==================== 2. 顶部与通用界面 (Header & General) ====================
+        ["Toggle"] = "开关UI",
+        ["Lock"] = "锁定界面",
+        ["Search"] = "搜索...",
+        ["Search..."] = "搜索...",
+        ["Loading UI"] = "正在加载UI...",
+        ["Update Log"] = "更新日志",
+        ["Old test version, Do not expect updates."] = "旧测试版本，请勿期待后续更新。",
+        ["Keybinds"] = "快捷按键绑定",
+        ["None"] = "无",
+        ["Disabled"] = "已禁用",
+        ["All"] = "全部",
+        ["Normal"] = "普通/默认",
+        ["Target"] = "选择目标",
+
+        -- ==================== 3. 本地玩家 (Local Player) ====================
+        ["Movement"] = "移动设置",
+        ["Character"] = "角色设置",
+        ["Invisibility"] = "隐身模式",
+        ["M1 Reset / No Dash Debounce"] = "M1重置 / 无冲刺冷却",
+        ["Emote Dash"] = "动作/表情冲刺",
+        ["Speed Hack Enabled"] = "开启移动加速",
+        ["Speed Hack Method"] = "移动加速模式",
+        ["CFrame"] = "翻译不出来",
+        ["Velocity"] = "速度",
+        ["Upside Down"] = "颠倒角色",
+        ["Fly"] = "开启飞行",
+        ["Fly Speed"] = "飞行速度",
+        ["Fly Rotations"] = "飞行旋转模式",
+        ["Horizontal"] = "仅水平",
+        ["Vertical & Horizontal"] = "垂直与水平",
+
+        -- 角色防控制与漏洞
+        ["Character Exploits"] = "角色漏洞设置",
+        ["No Dash Cooldown"] = "无冲刺CD",
+        ["No Stun"] = "无僵直/晕眩",
+        ["No Slow"] = "无减速效应",
+        ["No Fatigue"] = "无疲劳状态",
+        ["No Jump Bypass"] = "绕过跳跃限制",
+        ["No Rotations Bypass"] = "绕过旋转限制",
+        ["Anti Ragdoll"] = "防布娃娃(防击倒)",
+        ["Auto Ragdoll Cancel"] = "自动取消击倒",
+        ["Ragdoll Hide"] = "击倒隐藏身体",
+        ["Launch Hide"] = "击飞隐藏身体",
+
+        -- 自动化与冲刺增强
+        ["Automation"] = "自动化功能",
+        ["Auto Frozen Soul"] = "自动冰封灵魂",
+        ["Free Stargazer / Nightchild"] = "免费 观星者 / 夜之子",
+        ["Dashes"] = "冲刺增强设置",
+        ["Custom Front Dash"] = "自定义前冲刺",
+        ["Front Dash Distance"] = "前冲刺距离",
+        ["Custom Side Dash"] = "自定义侧冲刺",
+        ["Side Dash Distance (Multiplier)"] = "侧冲刺距离 (倍率)",
+        ["Side Dash Speed"] = "侧冲刺速度",
+        ["Custom Back Dash"] = "自定义后冲刺",
+        ["Back Dash Distance (Multiplier)"] = "后冲刺距离 (倍率)",
+        ["Reset to Defaults"] = "恢复默认设置",
+
+        -- 传送与音效
+        ["Anime Teleportation"] = "动漫风格传送",
+        ["Teleport Animation"] = "传送动画",
+        ["Teleport Sound"] = "传送音效",
+        ["Goku"] = "孙悟空",
+        ["Goku Black"] = "黑悟空",
+        ["Sound Volume"] = "音量大小",
+        ["Animation Speed"] = "动画播放速度",
+        ["Teleport 1"] = "传送位置 1",
+        ["Teleport 2"] = "传送位置 2",
+        ["Lock-on"] = "锁定目标",
+        ["Prediction:"] = "预判值:",
+        ["Auto Prediction"] = "自动预判",
+        ["Orbit"] = "开启环绕",
+        ["Orbit Speed"] = "环绕速度",
+        ["Orbit Distance"] = "环绕距离",
+        ["Velocity Spoof"] = "速度伪造 (Velocity)",
+
+        -- ==================== 4. 漏洞作弊 (Exploits) ====================
+        ["Trashcan Launch"] = "垃圾桶飞天发射",
+        ["Launch Power"] = "发射力度",
+        ["Skill Bring"] = "技能吸人",
+        ["TP Back on Bring"] = "吸人后传送回原位",
+        ["Skill Bring Area"] = "技能吸人区域",
+        ["Goto"] = "前往区域",
+        ["Back"] = "返回",
+        ["Attack All"] = "全屏/全员攻击",
+        ["Savage Tornado"] = "残暴龙卷风",
+        ["Brutal Beatdown"] = "残暴殴打",
+        ["Crushed Rock Variant"] = "碎石变体",
+        ["Skill Throw"] = "技能投掷",
+        ["No Windstorm Fury BP"] = "无狂风怒号限制",
+        ["No Tatsumaki Ult BP"] = "无龙卷大招限制",
+        ["No Prey's Peril BP"] = "无猎物危机限制",
+        ["Fling On Death"] = "死亡时击飞他人",
+
+        -- 碰撞/连招与隐形技能
+        ["Wall Combo"] = "撞墙连招",
+        ["Wall Combo Anywhere"] = "任意位置撞墙连招",
+        ["Auto Wall Combo"] = "自动撞墙连招",
+        ["Auto Wall Combo + Bring"] = "自动撞墙连招 + 吸人",
+        ["Teleport Back"] = "传送返回",
+        ["Area"] = "指定区域",
+        ["Teleport To Area"] = "传送至该区域",
+        ["Invisible Moves"] = "隐形技能招式",
+        ["Invisible Block"] = "隐形格挡",
+        ["Block Color"] = "格挡颜色",
+        ["Invisible Counter"] = "隐形反击",
+        ["Invisible Counter Hit"] = "隐形反击命中",
+        ["Invisible Saitama"] = "隐形埼玉技能",
+        ["Invisible Ult"] = "隐形大招",
+        ["Invisible Table Flip"] = "隐形掀桌",
+        ["Invisible Serious Punch"] = "隐形认真一拳",
+        ["Invisible Omni-Directional Punch"] = "隐形全向拳",
+        ["Invisible Garou"] = "隐形饿狼技能",
+        ["Invisible Speed-o'-Sonic"] = "隐形音速索尼克",
+        ["Invisible Genos"] = "隐形杰诺斯技能",
+        ["Invisible Incinerate"] = "隐形焚烧",
+        ["Invisible Tatsumaki"] = "隐形龙卷技能",
+        ["Invisible Atomic Samurai"] = "隐形原子武士",
+        ["Invisible Metal Bat"] = "隐形金属棒球",
+        ["Invisible Suiryu"] = "隐形水龙技能",
+
+        -- 防制与反制功能 (Anti's)
+        ["Anti's"] = "防制/防护设置",
+        ["Toggle All On"] = "全部开启",
+        ["Toggle All Off"] = "全部关闭",
+        ["Anti Fling"] = "防甩飞/防击飞",
+        ["Anti Invisibility"] = "防隐身检测",
+        ["Backdash Cancel"] = "取消后冲刺",
+        ["Anti Trash Can"] = "防垃圾桶拉扯",
+        ["Anti Saitama"] = "防埼玉",
+        ["Anti Garou"] = "防饿狼",
+        ["Anti Genos"] = "防杰诺斯",
+        ["Anti Tatsumaki"] = "防龙卷",
+        ["Anti Atomic Samurai"] = "防原子武士",
+        ["Anti Suiryu"] = "防水龙",
+        ["Anti Metal Bat"] = "防金属棒球",
+        ["Anti Speed-o'-Sonic"] = "防音速索尼克",
+        ["Anti KJ"] = "防KJ",
+        ["Anti Frozen Soul"] = "防冰封灵魂",
+        ["Anti Permafrost"] = "防永冻冰霜",
+        ["Anti Frost Forge"] = "防霜冻锻造",
+        ["Anti Freezing Path"] = "防冰冻路径",
+        ["Anti Judgement Chain"] = "防审判之链",
+
+        -- ==================== 5. 视觉透视 (Visuals) ====================
+        ["Main"] = "主要功能",
+        ["No Camera Animations"] = "禁用视角镜头动画",
+        ["Enabled CoreGUI Elements"] = "启用系统原生GUI元素",
+        ["Player List"] = "玩家列表",
+        ["Chat"] = "聊天框",
+        ["Desync Visualizer"] = "错位/异步可视化",
+        ["Always Enabled"] = "保持开启",
+        ["ESP"] = "ESP透视",
+        ["Show Death Counter"] = "显示死亡计数器",
+        ["Move Notifications"] = "招式技能通知",
+        ["Expose Move In Chat"] = "在聊天框显示对方招式",
+        ["Expose Whitelisted Players"] = "公开白名单玩家",
+        ["Moves"] = "技能招式透视",
+        ["Box ESP"] = "方框透视",
+        ["Rainbow Box"] = "彩虹方框",
+        ["Box Thickness:"] = "方框粗细:",
+        ["Box Transparency:"] = "方框透明度:",
+        ["Face Camera"] = "面向镜头",
+        ["Tracers"] = "玩家射线/追踪线",
+        ["Rainbow Tracers"] = "彩虹射线",
+        ["Tracer Thickness:"] = "射线粗细:",
+        ["Tracer Transparency:"] = "射线透明度:",
+        ["Unlock Tracers"] = "解锁射线限制",
+        ["Death Blow"] = "致命一击",
+        ["Last Breath"] = "最后一息",
+        ["20-20-20 Dropkick"] = "20-20-20 飞踢",
+
+        -- 环境修改 (World)
+        ["World"] = "世界环境修改",
+        ["No Walls"] = "移除墙体",
+        ["No Trees"] = "移除树木",
+        ["No Debris"] = "移除碎片残骸",
+        ["No Smoke"] = "移除烟雾效果",
+        ["No Explosions"] = "移除爆炸特效",
+        ["Ambient Enabled"] = "启用自定义环境光",
+        ["Rainbow Ambient"] = "彩虹环境光",
+
+        -- ==================== 6. 指令列表 (Commands) ====================
+        ["Settings"] = "指令设置",
+        ["Command Bar"] = "快捷指令栏",
+        ["Semicolon"] = "分号键(;)",
+        ["Use Commands in Chat"] = "允许在聊天框输入指令",
+        ["Send Command In Chat"] = "发送指令信息到聊天框",
+        ["Fling Type"] = "甩飞模式类型",
+        ["Void"] = "虚空甩飞",
+        ["Anti-Fling"] = "防甩飞反制",
+        ["Fling Speed:"] = "甩飞速度:",
+        ["Fling Timeout:"] = "甩飞超时:",
+
+        -- ==================== 7. 地图功能 (Map) ====================
+        ["Teleports"] = "传送地点列表",
+        ["Above Tunnel"] = "隧道上方",
+        ["Arena"] = "竞技场",
+        ["Atomic Slash"] = "原子斩区域",
+        ["Baseplate"] = "基础平板",
+        ["Below Baseplate"] = "基础平板下方",
+        ["Bigger Jail"] = "大监狱",
+        ["Even Bigger Jail"] = "更大监狱",
+        ["Dark Domain"] = "黑暗领域",
+        ["Death Counter"] = "死亡反击区域",
+        ["Jail"] = "监狱",
+        ["Jail But Smaller"] = "较小监狱",
+        ["Middle"] = "地图中心",
+        ["Mountain 1"] = "高山 1",
+        ["Mountain 2"] = "高山 2",
+        ["Mountain Edge"] = "山脉边缘",
+        ["Players"] = "玩家列表",
+
+        -- ==================== 8. 杂项设置 (Miscallenous) ====================
+        -- 反封禁功能 (Anti Ban)
+        ["Anti Ban"] = "反封禁设置",
+        ["Staff Detector"] = "管理/工作人员检测",
+        ["Check Group"] = "检测群组身份",
+        ["Check Friends"] = "检测好友列表",
+        ["Anticheat Flags:"] = "反作弊标记说明:",
+        ["A1: Report"] = "A1: 举报记录",
+        ["A2: Animation"] = "A2: 异常动画",
+        ["A3: Remote Event"] = "A3: 远程事件",
+        ["Anticheat Detector"] = "反作弊检测提醒",
+        ["Avoid Ban Method"] = "避封禁响应方式",
+        ["Auto Leave"] = "自动退出游戏",
+        ["Auto Rejoin"] = "自动重新连接",
+        ["Rejoin Delay"] = "重新连接延迟",
+
+        -- 动作与姿势替换 (Animations)
+        ["Animations"] = "动作/动画替换",
+        ["Idle Animation"] = "待机姿势动画",
+        ["Watch"] = "看表姿势",
+        ["Casual"] = "休闲姿态",
+        ["Confident"] = "自信姿态",
+        ["Fent Master"] = "摇晃大师",
+        ["Fly Idle"] = "飞行悬停姿态",
+        ["Random"] = "随机姿态",
+        ["Idle Animation End Fade Time"] = "待机动画淡出时间",
+        ["Run Animation"] = "跑步动画",
+        ["Gojo Run"] = "五条悟同款跑",
+        ["Sonic EXE"] = "邪恶索尼克跑",
+        ["Girly Walk"] = "少女步态",
+        ["Steve Walk"] = "史蒂夫步伐",
+        ["Sassy Walk"] = "傲娇/时髦步伐",
+        ["Yandere Walk"] = "病娇步态",
+        ["Sword Walk"] = "持剑行走",
+        ["Run Animation Speed"] = "跑步动画播放速度",
+        ["Run Animation Start Fade Time"] = "跑步动画淡入时间",
+        ["Run Animation End Fade Time"] = "跑步动画淡出时间",
+        ["Block Animation"] = "格挡动作动画",
+        ["One Hand"] = "单手格挡",
+        ["Gojo"] = "五条悟姿态",
+        ["Infinity"] = "无下限/无限",
+        ["Boxer"] = "拳击手姿态",
+        ["Block Animation End Fade Time"] = "格挡动画淡出时间",
+        ["Looped Animation"] = "循环动作/舞步",
+        ["Spin"] = "旋转",
+        ["Boogie Down"] = "热舞姿态",
+        ["Fucked Up Character"] = "鬼畜/崩坏角色模型",
+        ["No Trashcan Hold"] = "禁用拿着垃圾桶",
+        ["Disable Intro"] = "禁用开场动画",
+
+        -- 拓展功能 (Extra)
+        ["Extra"] = "拓展增强功能",
+        ["Auto Emote Spin"] = "自动表情旋转",
+        ["Knockoff Free Emotes"] = "解锁全部免费表情",
+        ["Free Emote Search Bar"] = "免费表情搜索栏",
+        ["Free 8 Emote Slots"] = "免费8表情槽位",
+        ["Free Emote Page"] = "免费表情页面",
+        ["Total Emotes:"] = "表情总计:",
+        ["Disable Messaging"] = "禁用系统消息提示",
+        ["Anti Chat Logger"] = "防聊天日志记录",
+        ["Chat Flooder"] = "自动聊天刷屏",
+        ["Chat Flooder Delay"] = "刷屏发送延迟",
+
+        -- 外置脚本库与版权信息 (Scripts & Credits)
+        ["Scripts"] = "内置外置脚本库",
+        ["Infinite Yield"] = "Infinite Yield 通用指令集",
+        ["Remote Spy"] = "Remote Spy 远程数据包抓包",
+        ["Dark Dex V3"] = "Dark Dex V3 游戏资源解密",
+        ["Bypassed Dark Dex V3"] = "绕过检测版 Dark Dex V3",
+        ["Credits:"] = "制作人员名单:",
+        ["Kade's Scripts:"] = "Kade 的脚本集:"
+    }
+
+    local function translateText(text)
+        if not text or type(text) ~= "string" then return text end
+        
+        if Translations[text] then
+            return Translations[text]
+        end
+        
+        for en, cn in pairs(Translations) do
+            if text:find(en) then
+                return text:gsub(en, cn)
+            end
+        end
+        
+        return text
+    end
+
+    local function setupTranslationEngine()
+        local success, err = pcall(function()
+            local oldIndex = getrawmetatable(game).__newindex
+            setreadonly(getrawmetatable(game), false)
+            
+            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
+                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
+                    v = translateText(tostring(v))
+                end
+                return oldIndex(t, k, v)
+            end)
+            
+            setreadonly(getrawmetatable(game), true)
+        end)
+        
+        if not success then
+            warn("元表劫持失败:", err)
+           
+            local translated = {}
+            local function scanAndTranslate()
+                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+                    if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                        pcall(function()
+                            local text = gui.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    gui.Text = translatedText
+                                    translated[gui] = true
+                                end
+                            end
+                        end)
+                    end
+                end
+                
+                local player = game:GetService("Players").LocalPlayer
+                if player and player:FindFirstChild("PlayerGui") then
+                    for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
+                        if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                            pcall(function()
+                                local text = gui.Text
+                                if text and text ~= "" then
+                                    local translatedText = translateText(text)
+                                    if translatedText ~= text then
+                                        gui.Text = translatedText
+                                        translated[gui] = true
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+            
+            local function setupDescendantListener(parent)
+                parent.DescendantAdded:Connect(function(descendant)
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                        task.wait(0.1)
+                        pcall(function()
+                            local text = descendant.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    descendant.Text = translatedText
+                                end
+                            end
+                        end)
+                    end
+                end)
+            end
+            
+            pcall(setupDescendantListener, game:GetService("CoreGui"))
+            local player = game:GetService("Players").LocalPlayer
+            if player and player:FindFirstChild("PlayerGui") then
+                pcall(setupDescendantListener, player.PlayerGui)
+            end
+            
+            while true do
+                scanAndTranslate()
+                task.wait(3)
+            end
+        end
+    end
+
+    task.wait(2)
+    setupTranslationEngine()
+
+    local success, err = pcall(function()
+        loadstring(game:HttpGet('https://raw.githubusercontent.com/ATrainz/Phantasm/refs/heads/main/Games/TSB.lua'))()
+    end)
+
+    if not success then
+        warn("加载失败:", err)
+    end
+end
