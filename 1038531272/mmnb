@@ -29,6 +29,7 @@ local Window = Rayfield:CreateWindow({
 
 -- 创建选项卡
 local AboutTab    = Window:CreateTab("关于", "info")        
+local UniversalTab = Window:CreateTab("通用", "globe")
 local TSBTab      = Window:CreateTab("最强战场", 4370060017)
 local SchoolTab   = Window:CreateTab("学乱", 4483362458)
 local SettingsTab = Window:CreateTab("设置", "settings")
@@ -37,7 +38,19 @@ AboutTab:CreateSection("脚本说明")
 
 AboutTab:CreateParagraph({
    Title = "脚本介绍",
-   Content = "这是一个免费的不存在任何付费\n小林感谢所有的户\n谢谢你们的支持"
+   Content = "这是一个免费的不存在任何付费\n小林感谢所有的用户\n谢谢你们的支持"
+})
+
+UniversalTab:CreateSection("通用 脚本列表")
+
+UniversalTab:CreateButton({
+   Name = "多方向吸附",
+   Callback = function()
+      local success, err = pcall(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84"))()
+      end)
+      if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
 })
 
 TSBTab:CreateSection("最强战场 脚本列表")
