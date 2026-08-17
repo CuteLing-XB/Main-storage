@@ -71,7 +71,7 @@ do
         ["Height"] = "身高",
         ["Whitelist / hover colors"] = "白名单 / 悬停颜色",
         ["Player Visuals"] = "玩家视觉效果",
-        ["Remove Stun Blur"] = "移除眩晕模糊",
+        ["Remove Stun Blur"] = "移除眩眩模糊",
         ["HP Bar (Roblox)"] = "Roblox血条",
         ["HP / Stamina + Crit Bars"] = "血量/体力/重击条",
         ["Show Roblox Chat"] = "显示Roblox聊天",
@@ -130,98 +130,95 @@ do
         ["Export current config"] = "导出当前配置"
     }
 
-    -- 纯文本安全替换函数，防正则崩溃
-    local function plainReplace(str, findStr, replaceStr)
-        local b, e = str:find(findStr, 1, true)
-        if not b then return str end
-        return str:sub(1, b - 1) .. replaceStr .. str:sub(e + 1)
-    end
-
+    -- 极速且安全的纯文本匹配逻辑
     local function translateText(text)
         if not text or type(text) ~= "string" or text == "" then return text end
         
-        -- 精确匹配优先
+        -- 1. 优先精确匹配 (O(1) 速度)
         if Translations[text] then
             return Translations[text]
         end
         
-        -- 模糊查找（关闭正则匹配）
+        -- 2. 子字符串匹配 (关闭正则，防语法报错)
         for en, cn in pairs(Translations) do
-            if text:find(en, 1, true) then
-                return plainReplace(text, en, cn)
+            if #en > 2 and text:find(en, 1, true) then
+                local b, e = text:find(en, 1, true)
+                return text:sub(1, b - 1) .. cn .. text:sub(e + 1)
             end
         end
         
         return text
     end
 
-    local function setupTranslationEngine()
+    -- 无需修改元表的安全监听引擎
+    local function startSafeTranslator()
         task.spawn(function()
-            local success, err = pcall(function()
-                local rawMT = getrawmetatable(game)
-                local oldIndex = rawMT.__newindex
-                setreadonly(rawMT, false)
-                
-                rawMT.__newindex = newcclosure(function(t, k, v)
-                    if typeof(t) == "Instance" and (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
-                        pcall(function()
-                            v = translateText(tostring(v))
-                        end)
-                    end
-                    return oldIndex(t, k, v)
-                end)
-                
-                setreadonly(rawMT, true)
-            end)
+            local CoreGui = game:GetService("CoreGui")
+            local Players = game:GetService("Players")
+            local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+            local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
             
-            if not success then
-                warn("元表劫持失败，降级为轮询模式:", err)
-                
-                local function translateGui(gui)
-                    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
+            -- 使用弱引用防止内存泄漏，记录已绑定的控件
+            local boundObjects = setmetatable({}, {__mode = "k"})
+
+            local function processTextElement(obj)
+                if boundObjects[obj] then return end
+                if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                    boundObjects[obj] = true
+                    
+                    -- 首次翻译
+                    pcall(function()
+                        local currentText = obj.Text
+                        if currentText and currentText ~= "" then
+                            local newText = translateText(currentText)
+                            if newText ~= currentText then
+                                obj.Text = newText
+                            end
+                        end
+                    end)
+                    
+                    -- 监听后续文字变化
+                    obj:GetPropertyChangedSignal("Text"):Connect(function()
                         pcall(function()
-                            local text = gui.Text
-                            if text and text ~= "" then
-                                local translatedText = translateText(text)
-                                if translatedText ~= text then
-                                    gui.Text = translatedText
+                            local txt = obj.Text
+                            if txt and txt ~= "" then
+                                local tTxt = translateText(txt)
+                                if tTxt ~= txt then
+                                    obj.Text = tTxt
                                 end
                             end
                         end)
-                    end
-                end
-
-                local function bindContainer(container)
-                    if not container then return end
-                    container.DescendantAdded:Connect(function(descendant)
-                        task.wait(0.05)
-                        translateGui(descendant)
                     end)
-                    for _, desc in ipairs(container:GetDescendants()) do
-                        translateGui(desc)
-                    end
-                end
-
-                pcall(bindContainer, game:GetService("CoreGui"))
-                local player = game:GetService("Players").LocalPlayer
-                if player and player:FindFirstChild("PlayerGui") then
-                    pcall(bindContainer, player.PlayerGui)
                 end
             end
+
+            local function bindContainer(container)
+                if not container then return end
+                container.DescendantAdded:Connect(function(descendant)
+                    task.wait(0.01)
+                    processTextElement(descendant)
+                end)
+                for _, desc in ipairs(container:GetDescendants()) do
+                    processTextElement(desc)
+                end
+            end
+
+            -- 监听 CoreGui 与 PlayerGui 的 UI 生成
+            pcall(bindContainer, CoreGui)
+            pcall(bindContainer, PlayerGui)
         end)
     end
 
-    -- 开启汉化引擎
-    setupTranslationEngine()
+    -- 1. 启动完全无害的汉化引擎
+    startSafeTranslator()
 
-    -- 加载主脚本
-    task.wait(1)
+    -- 2. 正常运行原 Luarmor 加密脚本 (不修改任何元表，不触发反作弊)
     local success, err = pcall(function()
         loadstring(game:HttpGet('https://api.luarmor.net/files/v4/loaders/e4f879e72b8fcf03f318ec5e76201ec7.lua'))()
     end)
 
     if not success then
-        warn("主脚本加载失败:", err)
+        warn("Luarmor 主脚本加载失败:", err)
     end
 end
 
