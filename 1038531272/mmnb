@@ -4,7 +4,7 @@ local Window = Rayfield:CreateWindow({
    Name = "主菜单",
    LoadingTitle = "Rayfield脚本加载中",
    LoadingSubtitle = "by 小林",
-   Theme = "Bloom", -- 设置默认主题为樱花粉 (Bloom)
+   Theme = "Bloom", -- 默认初始主题设置为 Bloom (樱花粉)
    
    -- 卡密系统设置
    KeySystem = true,
@@ -26,19 +26,6 @@ local Window = Rayfield:CreateWindow({
    
    DisableRayfieldPrompts = false,
 })
-
--- 主题映射表（中文名 -> 英文主题ID）
-local themeMap = {
-   ["樱花粉 (Bloom)"] = "Bloom",
-   ["默认暗黑 (Default)"] = "Default",
-   ["琥珀余晖 (AmberGlow)"] = "AmberGlow",
-   ["紫水晶 (Amethyst)"] = "Amethyst",
-   ["深海蓝 (DarkBlue)"] = "DarkBlue",
-   ["翡翠绿 (Green)"] = "Green",
-   ["明亮白 (Light)"] = "Light",
-   ["海洋蓝 (Ocean)"] = "Ocean",
-   ["宁静蓝 (Serenity)"] = "Serenity"
-}
 
 -- 创建选项卡
 local AboutTab     = Window:CreateTab("关于", "info")        
@@ -150,23 +137,22 @@ SettingsTab:CreateSection("主题与外观")
 SettingsTab:CreateDropdown({
    Name = "选择UI主题配色",
    Options = {
-      "樱花粉 (Bloom)",
-      "默认暗黑 (Default)", 
-      "琥珀余晖 (AmberGlow)", 
-      "紫水晶 (Amethyst)", 
-      "深海蓝 (DarkBlue)", 
-      "翡翠绿 (Green)", 
-      "明亮白 (Light)", 
-      "海洋蓝 (Ocean)", 
-      "宁静蓝 (Serenity)"
+      "Bloom",
+      "Default", 
+      "AmberGlow", 
+      "Amethyst", 
+      "DarkBlue", 
+      "Green", 
+      "Light", 
+      "Ocean", 
+      "Serenity"
    },
-   CurrentOption = {"樱花粉 (Bloom)"},
+   CurrentOption = {"Bloom"},
    MultipleOptions = false,
    Flag = "ThemeDropdown",
    Callback = function(Option)
-      local selectedChinese = Option[1] or Option
-      local realTheme = themeMap[selectedChinese] or "Bloom"
-      Window:ChangeTheme(realTheme)
+      local selectedTheme = type(Option) == "table" and Option[1] or Option
+      Window:ChangeTheme(selectedTheme)
    end,
 })
 
