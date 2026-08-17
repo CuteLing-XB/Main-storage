@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "🥵",
+   Name = "🤓主菜单",
    LoadingTitle = "Rayfield脚本加载中",
    LoadingSubtitle = "by 小林",
    Theme = "Default",
@@ -15,7 +15,7 @@ local Window = Rayfield:CreateWindow({
       FileName = "MyScriptKey", -- 保存卡密记录的文件名 (存放在 workspace 目录下)
       SaveKey = true,          -- 开启自动记住功能
       GrabKeyFromSite = false, -- 使用本地内置列表进行验证
-      Key = {"小林", "1038531272"} -- 在此修改允许解锁的卡密列表
+      Key = {"小林", "1038531272", "67kid"} -- 在此修改允许解锁的卡密列表
    },
 
    -- 界面隐藏
@@ -47,16 +47,6 @@ TSBTab:CreateButton({
    Callback = function()
       local success, err = pcall(function()
          loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"))()
-      end)
-      if not success then warn("脚本执行失败: " .. tostring(err)) end
-   end,
-})
-
-TSBTab:CreateButton({
-   Name = "执行幻象汉化",
-   Callback = function()
-      local success, err = pcall(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%B9%BB%E8%B1%A1%E6%B1%89%E5%8C%96%23"))()
       end)
       if not success then warn("脚本执行失败: " .. tostring(err)) end
    end,
