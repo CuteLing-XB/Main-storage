@@ -1,0 +1,753 @@
+-- ====================================================
+-- 1. 竞态检查：等待游戏 DataModel 完全加载完毕
+-- ====================================================
+if not game:IsLoaded() then
+    repeat task.wait() until game:IsLoaded()
+end
+
+if getgenv().ZKAYMagnetExecuted then return end
+getgenv().ZKAYMagnetExecuted = true
+
+-- ====================================================
+-- 2. cloneref 包装与服务隔离
+-- ====================================================
+local safeCloneref = (cloneref or function(obj) return obj end)
+
+local Players = safeCloneref(game:GetService("Players"))
+local RunService = safeCloneref(game:GetService("RunService"))
+local CoreGui = safeCloneref(game:GetService("CoreGui"))
+local TweenService = safeCloneref(game:GetService("TweenService"))
+local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+
+-- ====================================================
+-- 3. 环境诊断与 API 探测
+-- ====================================================
+local ExecutorEnv = {
+    ProtectGui = protect_gui or (syn and syn.protect_gui) or nil,
+    GetHui = gethui or get_hidden_gui or nil,
+    CheckCaller = checkcaller or nil,
+    NewCClosure = newcclosure or function(f) return f end,
+}
+
+-- ====================================================
+-- 4. 随机字符串生成器（消除静态节点特征名称）
+-- ====================================================
+local function getRandomString(length)
+    length = length or math.random(12, 16)
+    local charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+    local result = {}
+    for i = 1, length do
+        local randIndex = math.random(1, #charset)
+        table.insert(result, string.sub(charset, randIndex, randIndex))
+    end
+    return table.concat(result)
+end
+
+-- 通用安全实例创建器（自动随机化名称）
+local function createSafeInstance(className, properties)
+    local inst = Instance.new(className)
+    inst.Name = getRandomString()
+    if properties then
+        for k, v in pairs(properties) do
+            inst[k] = v
+        end
+    end
+    return inst
+end
+
+-- ====================================================
+-- 5. 主配色与状态变量
+-- ====================================================
+local Colors = {
+    Background = Color3.fromRGB(22, 22, 26),
+    Panel = Color3.fromRGB(32, 32, 38),
+    GoldAccent = Color3.fromRGB(245, 185, 30),
+    GoldDark = Color3.fromRGB(160, 115, 15),
+    RedAccent = Color3.fromRGB(255, 50, 50),
+    RedDark = Color3.fromRGB(150, 20, 20),
+    Stroke = Color3.fromRGB(212, 175, 55),
+    TextPrimary = Color3.fromRGB(255, 255, 255),
+    TextDim = Color3.fromRGB(180, 180, 190),
+    Disabled = Color3.fromRGB(120, 50, 50),
+}
+
+local state = {
+    enabled = false,
+    targetPlayer = nil,
+    direction = "Behind", -- "Head", "Below", "Left", "Right", "Behind"
+    distance = 4.0,       -- 浮点数，支持精细微调
+}
+
+local animatedGradients = {}
+local eventConnections = {}
+
+-- UI 工具函数
+local function addCorner(parent, radius)
+    local corner = createSafeInstance("UICorner", {
+        CornerRadius = UDim.new(0, radius or 6),
+        Parent = parent
+    })
+    return corner
+end
+
+-- 生成平滑闭合、无断点的跑马灯 ColorSequence
+local function makeSeamlessColorSequence(activeColor)
+    local dimColor = Color3.new(activeColor.R * 0.12, activeColor.G * 0.12, activeColor.B * 0.12)
+    return ColorSequence.new({
+        ColorSequenceKeypoint.new(0.0, dimColor),
+        ColorSequenceKeypoint.new(0.35, dimColor),
+        ColorSequenceKeypoint.new(0.50, activeColor),
+        ColorSequenceKeypoint.new(0.65, dimColor),
+        ColorSequenceKeypoint.new(1.0, dimColor)
+    })
+end
+
+-- 创建无缝连续平滑跑马灯边框
+local function addMarqueeStroke(parent, color, thickness)
+    local stroke = createSafeInstance("UIStroke", {
+        Color = Color3.fromRGB(255, 255, 255),
+        Thickness = thickness or 1.2,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        Parent = parent
+    })
+
+    local activeColor = color or Colors.GoldAccent
+    local gradient = createSafeInstance("UIGradient", {
+        Color = makeSeamlessColorSequence(activeColor),
+        Transparency = NumberSequence.new(0),
+        Parent = stroke
+    })
+
+    table.insert(animatedGradients, { Gradient = gradient, Stroke = stroke })
+    return stroke, gradient
+end
+
+-- 动态改变跑马灯光束颜色
+local function updateMarqueeColor(stroke, newColor)
+    for _, item in ipairs(animatedGradients) do
+        if item.Stroke == stroke then
+            item.Gradient.Color = makeSeamlessColorSequence(newColor)
+            break
+        end
+    end
+end
+
+----------------------------------------------------
+-- 独立吸附解算逻辑 (过滤目标倒地/趴下的旋转影响)
+----------------------------------------------------
+local function getTargetYawCFrame(targetRoot)
+    local targetPos = targetRoot.Position
+    local lookVector = targetRoot.CFrame.LookVector
+    local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
+    if flatLook.Magnitude < 0.001 then
+        flatLook = -Vector3.zAxis
+    else
+        flatLook = flatLook.Unit
+    end
+    return CFrame.lookAt(targetPos, targetPos + flatLook)
+end
+
+local function calculateMagnetCFrame(targetRoot)
+    local targetPos = targetRoot.Position
+    local yawCFrame = getTargetYawCFrame(targetRoot)
+    local myPos = targetPos
+    local dist = state.distance
+
+    if state.direction == "Behind" then
+        myPos = (yawCFrame * CFrame.new(0, 0, dist)).Position
+    elseif state.direction == "Head" then
+        myPos = (yawCFrame * CFrame.new(0, dist, 0)).Position
+    elseif state.direction == "Below" then
+        myPos = (yawCFrame * CFrame.new(0, -dist, 0)).Position
+    elseif state.direction == "Left" then
+        myPos = (yawCFrame * CFrame.new(-dist, 0, 0)).Position
+    elseif state.direction == "Right" then
+        myPos = (yawCFrame * CFrame.new(dist, 0, 0)).Position
+    end
+
+    if (myPos - targetPos).Magnitude > 0.001 then
+        return CFrame.lookAt(myPos, targetPos)
+    else
+        return yawCFrame
+    end
+end
+
+----------------------------------------------------
+-- GUI 构建 (安全父级保护挂载 & 手机紧凑型适配)
+----------------------------------------------------
+local screenGui = createSafeInstance("ScreenGui", {
+    ResetOnSpawn = false
+})
+
+-- 优先使用执行器隐蔽 GUI 节点或隔离挂载
+if ExecutorEnv.GetHui then
+    screenGui.Parent = ExecutorEnv.GetHui()
+elseif ExecutorEnv.ProtectGui then
+    ExecutorEnv.ProtectGui(screenGui)
+    screenGui.Parent = CoreGui
+else
+    local success = pcall(function()
+        screenGui.Parent = CoreGui
+    end)
+    if not success then
+        screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui", 5)
+    end
+end
+
+-- 1. 主UI窗口 (220 x 240)
+local mainFrame = createSafeInstance("Frame", {
+    Size = UDim2.new(0, 220, 0, 240),
+    Position = UDim2.fromScale(0.35, 0.3),
+    BackgroundColor3 = Colors.Background,
+    Active = true,
+    Draggable = true,
+    ClipsDescendants = true,
+    Parent = screenGui
+})
+addCorner(mainFrame, 10)
+local mainStroke = addMarqueeStroke(mainFrame, Colors.GoldAccent, 1.2)
+
+-- 标题容器栏
+local headerFrame = createSafeInstance("Frame", {
+    Size = UDim2.new(1, 0, 0, 28),
+    BackgroundTransparency = 1,
+    Parent = mainFrame
+})
+
+-- 主界面标题
+local titleLabel = createSafeInstance("TextLabel", {
+    Size = UDim2.new(1, -56, 1, 0),
+    Position = UDim2.fromOffset(8, 0),
+    BackgroundTransparency = 1,
+    Text = "ZKAY - 小林在此感谢所有尊贵的用户",
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    TextColor3 = Colors.GoldAccent,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = headerFrame
+})
+
+-- 设置按钮 ⚙
+local settingsBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(0, 20, 0, 20),
+    Position = UDim2.new(1, -48, 0, 4),
+    BackgroundTransparency = 1,
+    Text = "⚙",
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    TextColor3 = Colors.GoldAccent,
+    Parent = headerFrame
+})
+
+-- 缩小/展开按钮 —
+local minimizeBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(0, 20, 0, 20),
+    Position = UDim2.new(1, -24, 0, 4),
+    BackgroundTransparency = 1,
+    Text = "—",
+    Font = Enum.Font.GothamBold,
+    TextSize = 11,
+    TextColor3 = Colors.TextDim,
+    Parent = headerFrame
+})
+
+-- 内容展示区容器
+local contentContainer = createSafeInstance("Frame", {
+    Size = UDim2.new(1, 0, 1, -28),
+    Position = UDim2.fromOffset(0, 28),
+    BackgroundTransparency = 1,
+    Parent = mainFrame
+})
+
+-- 开关按钮
+local toggleBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(1, -16, 0, 30),
+    Position = UDim2.fromOffset(8, 2),
+    BackgroundColor3 = Colors.GoldDark,
+    Font = Enum.Font.GothamBold,
+    Text = "吸附状态: 暂停",
+    TextColor3 = Colors.TextPrimary,
+    TextSize = 11,
+    AutoButtonColor = false,
+    Parent = contentContainer
+})
+addCorner(toggleBtn, 6)
+local toggleStroke = addMarqueeStroke(toggleBtn, Colors.GoldAccent, 1)
+
+-- 目标选择栏
+local targetFrame = createSafeInstance("Frame", {
+    Size = UDim2.new(1, -16, 0, 28),
+    Position = UDim2.fromOffset(8, 38),
+    BackgroundColor3 = Colors.Panel,
+    Parent = contentContainer
+})
+addCorner(targetFrame, 5)
+addMarqueeStroke(targetFrame, Colors.GoldAccent, 1)
+
+local targetText = createSafeInstance("TextLabel", {
+    Size = UDim2.new(0.62, -6, 1, 0),
+    Position = UDim2.fromOffset(6, 0),
+    BackgroundTransparency = 1,
+    Text = "目标: 无",
+    Font = Enum.Font.Gotham,
+    TextSize = 10,
+    TextColor3 = Colors.TextDim,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+    Parent = targetFrame
+})
+
+local selectBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(0.38, 0, 1, 0),
+    Position = UDim2.new(0.62, 0, 0, 0),
+    BackgroundColor3 = Colors.GoldDark,
+    Font = Enum.Font.GothamBold,
+    Text = "选择玩家",
+    TextColor3 = Colors.TextPrimary,
+    TextSize = 10,
+    Parent = targetFrame
+})
+addCorner(selectBtn, 5)
+addMarqueeStroke(selectBtn, Colors.GoldAccent, 1)
+
+-- 方向选择区域
+local dirLabel = createSafeInstance("TextLabel", {
+    Position = UDim2.fromOffset(8, 72),
+    Size = UDim2.new(1, -16, 0, 16),
+    BackgroundTransparency = 1,
+    Text = "吸附方向设置",
+    Font = Enum.Font.GothamMedium,
+    TextSize = 10,
+    TextColor3 = Colors.GoldAccent,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = contentContainer
+})
+
+local dirGrid = createSafeInstance("Frame", {
+    Position = UDim2.fromOffset(8, 92),
+    Size = UDim2.new(1, -16, 0, 72),
+    BackgroundTransparency = 1,
+    Parent = contentContainer
+})
+
+local layout = createSafeInstance("UIGridLayout", {
+    CellSize = UDim2.new(0.31, 0, 0, 30),
+    CellPadding = UDim2.new(0.035, 0, 0.1, 0),
+    Parent = dirGrid
+})
+
+local directions = {
+    { Name = "头顶", Mode = "Head" },
+    { Name = "下方", Mode = "Below" },
+    { Name = "左边", Mode = "Left" },
+    { Name = "右边", Mode = "Right" },
+    { Name = "后方", Mode = "Behind" },
+}
+
+local dirBtns = {}
+for _, dirData in ipairs(directions) do
+    local isSelected = (state.direction == dirData.Mode)
+    local btn = createSafeInstance("TextButton", {
+        BackgroundColor3 = Colors.Panel,
+        Font = Enum.Font.GothamMedium,
+        Text = dirData.Name,
+        TextColor3 = Colors.TextPrimary,
+        TextSize = 10,
+        Parent = dirGrid
+    })
+    addCorner(btn, 5)
+    
+    local stroke = addMarqueeStroke(btn, isSelected and Colors.RedAccent or Colors.GoldAccent, 1)
+
+    btn.MouseButton1Click:Connect(function()
+        state.direction = dirData.Mode
+        for _, bData in pairs(dirBtns) do
+            local isSel = (bData.Mode == state.direction)
+            updateMarqueeColor(bData.Stroke, isSel and Colors.RedAccent or Colors.GoldAccent)
+        end
+    end)
+    table.insert(dirBtns, { Btn = btn, Mode = dirData.Mode, Stroke = stroke })
+end
+
+-- 距离步进设置
+local distFrame = createSafeInstance("Frame", {
+    Size = UDim2.new(1, -16, 0, 26),
+    Position = UDim2.fromOffset(8, 172),
+    BackgroundColor3 = Colors.Panel,
+    Parent = contentContainer
+})
+addCorner(distFrame, 5)
+addMarqueeStroke(distFrame, Colors.GoldAccent, 1)
+
+local distText = createSafeInstance("TextLabel", {
+    Size = UDim2.new(0.5, -6, 1, 0),
+    Position = UDim2.fromOffset(6, 0),
+    BackgroundTransparency = 1,
+    Text = string.format("吸附距离: %.1fm", state.distance),
+    Font = Enum.Font.Gotham,
+    TextSize = 10,
+    TextColor3 = Colors.TextDim,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = distFrame
+})
+
+local minusBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(0.2, 0, 0.8, 0),
+    Position = UDim2.new(0.55, 0, 0.1, 0),
+    BackgroundColor3 = Colors.Background,
+    Text = "-",
+    TextColor3 = Colors.GoldAccent,
+    Font = Enum.Font.GothamBold,
+    Parent = distFrame
+})
+addCorner(minusBtn, 3)
+addMarqueeStroke(minusBtn, Colors.GoldAccent, 1)
+
+local plusBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(0.2, 0, 0.8, 0),
+    Position = UDim2.new(0.78, 0, 0.1, 0),
+    BackgroundColor3 = Colors.Background,
+    Text = "+",
+    TextColor3 = Colors.GoldAccent,
+    Font = Enum.Font.GothamBold,
+    Parent = distFrame
+})
+addCorner(plusBtn, 3)
+addMarqueeStroke(plusBtn, Colors.GoldAccent, 1)
+
+-- 长按加减控制逻辑
+local function bindAutoHold(button, delta)
+    local holding = false
+
+    local function changeValue()
+        state.distance = math.clamp(state.distance + delta, 0.1, 50.0)
+        distText.Text = string.format("吸附距离: %.1fm", state.distance)
+    end
+
+    button.MouseButton1Down:Connect(function()
+        holding = true
+        changeValue()
+        task.wait(0.3)
+        while holding do
+            changeValue()
+            task.wait(0.05)
+        end
+    end)
+
+    local function stopHold()
+        holding = false
+    end
+
+    button.MouseButton1Up:Connect(stopHold)
+    button.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            stopHold()
+        end
+    end)
+end
+
+bindAutoHold(minusBtn, -0.1)
+bindAutoHold(plusBtn, 0.1)
+
+----------------------------------------------------
+-- 缩小与展开动画逻辑 (主窗口)
+----------------------------------------------------
+local isMinimized = false
+local fullSize = UDim2.new(0, 220, 0, 240)
+local minSize = UDim2.new(0, 220, 0, 28)
+local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    minimizeBtn.Text = isMinimized and "▢" or "—"
+    
+    if isMinimized then
+        contentContainer.Visible = false
+        TweenService:Create(mainFrame, tweenInfo, { Size = minSize }):Play()
+    else
+        local tween = TweenService:Create(mainFrame, tweenInfo, { Size = fullSize })
+        tween:Play()
+        tween.Completed:Connect(function()
+            if not isMinimized then
+                contentContainer.Visible = true
+            end
+        end)
+    end
+end)
+
+----------------------------------------------------
+-- 2. 独立小悬浮窗 (玩家选择列表，缩小为 160 x 200)
+----------------------------------------------------
+local listFrame = createSafeInstance("Frame", {
+    Size = UDim2.new(0, 160, 0, 200),
+    Position = UDim2.fromScale(0.55, 0.3),
+    BackgroundColor3 = Colors.Background,
+    Visible = false,
+    Active = true,
+    Draggable = true,
+    ClipsDescendants = true,
+    Parent = screenGui
+})
+addCorner(listFrame, 8)
+addMarqueeStroke(listFrame, Colors.GoldAccent, 1.2)
+
+-- 玩家列表头部容器
+local listHeader = createSafeInstance("Frame", {
+    Size = UDim2.new(1, 0, 0, 26),
+    BackgroundTransparency = 1,
+    Parent = listFrame
+})
+
+local listTitle = createSafeInstance("TextLabel", {
+    Size = UDim2.new(1, -50, 1, 0),
+    Position = UDim2.fromOffset(6, 0),
+    BackgroundTransparency = 1,
+    Text = "选择玩家目标",
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+    TextColor3 = Colors.GoldAccent,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = listHeader
+})
+
+-- 玩家列表折叠按钮 —
+local listMinBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(0, 18, 0, 18),
+    Position = UDim2.new(1, -40, 0, 4),
+    BackgroundTransparency = 1,
+    Text = "—",
+    TextColor3 = Colors.TextDim,
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+    Parent = listHeader
+})
+
+-- 玩家列表关闭按钮 ✕
+local closeListBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(0, 18, 0, 18),
+    Position = UDim2.new(1, -20, 0, 4),
+    BackgroundTransparency = 1,
+    Text = "✕",
+    TextColor3 = Colors.TextDim,
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+    Parent = listHeader
+})
+
+local scrollFrame = createSafeInstance("ScrollingFrame", {
+    Size = UDim2.new(1, -10, 1, -30),
+    Position = UDim2.fromOffset(5, 26),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 2,
+    ScrollBarImageColor3 = Colors.GoldAccent,
+    Parent = listFrame
+})
+
+local listLayout = createSafeInstance("UIListLayout", {
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding = UDim.new(0, 4),
+    Parent = scrollFrame
+})
+
+-- 玩家列表窗口折叠动画逻辑
+local isListMinimized = false
+local listFullSize = UDim2.new(0, 160, 0, 200)
+local listMinSize = UDim2.new(0, 160, 0, 26)
+
+listMinBtn.MouseButton1Click:Connect(function()
+    isListMinimized = not isListMinimized
+    listMinBtn.Text = isListMinimized and "▢" or "—"
+    
+    if isListMinimized then
+        scrollFrame.Visible = false
+        TweenService:Create(listFrame, tweenInfo, { Size = listMinSize }):Play()
+    else
+        local tween = TweenService:Create(listFrame, tweenInfo, { Size = listFullSize })
+        tween:Play()
+        tween.Completed:Connect(function()
+            if not isListMinimized then
+                scrollFrame.Visible = true
+            end
+        end)
+    end
+end)
+
+local function updatePlayerList()
+    for _, child in ipairs(scrollFrame:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local isTarget = (state.targetPlayer == p)
+            local pBtn = createSafeInstance("TextButton", {
+                Size = UDim2.new(1, -4, 0, 24),
+                BackgroundColor3 = Colors.Panel,
+                Font = Enum.Font.Gotham,
+                Text = p.DisplayName .. " (@" .. p.Name .. ")",
+                TextColor3 = Colors.TextPrimary,
+                TextSize = 10,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                Parent = scrollFrame
+            })
+            addCorner(pBtn, 4)
+            
+            local pStroke = addMarqueeStroke(pBtn, isTarget and Colors.RedAccent or Colors.GoldAccent, 1)
+
+            pBtn.MouseButton1Click:Connect(function()
+                state.targetPlayer = p
+                targetText.Text = "目标: " .. p.DisplayName
+                -- 点击后保持列表页面打开，不清空悬浮窗
+                updatePlayerList()
+            end)
+        end
+    end
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+end
+
+selectBtn.MouseButton1Click:Connect(function()
+    updatePlayerList()
+    listFrame.Visible = not listFrame.Visible
+end)
+
+closeListBtn.MouseButton1Click:Connect(function()
+    listFrame.Visible = false
+end)
+
+table.insert(eventConnections, Players.PlayerAdded:Connect(updatePlayerList))
+table.insert(eventConnections, Players.PlayerRemoving:Connect(function(p)
+    if state.targetPlayer == p then
+        state.targetPlayer = nil
+        targetText.Text = "目标: 无"
+    end
+    updatePlayerList()
+end))
+
+----------------------------------------------------
+-- 3. 设置面板 (含有卸载UI按钮)
+----------------------------------------------------
+local settingsFrame = createSafeInstance("Frame", {
+    Size = UDim2.new(0, 160, 0, 95),
+    Position = UDim2.fromScale(0.35, 0.3),
+    BackgroundColor3 = Colors.Background,
+    Visible = false,
+    Active = true,
+    Draggable = true,
+    Parent = screenGui
+})
+addCorner(settingsFrame, 8)
+addMarqueeStroke(settingsFrame, Colors.GoldAccent, 1.2)
+
+local settingsTitle = createSafeInstance("TextLabel", {
+    Size = UDim2.new(1, -26, 0, 24),
+    Position = UDim2.fromOffset(6, 0),
+    BackgroundTransparency = 1,
+    Text = "系统设置",
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+    TextColor3 = Colors.GoldAccent,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    Parent = settingsFrame
+})
+
+local closeSettingsBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(0, 18, 0, 18),
+    Position = UDim2.new(1, -20, 0, 3),
+    BackgroundTransparency = 1,
+    Text = "✕",
+    TextColor3 = Colors.TextDim,
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+    Parent = settingsFrame
+})
+
+local unloadBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(1, -20, 0, 32),
+    Position = UDim2.fromOffset(10, 42),
+    BackgroundColor3 = Colors.Panel,
+    Font = Enum.Font.GothamBold,
+    Text = "卸载 UI 脚本",
+    TextColor3 = Colors.RedAccent,
+    TextSize = 11,
+    Parent = settingsFrame
+})
+addCorner(unloadBtn, 5)
+local unloadStroke = addMarqueeStroke(unloadBtn, Colors.RedAccent, 1)
+
+settingsBtn.MouseButton1Click:Connect(function()
+    settingsFrame.Visible = not settingsFrame.Visible
+end)
+
+closeSettingsBtn.MouseButton1Click:Connect(function()
+    settingsFrame.Visible = false
+end)
+
+-- 卸载逻辑处理
+local function unloadScript()
+    state.enabled = false
+    for _, conn in ipairs(eventConnections) do
+        if conn and conn.Connected then
+            conn:Disconnect()
+        end
+    end
+    screenGui:Destroy()
+    getgenv().ZKAYMagnetExecuted = nil
+end
+
+unloadBtn.MouseButton1Click:Connect(unloadScript)
+
+----------------------------------------------------
+-- 吸附控制逻辑
+----------------------------------------------------
+local function setMagnetState(enabled)
+    state.enabled = enabled
+    if enabled then
+        toggleBtn.Text = "吸附状态: 开启"
+        updateMarqueeColor(toggleStroke, Colors.RedAccent)
+    else
+        toggleBtn.Text = "吸附状态: 暂停"
+        updateMarqueeColor(toggleStroke, Colors.GoldAccent)
+    end
+end
+
+toggleBtn.MouseButton1Click:Connect(function()
+    setMagnetState(not state.enabled)
+end)
+
+-- 平滑匀速顺时针跑马灯动画驱动
+local currentAngle = 0
+local ROTATION_SPEED = 140
+
+table.insert(eventConnections, RunService.RenderStepped:Connect(function(deltaTime)
+    currentAngle = (currentAngle + deltaTime * ROTATION_SPEED) % 360
+    for i = #animatedGradients, 1, -1 do
+        local item = animatedGradients[i]
+        if item and item.Gradient and item.Gradient.Parent then
+            item.Gradient.Rotation = currentAngle
+        else
+            table.remove(animatedGradients, i)
+        end
+    end
+end))
+
+table.insert(eventConnections, RunService.Heartbeat:Connect(function()
+    if not state.enabled or not state.targetPlayer then return end
+
+    local myChar = LocalPlayer.Character
+    local targetChar = state.targetPlayer.Character
+
+    if not myChar or not targetChar then return end
+
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+
+    if not myRoot or not targetRoot then return end
+
+    -- 执行贴合解算
+    local calculatedCFrame = calculateMagnetCFrame(targetRoot)
+    myRoot.CFrame = calculatedCFrame
+    myRoot.AssemblyLinearVelocity = Vector3.zero
+    myRoot.AssemblyAngularVelocity = Vector3.zero
+end))
+
