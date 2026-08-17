@@ -4,7 +4,7 @@ local Window = Rayfield:CreateWindow({
    Name = "主菜单",
    LoadingTitle = "Rayfield脚本加载中",
    LoadingSubtitle = "by 小林",
-   Theme = "Default",
+   Theme = "Bloom", -- 设置默认主题为樱花粉 (Bloom)
    
    -- 卡密系统设置
    KeySystem = true,
@@ -27,13 +27,29 @@ local Window = Rayfield:CreateWindow({
    DisableRayfieldPrompts = false,
 })
 
--- 创建选项卡
-local AboutTab    = Window:CreateTab("关于", "info")        
-local UniversalTab = Window:CreateTab("通用", "globe")
-local TSBTab      = Window:CreateTab("最强战场", 4370060017)
-local SchoolTab   = Window:CreateTab("学乱", 4483362458)
-local SettingsTab = Window:CreateTab("设置", "settings")
+-- 主题映射表（中文名 -> 英文主题ID）
+local themeMap = {
+   ["樱花粉 (Bloom)"] = "Bloom",
+   ["默认暗黑 (Default)"] = "Default",
+   ["琥珀余晖 (AmberGlow)"] = "AmberGlow",
+   ["紫水晶 (Amethyst)"] = "Amethyst",
+   ["深海蓝 (DarkBlue)"] = "DarkBlue",
+   ["翡翠绿 (Green)"] = "Green",
+   ["明亮白 (Light)"] = "Light",
+   ["海洋蓝 (Ocean)"] = "Ocean",
+   ["宁静蓝 (Serenity)"] = "Serenity"
+}
 
+-- 创建选项卡
+local AboutTab     = Window:CreateTab("关于", "info")        
+local UniversalTab = Window:CreateTab("通用", "globe")
+local TSBTab       = Window:CreateTab("最强战场", 4370060017)
+local SchoolTab    = Window:CreateTab("学乱", 4483362458)
+local SettingsTab  = Window:CreateTab("设置", "settings")
+
+---------------------------------------------------------
+-- 关于 页面
+---------------------------------------------------------
 AboutTab:CreateSection("脚本说明")
 
 AboutTab:CreateParagraph({
@@ -41,6 +57,9 @@ AboutTab:CreateParagraph({
    Content = "这是一个免费的不存在任何付费\n小林感谢所有的用户\n谢谢你们的支持"
 })
 
+---------------------------------------------------------
+-- 通用 页面
+---------------------------------------------------------
 UniversalTab:CreateSection("通用 脚本列表")
 
 UniversalTab:CreateButton({
@@ -53,6 +72,9 @@ UniversalTab:CreateButton({
    end,
 })
 
+---------------------------------------------------------
+-- 最强战场 页面
+---------------------------------------------------------
 TSBTab:CreateSection("最强战场 脚本列表")
 
 TSBTab:CreateButton({
@@ -85,6 +107,9 @@ TSBTab:CreateButton({
    end,
 })
 
+---------------------------------------------------------
+-- 学乱 页面
+---------------------------------------------------------
 SchoolTab:CreateSection("学乱 汉化脚本列表")
 
 SchoolTab:CreateButton({
@@ -114,6 +139,34 @@ SchoolTab:CreateButton({
          loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"))()
       end)
       if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
+})
+
+---------------------------------------------------------
+-- 设置 页面
+---------------------------------------------------------
+SettingsTab:CreateSection("主题与外观")
+
+SettingsTab:CreateDropdown({
+   Name = "选择UI主题配色",
+   Options = {
+      "樱花粉 (Bloom)",
+      "默认暗黑 (Default)", 
+      "琥珀余晖 (AmberGlow)", 
+      "紫水晶 (Amethyst)", 
+      "深海蓝 (DarkBlue)", 
+      "翡翠绿 (Green)", 
+      "明亮白 (Light)", 
+      "海洋蓝 (Ocean)", 
+      "宁静蓝 (Serenity)"
+   },
+   CurrentOption = {"樱花粉 (Bloom)"},
+   MultipleOptions = false,
+   Flag = "ThemeDropdown",
+   Callback = function(Option)
+      local selectedChinese = Option[1] or Option
+      local realTheme = themeMap[selectedChinese] or "Bloom"
+      Window:ChangeTheme(realTheme)
    end,
 })
 
