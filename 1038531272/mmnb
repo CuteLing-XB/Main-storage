@@ -37,7 +37,7 @@ AboutTab:CreateSection("脚本说明")
 
 AboutTab:CreateParagraph({
    Title = "脚本介绍",
-   Content = "这是一个免费的不存在任何付费"
+   Content = "这是一个免费的不存在任何付费\n小林感谢所有的户\n谢谢你们的支持"
 })
 
 TSBTab:CreateSection("最强战场 脚本列表")
