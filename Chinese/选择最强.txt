@@ -21,9 +21,11 @@ local function getRandomString(len)
     return table.concat(result)
 end
 
--- 汉化脚本资源链接
+-- 汉化与扩展脚本资源链接
 local URL1 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"
 local URL2 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"
+local URL_PHANTOM = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/幻象汉化%23"
+local URL_TRASHCAN = "https://rawscripts.net/raw/Universal-Script-Tsb-trashcan-by-democracy134-238829"
 local URL3 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E9%9A%90%E8%BA%AB%E9%87%8D%E8%A6%81.txt"
 
 -- 3. 创建 ScreenGui 并挂载到受保护节点 (ProtectGui / gethui)
@@ -44,11 +46,11 @@ else
     ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 end
 
--- 4. 主面板 (Main Frame)
+-- 4. 紧凑型主面板 (适合手机端: 270x240)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = getRandomString()
-MainFrame.Size = UDim2.new(0, 340, 0, 350)
-MainFrame.Position = UDim2.new(0.5, -170, 0.4, -175)
+MainFrame.Size = UDim2.new(0, 270, 0, 240)
+MainFrame.Position = UDim2.new(0.5, -135, 0.4, -120)
 MainFrame.BackgroundColor3 = Color3.fromRGB(24, 25, 38)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -56,7 +58,7 @@ MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
 MainCorner.Name = getRandomString()
-MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.CornerRadius = UDim.new(0, 10)
 MainCorner.Parent = MainFrame
 
 local MainStroke = Instance.new("UIStroke")
@@ -68,18 +70,18 @@ MainStroke.Parent = MainFrame
 -- 5. 标题栏 (Title Bar)
 local TitleBar = Instance.new("Frame")
 TitleBar.Name = getRandomString()
-TitleBar.Size = UDim2.new(1, 0, 0, 42)
+TitleBar.Size = UDim2.new(1, 0, 0, 36)
 TitleBar.BackgroundColor3 = Color3.fromRGB(30, 32, 48)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = MainFrame
 
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Name = getRandomString()
-TitleLabel.Size = UDim2.new(1, -50, 1, 0)
-TitleLabel.Position = UDim2.new(0, 15, 0, 0)
+TitleLabel.Size = UDim2.new(1, -45, 1, 0)
+TitleLabel.Position = UDim2.new(0, 12, 0, 0)
 TitleLabel.Text = "最强战场选择器"
 TitleLabel.Font = Enum.Font.SourceSansBold
-TitleLabel.TextSize = 18
+TitleLabel.TextSize = 16
 TitleLabel.TextColor3 = Color3.fromRGB(240, 240, 255)
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.BackgroundTransparency = 1
@@ -88,18 +90,18 @@ TitleLabel.Parent = TitleBar
 -- 关闭按钮
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Name = getRandomString()
-CloseBtn.Size = UDim2.new(0, 28, 0, 28)
-CloseBtn.Position = UDim2.new(1, -35, 0.5, -14)
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -30, 0.5, -12)
 CloseBtn.Text = "×"
 CloseBtn.Font = Enum.Font.SourceSansBold
-CloseBtn.TextSize = 20
+CloseBtn.TextSize = 18
 CloseBtn.TextColor3 = Color3.fromRGB(180, 180, 200)
 CloseBtn.BackgroundColor3 = Color3.fromRGB(45, 48, 70)
 CloseBtn.Parent = TitleBar
 
 local CloseCorner = Instance.new("UICorner")
 CloseCorner.Name = getRandomString()
-CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.CornerRadius = UDim.new(0, 5)
 CloseCorner.Parent = CloseBtn
 
 CloseBtn.MouseButton1Click:Connect(function()
@@ -109,47 +111,58 @@ end)
 -- 6. 状态指示器
 local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Name = getRandomString()
-StatusLabel.Size = UDim2.new(1, -30, 0, 25)
-StatusLabel.Position = UDim2.new(0, 15, 0, 52)
+StatusLabel.Size = UDim2.new(1, -24, 0, 20)
+StatusLabel.Position = UDim2.new(0, 12, 0, 40)
 StatusLabel.Text = "状态: 等待选择加载方案..."
 StatusLabel.Font = Enum.Font.SourceSans
-StatusLabel.TextSize = 14
+StatusLabel.TextSize = 12
 StatusLabel.TextColor3 = Color3.fromRGB(160, 170, 200)
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Parent = MainFrame
 
--- 7. 按钮容器与布局
-local ButtonContainer = Instance.new("Frame")
-ButtonContainer.Name = getRandomString()
-ButtonContainer.Size = UDim2.new(1, -30, 0, 255)
-ButtonContainer.Position = UDim2.new(0, 15, 0, 80)
-ButtonContainer.BackgroundTransparency = 1
-ButtonContainer.Parent = MainFrame
+-- 7. 手机端滚动容器 (ScrollingFrame)
+local ScrollContainer = Instance.new("ScrollingFrame")
+ScrollContainer.Name = getRandomString()
+ScrollContainer.Size = UDim2.new(1, -20, 0, 168)
+ScrollContainer.Position = UDim2.new(0, 10, 0, 64)
+ScrollContainer.BackgroundTransparency = 1
+ScrollContainer.BorderSizePixel = 0
+ScrollContainer.ScrollBarThickness = 4
+ScrollContainer.ScrollBarImageColor3 = Color3.fromRGB(90, 95, 130)
+ScrollContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ScrollContainer.ScrollingDirection = Enum.ScrollingDirection.Y
+ScrollContainer.Parent = MainFrame
 
 local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Name = getRandomString()
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 10)
-UIListLayout.Parent = ButtonContainer
+UIListLayout.Padding = UDim.new(0, 7)
+UIListLayout.Parent = ScrollContainer
 
--- 按键构造工厂函数
+local UIPadding = Instance.new("UIPadding")
+UIPadding.Name = getRandomString()
+UIPadding.PaddingRight = UDim.new(0, 4)
+UIPadding.Parent = ScrollContainer
+
+-- 手机端按钮工厂函数 (高度: 36px)
 local function createStealthButton(text, order, color, callback)
     local btn = Instance.new("TextButton")
     btn.Name = getRandomString()
-    btn.Size = UDim2.new(1, 0, 0, 50)
+    btn.Size = UDim2.new(1, 0, 0, 36)
     btn.LayoutOrder = order
     btn.Text = text
     btn.Font = Enum.Font.SourceSansSemibold
-    btn.TextSize = 16
+    btn.TextSize = 14
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.BackgroundColor3 = color
     btn.AutoButtonColor = false
-    btn.Parent = ButtonContainer
+    btn.Parent = ScrollContainer
 
     local btnCorner = Instance.new("UICorner")
     btnCorner.Name = getRandomString()
-    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.CornerRadius = UDim.new(0, 6)
     btnCorner.Parent = btn
 
     btn.MouseEnter:Connect(function()
@@ -193,7 +206,7 @@ local function safeLoadScript(url, scriptName)
     end)
 end
 
--- 9. 绑定四大加载选项
+-- 9. 按顺序绑定加载选项（包含幻象汉化与垃圾桶脚本）
 createStealthButton("加载：最强1", 1, Color3.fromRGB(59, 130, 246), function()
     safeLoadScript(URL1, "最强1")
 end)
@@ -202,20 +215,32 @@ createStealthButton("加载：最强2", 2, Color3.fromRGB(139, 92, 246), functio
     safeLoadScript(URL2, "最强2")
 end)
 
-createStealthButton("加载：自动农场", 3, Color3.fromRGB(236, 72, 153), function()
+createStealthButton("加载：幻象汉化", 3, Color3.fromRGB(14, 165, 233), function()
+    safeLoadScript(URL_PHANTOM, "幻象汉化")
+end)
+
+createStealthButton("加载：垃圾桶脚本", 4, Color3.fromRGB(234, 88, 12), function()
+    safeLoadScript(URL_TRASHCAN, "垃圾桶脚本")
+end)
+
+createStealthButton("加载：自动农场", 5, Color3.fromRGB(236, 72, 153), function()
     safeLoadScript(URL3, "自动农场")
 end)
 
-createStealthButton("一键加载全部⚠️不推荐", 4, Color3.fromRGB(16, 185, 129), function()
+createStealthButton("一键加载全部⚠️不推荐", 6, Color3.fromRGB(16, 185, 129), function()
     StatusLabel.Text = "状态: 开始分时顺序装载..."
     safeLoadScript(URL1, "最强1")
     task.wait(1.5)
     safeLoadScript(URL2, "最强2")
     task.wait(1.5)
+    safeLoadScript(URL_PHANTOM, "幻象汉化")
+    task.wait(1.5)
+    safeLoadScript(URL_TRASHCAN, "垃圾桶脚本")
+    task.wait(1.5)
     safeLoadScript(URL3, "自动农场")
 end)
 
--- 10. 平滑拖拽交互实现
+-- 10. 平滑拖拽交互实现 (适配触摸屏与鼠标)
 local dragging, dragInput, dragStart, startPos
 
 TitleBar.InputBegan:Connect(function(input)
@@ -247,3 +272,4 @@ UserInputService.InputChanged:Connect(function(input)
         )
     end
 end)
+
