@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "🤓主菜单",
+   Name = "主菜单",
    LoadingTitle = "Rayfield脚本加载中",
    LoadingSubtitle = "by 小林",
    Theme = "Default",
