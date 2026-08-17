@@ -1,66 +1,133 @@
-local SoundService = game:GetService("SoundService")
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-local Config = {
-    [10449761463] = { 
-        name = "最强战场", 
-        scripts = {
-            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E9%80%89%E6%8B%A9%E6%9C%80%E5%BC%BA.txt"
-        }
-    },
-    
-    [189707] = { 
-        name = "自然灾害", 
-        scripts = {
-            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/nbf9000"
-        }
-    },
-    
-    [128736949265057] = { 
-        name = "学乱", 
-        scripts = {
-            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/选择加载.txt"
-        }
-    },
-}
+local Window = Rayfield:CreateWindow({
+   Name = "🥵",
+   LoadingTitle = "Rayfield脚本加载中",
+   LoadingSubtitle = "by 小林",
+   Theme = "Default",
+   
+   -- 卡密系统设置
+   KeySystem = true,
+   KeySettings = {
+      Title = "卡密验证系统",
+      Subtitle = "请输入有效卡密以继续",
+      Note = "加群以获取密钥 1038531272",
+      FileName = "MyScriptKey", -- 保存卡密记录的文件名 (存放在 workspace 目录下)
+      SaveKey = true,          -- 开启自动记住功能
+      GrabKeyFromSite = false, -- 使用本地内置列表进行验证
+      Key = {"小林", "1038531272"} -- 在此修改允许解锁的卡密列表
+   },
 
-local function playDingSound()
-    task.spawn(function()
-        local sound = Instance.new("Sound")
-        sound.SoundId = "rbxassetid://9114223297"
-        sound.Volume = 1.0
-        sound.Parent = SoundService
-        sound:Play()
-        sound.Ended:Connect(function() 
-            sound:Destroy() 
-        end)
-    end)
-end
+   -- 界面隐藏
+   ToggleKey = Enum.KeyCode.RightControl, 
+   
+   -- 屏蔽控制台
+   DisableBuildWarnings = true,           
+   
+   DisableRayfieldPrompts = false,
+})
 
-local function Loader()
-    -- 自动匹配 PlaceId 或 GameId
-    local target = Config[game.PlaceId] or Config[game.GameId]
-    
-    if target and target.scripts then
-        local loaded = false
-        
-        for idx, url in ipairs(target.scripts) do
-            if url and url ~= "" then
-                -- 核心精简加载逻辑
-                pcall(function()
-                    loadstring(game:HttpGet(url))()
-                end)
-                print("[" .. target.name .. "] 已加载脚本 " .. idx)
-                loaded = true
-            end
-        end
-        
-        if loaded then
-            print("【" .. target.name .. "] 所有脚本加载完成！")
-            playDingSound()
-        end
-    else
-        print("未匹配到当前游戏配置 (PlaceId: " .. game.PlaceId .. " / GameId: " .. game.GameId .. ")")
-    end
-end
+-- 创建选项卡
+local AboutTab    = Window:CreateTab("关于", "info")        
+local TSBTab      = Window:CreateTab("最强战场", 4370060017)
+local SchoolTab   = Window:CreateTab("学乱", 4483362458)
+local SettingsTab = Window:CreateTab("设置", "settings")
 
-Loader()
+AboutTab:CreateSection("脚本说明")
+
+AboutTab:CreateParagraph({
+   Title = "脚本介绍",
+   Content = "这是一个免费的不存在任何付费"
+})
+
+TSBTab:CreateSection("最强战场 脚本列表")
+
+TSBTab:CreateButton({
+   Name = "执行自动农场",
+   Callback = function()
+      local success, err = pcall(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"))()
+      end)
+      if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
+})
+
+TSBTab:CreateButton({
+   Name = "执行幻象汉化",
+   Callback = function()
+      local success, err = pcall(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%B9%BB%E8%B1%A1%E6%B1%89%E5%8C%96%23"))()
+      end)
+      if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
+})
+
+TSBTab:CreateButton({
+   Name = "TSB脚本 1",
+   Callback = function()
+      local success, err = pcall(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"))()
+      end)
+      if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
+})
+
+TSBTab:CreateButton({
+   Name = "TSB脚本 2",
+   Callback = function()
+      local success, err = pcall(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"))()
+      end)
+      if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
+})
+
+SchoolTab:CreateSection("学乱 汉化脚本列表")
+
+SchoolTab:CreateButton({
+   Name = "学乱1",
+   Callback = function()
+      local success, err = pcall(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"))()
+      end)
+      if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
+})
+
+SchoolTab:CreateButton({
+   Name = "学乱2",
+   Callback = function()
+      local success, err = pcall(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%961.txt"))()
+      end)
+      if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
+})
+
+SchoolTab:CreateButton({
+   Name = "学乱3",
+   Callback = function()
+      local success, err = pcall(function()
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"))()
+      end)
+      if not success then warn("脚本执行失败: " .. tostring(err)) end
+   end,
+})
+
+SettingsTab:CreateSection("系统设置")
+
+SettingsTab:CreateKeybind({
+   Name = "UI显示快捷键",
+   CurrentKeybind = "RightControl",
+   HoldToInteract = false,
+   Callback = function(Keybind)
+      Window:ChangeToggleKey(Keybind)
+   end,
+})
+
+SettingsTab:CreateButton({
+   Name = "销毁脚本界面",
+   Callback = function()
+      Rayfield:Destroy()
+   end,
+})
