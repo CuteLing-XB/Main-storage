@@ -95,7 +95,7 @@ do
         ["Delay max"] = "最大延迟",
         ["Only moves on your turn. Needs an"] = "仅在您的回合移动。",
 
-        -- ================= 配置/主题界面 (Config) [新增图片] =================
+        -- ================= 配置/主题界面 (Config) =================
         ["Menu"] = "菜单设置",
         ["Appearance & keybinds"] = "外观与快捷键",
         ["Custom Cursor"] = "自定义指针",
@@ -130,16 +130,25 @@ do
         ["Export current config"] = "导出当前配置"
     }
 
+    -- 纯文本安全替换函数，防正则崩溃
+    local function plainReplace(str, findStr, replaceStr)
+        local b, e = str:find(findStr, 1, true)
+        if not b then return str end
+        return str:sub(1, b - 1) .. replaceStr .. str:sub(e + 1)
+    end
+
     local function translateText(text)
-        if not text or type(text) ~= "string" then return text end
+        if not text or type(text) ~= "string" or text == "" then return text end
         
+        -- 精确匹配优先
         if Translations[text] then
             return Translations[text]
         end
         
+        -- 模糊查找（关闭正则匹配）
         for en, cn in pairs(Translations) do
-            if text:find(en) then
-                return text:gsub(en, cn)
+            if text:find(en, 1, true) then
+                return plainReplace(text, en, cn)
             end
         end
         
@@ -147,98 +156,72 @@ do
     end
 
     local function setupTranslationEngine()
-        local success, err = pcall(function()
-            local oldIndex = getrawmetatable(game).__newindex
-            setreadonly(getrawmetatable(game), false)
-            
-            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
-                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
-                    v = translateText(tostring(v))
-                end
-                return oldIndex(t, k, v)
+        task.spawn(function()
+            local success, err = pcall(function()
+                local rawMT = getrawmetatable(game)
+                local oldIndex = rawMT.__newindex
+                setreadonly(rawMT, false)
+                
+                rawMT.__newindex = newcclosure(function(t, k, v)
+                    if typeof(t) == "Instance" and (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
+                        pcall(function()
+                            v = translateText(tostring(v))
+                        end)
+                    end
+                    return oldIndex(t, k, v)
+                end)
+                
+                setreadonly(rawMT, true)
             end)
             
-            setreadonly(getrawmetatable(game), true)
-        end)
-        
-        if not success then
-            warn("元表劫持失败:", err)
-           
-            local translated = {}
-            local function scanAndTranslate()
-                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
-                    if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+            if not success then
+                warn("元表劫持失败，降级为轮询模式:", err)
+                
+                local function translateGui(gui)
+                    if gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox") then
                         pcall(function()
                             local text = gui.Text
                             if text and text ~= "" then
                                 local translatedText = translateText(text)
                                 if translatedText ~= text then
                                     gui.Text = translatedText
-                                    translated[gui] = true
                                 end
                             end
                         end)
                     end
                 end
-                
+
+                local function bindContainer(container)
+                    if not container then return end
+                    container.DescendantAdded:Connect(function(descendant)
+                        task.wait(0.05)
+                        translateGui(descendant)
+                    end)
+                    for _, desc in ipairs(container:GetDescendants()) do
+                        translateGui(desc)
+                    end
+                end
+
+                pcall(bindContainer, game:GetService("CoreGui"))
                 local player = game:GetService("Players").LocalPlayer
                 if player and player:FindFirstChild("PlayerGui") then
-                    for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
-                        if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
-                            pcall(function()
-                                local text = gui.Text
-                                if text and text ~= "" then
-                                    local translatedText = translateText(text)
-                                    if translatedText ~= text then
-                                        gui.Text = translatedText
-                                        translated[gui] = true
-                                    end
-                                end
-                            end)
-                        end
-                    end
+                    pcall(bindContainer, player.PlayerGui)
                 end
             end
-            
-            local function setupDescendantListener(parent)
-                parent.DescendantAdded:Connect(function(descendant)
-                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
-                        task.wait(0.1)
-                        pcall(function()
-                            local text = descendant.Text
-                            if text and text ~= "" then
-                                local translatedText = translateText(text)
-                                if translatedText ~= text then
-                                    descendant.Text = translatedText
-                                end
-                            end
-                        end)
-                    end
-                end)
-            end
-            
-            pcall(setupDescendantListener, game:GetService("CoreGui"))
-            local player = game:GetService("Players").LocalPlayer
-            if player and player:FindFirstChild("PlayerGui") then
-                pcall(setupDescendantListener, player.PlayerGui)
-            end
-            
-            while true do
-                scanAndTranslate()
-                task.wait(3)
-            end
-        end
+        end)
     end
 
-    task.wait(2)
+    -- 开启汉化引擎
     setupTranslationEngine()
 
+    -- 加载主脚本
+    task.wait(1)
     local success, err = pcall(function()
         loadstring(game:HttpGet('https://api.luarmor.net/files/v4/loaders/e4f879e72b8fcf03f318ec5e76201ec7.lua'))()
     end)
 
     if not success then
-        warn("加载失败:", err)
+        warn("主脚本加载失败:", err)
     end
 end
 
