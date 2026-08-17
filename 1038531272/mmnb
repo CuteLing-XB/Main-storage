@@ -1,10 +1,13 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+-- 获取或初始化全局选中的主题（用于热重载支持）
+local selectedTheme = _G.RayfieldSelectedTheme or "Bloom"
+
 local Window = Rayfield:CreateWindow({
    Name = "主菜单",
    LoadingTitle = "Rayfield脚本加载中",
    LoadingSubtitle = "by 小林",
-   Theme = "Bloom", -- 默认初始主题设置为 Bloom (樱花粉)
+   Theme = selectedTheme, -- 动态加载当前选中的主题
    
    -- 卡密系统设置
    KeySystem = true,
@@ -15,19 +18,20 @@ local Window = Rayfield:CreateWindow({
       FileName = "MyScriptKey", -- 保存卡密记录的文件名 (存放在 workspace 目录下)
       SaveKey = true,          -- 开启自动记住功能
       GrabKeyFromSite = false, -- 使用本地内置列表进行验证
-      Key = {"小林", "1038531272", "67kid"} -- 在此修改允许解锁的卡密列表
+      Key = {"小林", "1038531272", "67kid"} -- 允许解锁的卡密列表
    },
 
-   -- 界面隐藏
+   -- 界面隐藏设置
    ToggleKey = Enum.KeyCode.RightControl, 
    
-   -- 屏蔽控制台
+   -- 控制台设置
    DisableBuildWarnings = true,           
-   
    DisableRayfieldPrompts = false,
 })
 
+---------------------------------------------------------
 -- 创建选项卡
+---------------------------------------------------------
 local AboutTab     = Window:CreateTab("关于", "info")        
 local UniversalTab = Window:CreateTab("通用", "globe")
 local TSBTab       = Window:CreateTab("最强战场", 4370060017)
@@ -147,12 +151,18 @@ SettingsTab:CreateDropdown({
       "Ocean", 
       "Serenity"
    },
-   CurrentOption = {"Bloom"},
+   CurrentOption = {selectedTheme},
    MultipleOptions = false,
    Flag = "ThemeDropdown",
    Callback = function(Option)
-      local selectedTheme = type(Option) == "table" and Option[1] or Option
-      Window:ChangeTheme(selectedTheme)
+      local choice = type(Option) == "table" and Option[1] or Option
+      if choice ~= _G.RayfieldSelectedTheme then
+         _G.RayfieldSelectedTheme = choice
+         Rayfield:Destroy()
+         task.wait(0.1)
+         --重新加载自身应用新主题
+         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E4%B8%BB%E8%8F%9C%E5%8D%95.lua", true))()
+      end
    end,
 })
 
@@ -162,8 +172,12 @@ SettingsTab:CreateKeybind({
    Name = "UI显示快捷键",
    CurrentKeybind = "RightControl",
    HoldToInteract = false,
+   Flag = "UIKeybind",
    Callback = function(Keybind)
-      Window:ChangeToggleKey(Keybind)
+      local keyEnum = typeof(Keybind) == "EnumItem" and Keybind or Enum.KeyCode[Keybind]
+      if keyEnum then
+         Rayfield.ToggleKey = keyEnum
+      end
    end,
 })
 
