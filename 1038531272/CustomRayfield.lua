@@ -1901,12 +1901,15 @@ function RayfieldLibrary:CreateWindow(Settings)
 			-- 自定义云端验证：对保存的 key 也走一次后端校验（支持 SaveKey 自动跳过）
 			if not Passthrough and Settings.KeySettings.CustomValidator then
 				local savedKey = savedKeys and string.gsub(savedKeys, "[\r\n]", "") or ""
+				warn("[Rayfield Debug] 读取到保存的 key: '" .. tostring(savedKey) .. "'")
 				if savedKey ~= "" then
 					local validateSuccess, validateResult = pcall(function()
 						return Settings.KeySettings.CustomValidator(savedKey)
 					end)
+					warn("[Rayfield Debug] 云端验证结果: success=" .. tostring(validateSuccess) .. ", result=" .. tostring(validateResult))
 					if validateSuccess and validateResult == true then
 						Passthrough = true
+						warn("[Rayfield Debug] 保存的 key 验证通过，跳过 KeyUI")
 					end
 				end
 			end
@@ -2022,9 +2025,10 @@ function RayfieldLibrary:CreateWindow(Settings)
 					Passthrough = true
 					KeyMain.Visible = false
 					if Settings.KeySettings.SaveKey then
-						callSafely(writefile, RayfieldFolder.."/Key System".."/"..Settings.KeySettings.FileName..ConfigurationExtension, FoundKey)
-						RayfieldLibrary:Notify({Title = "Key System", Content = "The key for this script has been saved successfully.", Image = 3605522284})
-					end
+					callSafely(writefile, RayfieldFolder.."/Key System".."/"..Settings.KeySettings.FileName..ConfigurationExtension, FoundKey)
+					warn("[Rayfield Debug] 已保存 key 到文件: " .. RayfieldFolder.."/Key System".."/"..Settings.KeySettings.FileName..ConfigurationExtension)
+					RayfieldLibrary:Notify({Title = "Key System", Content = "The key for this script has been saved successfully.", Image = 3605522284})
+				end
 				else
 					if AttemptsRemaining == 0 then
 						fadeOutKeyUI(KeyMain)
