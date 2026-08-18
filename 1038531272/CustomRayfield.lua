@@ -1889,10 +1889,25 @@ function RayfieldLibrary:CreateWindow(Settings)
 		end
 
 		if callSafely(isfile, RayfieldFolder.."/Key System".."/"..Settings.KeySettings.FileName..ConfigurationExtension) then
+			local savedKeys = callSafely(readfile, RayfieldFolder.."/Key System".."/"..Settings.KeySettings.FileName..ConfigurationExtension)
+
+			-- 原生本地 key 列表检查
 			for _, MKey in ipairs(Settings.KeySettings.Key) do
-				local savedKeys = callSafely(readfile, RayfieldFolder.."/Key System".."/"..Settings.KeySettings.FileName..ConfigurationExtension)
 				if savedKeys and string.find(savedKeys, MKey) then
 					Passthrough = true
+				end
+			end
+
+			-- 自定义云端验证：对保存的 key 也走一次后端校验（支持 SaveKey 自动跳过）
+			if not Passthrough and Settings.KeySettings.CustomValidator then
+				local savedKey = savedKeys and string.gsub(savedKeys, "[\r\n]", "") or ""
+				if savedKey ~= "" then
+					local validateSuccess, validateResult = pcall(function()
+						return Settings.KeySettings.CustomValidator(savedKey)
+					end)
+					if validateSuccess and validateResult == true then
+						Passthrough = true
+					end
 				end
 			end
 		end
