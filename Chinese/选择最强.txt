@@ -26,7 +26,7 @@ local URL1 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/he
 local URL2 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"
 local URL_PHANTOM = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/幻象汉化%23"
 local URL_TRASHCAN = "https://rawscripts.net/raw/Universal-Script-Tsb-trashcan-by-democracy134-238829"
-local URL3 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E9%9A%90%E8%BA%AB%E9%87%8D%E8%A6%81.txt"
+local URL3 = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"
 
 -- 3. 创建 ScreenGui 并挂载到受保护节点 (ProtectGui / gethui)
 local ScreenGui = Instance.new("ScreenGui")
