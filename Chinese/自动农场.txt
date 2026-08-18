@@ -1,4 +1,5 @@
 getgenv().PYKey = "Bypass"
+getgenv().KeyPassed = true
 getgenv().Verified = true
 
 if getgenv().ScriptExecuted then
@@ -1501,7 +1502,7 @@ local function queueTeleportScript()
 		tostring(getgenv().renderEnabled or false),
 		tostring(getgenv().PYKey or "")
 	)
-	pcall(queue_on_teleport, teleportCode)
+	--pcall(queue_on_teleport, teleportCode)
 end
 
 local function pickServer(serverData)
