@@ -1,4 +1,63 @@
--- 加载 Rayfield UI 库
+local HttpService = game:GetService("HttpService")
+local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
+
+-- 你的 Render 后端网址与暗号
+local API_URL = "https://gh-jkll.onrender.com/api/bind-hwid"
+local AUTH_SECRET = "XiaoLin666"
+
+-- 获取玩家本地唯一设备码 (HWID)
+local function getHWID()
+    local hwid = "UNKNOWN_HWID"
+    pcall(function()
+        hwid = RbxAnalyticsService:GetClientId()
+    end)
+    return hwid
+end
+
+-- 自定义云端验证逻辑 (对接后台 API)
+local function VerifyKeyWithServer(enteredKey)
+    local userHWID = getHWID()
+    
+    -- 组装 POST JSON 数据
+    local payload = {
+        key = enteredKey,
+        hwid = userHWID,
+        secret = AUTH_SECRET
+    }
+    
+    local requestData = {
+        Url = API_URL,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json"
+        },
+        Body = HttpService:JSONEncode(payload)
+    }
+    
+    -- 发起网络请求
+    local response = nil
+    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    
+    if httpRequest then
+        local success, result = pcall(function()
+            return httpRequest(requestData)
+        end)
+        
+        if success and result and result.Body then
+            local jsonSuccess, decoded = pcall(function()
+                return HttpService:JSONDecode(result.Body)
+            end)
+            if jsonSuccess and decoded then
+                return decoded.success, decoded.message
+            end
+        end
+    else
+        return false, "当前执行器不支持 HTTP 请求 (request 缺失)"
+    end
+    
+    return false, "无法连接到卡密验证服务器"
+end
+
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
@@ -7,16 +66,39 @@ local Window = Rayfield:CreateWindow({
    LoadingSubtitle = "by 小林",
    Theme = "Bloom", -- 默认初始主题设置为 Bloom (樱花粉)
    
-   -- 卡密系统设置
+   -- 卡密系统设置 (对接云端 API)
    KeySystem = true,
    KeySettings = {
-      Title = "卡密验证系统",
-      Subtitle = "请输入有效卡密以继续",
-      Note = "加群以获取密钥 1038531272",
-      FileName = "MyScriptKey", -- 保存卡密记录的文件名 (存放在 workspace 目录下)
-      SaveKey = true,          -- 开启自动记住功能
-      GrabKeyFromSite = false, -- 使用本地内置列表进行验证
-      Key = {"小林", "1038531272", "67kid"} -- 允许解锁的卡密列表
+      Title = "云端卡密验证系统",
+      Subtitle = "请输入有效卡密以解锁脚本",
+      Note = "加群获取卡密 QQ群: 1038531272",
+      FileName = "MyScriptKey", -- 保存卡密记录的文件名
+      SaveKey = true,          -- 记住已填写的卡密
+      GrabKeyFromSite = false,
+      
+      -- 核心改动：自定义验证函数，向你的后台发起验证和 HWID 绑定
+      Key = {
+         function(enteredKey)
+            local isSuccess, message = VerifyKeyWithServer(enteredKey)
+            if isSuccess then
+               Rayfield:Notify({
+                  Title = "验证成功",
+                  Content = "卡密验证通过并已自动绑定此设备！",
+                  Duration = 5,
+                  Image = 4483362458,
+               })
+               return true
+            else
+               Rayfield:Notify({
+                  Title = "验证失败",
+                  Content = message or "卡密无效或已被其他设备占用",
+                  Duration = 5,
+                  Image = 4483362458,
+               })
+               return false
+            end
+         end
+      }
    },
 
    -- 界面隐藏设置
@@ -27,18 +109,12 @@ local Window = Rayfield:CreateWindow({
    DisableRayfieldPrompts = false,
 })
 
----------------------------------------------------------
--- 创建选项卡
----------------------------------------------------------
 local AboutTab     = Window:CreateTab("关于", "info")        
 local UniversalTab = Window:CreateTab("通用", "globe")
 local TSBTab       = Window:CreateTab("最强战场", 4370060017)
 local SchoolTab    = Window:CreateTab("学乱", 4483362458)
 local SettingsTab  = Window:CreateTab("设置", "settings")
 
----------------------------------------------------------
--- 关于 页面
----------------------------------------------------------
 AboutTab:CreateSection("脚本说明")
 
 AboutTab:CreateParagraph({
@@ -46,9 +122,6 @@ AboutTab:CreateParagraph({
    Content = "这是一个免费的不存在任何付费\n小林感谢所有的用户\n谢谢你们的支持"
 })
 
----------------------------------------------------------
--- 通用 页面
----------------------------------------------------------
 UniversalTab:CreateSection("通用 脚本列表")
 
 UniversalTab:CreateButton({
@@ -61,9 +134,6 @@ UniversalTab:CreateButton({
    end,
 })
 
----------------------------------------------------------
--- 最强战场 页面
----------------------------------------------------------
 TSBTab:CreateSection("最强战场 脚本列表")
 
 TSBTab:CreateButton({
@@ -96,9 +166,6 @@ TSBTab:CreateButton({
    end,
 })
 
----------------------------------------------------------
--- 学乱 页面
----------------------------------------------------------
 SchoolTab:CreateSection("学乱 汉化脚本列表")
 
 SchoolTab:CreateButton({
@@ -154,7 +221,6 @@ SettingsTab:CreateDropdown({
    Flag = "ThemeDropdown",
    Callback = function(Option)
       local selectedTheme = type(Option) == "table" and Option[1] or Option
-      -- 使用 Rayfield 官方的全局 API 进行无缝无损切主题
       if Rayfield and Rayfield.ChangeTheme then
          Rayfield:ChangeTheme(selectedTheme)
       end
@@ -182,3 +248,4 @@ SettingsTab:CreateButton({
       Rayfield:Destroy()
    end,
 })
+
