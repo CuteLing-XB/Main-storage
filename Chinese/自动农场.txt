@@ -1,4 +1,5 @@
-
+getgenv().PYKey = "Bypass"
+getgenv().Verified = true
 
 if getgenv().ScriptExecuted then
 	return
