@@ -32,6 +32,21 @@ local function getHWID()
     return hwid
 end
 
+-- 通用网络请求函数（带 3 次重试逻辑，防止网络抖动直接断开）
+local function SafeHttpRequest(requestData)
+    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    if not httpRequest then return false, "当前执行器不支持 HTTP 请求" end
+
+    for attempt = 1, 3 do
+        local success, result = pcall(function() return httpRequest(requestData) end)
+        if success and result and result.Body then
+            return true, result.Body
+        end
+        task.wait(1) -- 重试前等待 1 秒
+    end
+    return false, "无法连接卡密服务器，请稍后再试"
+end
+
 -- 验证卡密 & 发送心跳
 local function VerifyKeyWithServer(enteredKey)
     if not enteredKey or enteredKey == "" then 
@@ -58,12 +73,9 @@ local function VerifyKeyWithServer(enteredKey)
         Body = HttpService:JSONEncode(payload)
     }
     
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-    if not httpRequest then return false, "当前执行器不支持 HTTP 请求" end
-    
-    local success, result = pcall(function() return httpRequest(requestData) end)
-    if success and result and result.Body then
-        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(result.Body) end)
+    local success, responseBody = SafeHttpRequest(requestData)
+    if success then
+        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
         if jsonSuccess and decoded then
             return decoded.success, decoded.message
         end
@@ -73,15 +85,11 @@ end
 
 -- 获取在线脚本玩家
 local function GetScriptOnlineUsers()
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-    if not httpRequest then return { "不支持网络请求" } end
+    local requestData = { Url = ONLINE_URL, Method = "GET" }
+    local success, responseBody = SafeHttpRequest(requestData)
 
-    local success, result = pcall(function()
-        return httpRequest({ Url = ONLINE_URL, Method = "GET" })
-    end)
-
-    if success and result and result.Body then
-        local jsonOk, decoded = pcall(function() return HttpService:JSONDecode(result.Body) end)
+    if success then
+        local jsonOk, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
         if jsonOk and decoded and decoded.users and #decoded.users > 0 then
             return decoded.users
         end
@@ -92,15 +100,11 @@ end
 
 -- 获取已拉黑黑名单玩家
 local function GetBannedUsers()
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-    if not httpRequest then return { "暂无黑名单玩家" } end
+    local requestData = { Url = BANNED_URL, Method = "GET" }
+    local success, responseBody = SafeHttpRequest(requestData)
 
-    local success, result = pcall(function()
-        return httpRequest({ Url = BANNED_URL, Method = "GET" })
-    end)
-
-    if success and result and result.Body then
-        local jsonOk, decoded = pcall(function() return HttpService:JSONDecode(result.Body) end)
+    if success then
+        local jsonOk, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
         if jsonOk and decoded and decoded.users and #decoded.users > 0 then
             return decoded.users
         end
@@ -128,12 +132,9 @@ local function RequestKickScriptUser(adminKey, targetUsername)
         Body = HttpService:JSONEncode(payload)
     }
     
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-    if not httpRequest then return false, "执行器不支持请求" end
-    
-    local success, result = pcall(function() return httpRequest(requestData) end)
-    if success and result and result.Body then
-        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(result.Body) end)
+    local success, responseBody = SafeHttpRequest(requestData)
+    if success then
+        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
         if jsonSuccess and decoded then
             return decoded.success, decoded.message
         end
@@ -160,12 +161,9 @@ local function RequestUnbanUser(adminKey, targetUsername)
         Body = HttpService:JSONEncode(payload)
     }
     
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-    if not httpRequest then return false, "执行器不支持请求" end
-    
-    local success, result = pcall(function() return httpRequest(requestData) end)
-    if success and result and result.Body then
-        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(result.Body) end)
+    local success, responseBody = SafeHttpRequest(requestData)
+    if success then
+        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
         if jsonSuccess and decoded then
             return decoded.success, decoded.message
         end
@@ -470,16 +468,26 @@ local function BuildMainTabs(isAdminUser, currentAdminKey)
        end,
     })
 
-    -- 心跳包兼黑名单检测
+    -- 心跳包兼黑名单检测（增强防踢版）
     task.spawn(function()
+        local failCount = 0
         while task.wait(15) do
             local currentKey = getSavedKey()
             if currentKey then
-                local isOk, msg = VerifyKeyWithServer(currentKey)
-                if not isLocalAdminKey(currentKey) and not isOk then
-                    pcall(function() Rayfield:Destroy() end)
-                    LocalPlayer:Kick("【系统安全拦截】您已被管理员踢出游戏！原因: " .. tostring(msg))
-                    break
+                if not isLocalAdminKey(currentKey) then
+                    local isOk, msg = VerifyKeyWithServer(currentKey)
+                    if not isOk then
+                        failCount = failCount + 1
+                        -- 只有当连续失败 3 次以上（持续约 45 秒网络崩溃）或者服务器明确返回“踢出/黑名单”时才触发 Kick
+                        local isDefiniteKick = msg and (msg:find("黑名单") or msg:find("拦截") or msg:find("不存在"))
+                        if failCount >= 3 or isDefiniteKick then
+                            pcall(function() Rayfield:Destroy() end)
+                            LocalPlayer:Kick("【系统安全拦截】您已被管理员踢出游戏！原因: " .. tostring(msg))
+                            break
+                        end
+                    else
+                        failCount = 0 -- 恢复正常时重置计数
+                    end
                 end
             end
         end
@@ -573,4 +581,3 @@ else
        Content = "官方加群获取卡密 QQ群: 1038531272"
     })
 end
-
