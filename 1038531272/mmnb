@@ -1,11 +1,12 @@
 local HttpService = game:GetService("HttpService")
 local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
--- 你的 Render 后端网址与暗号
 local API_URL = "https://gh-jkll.onrender.com/api/bind-hwid"
 local AUTH_SECRET = "XiaoLin666"
+local SAVE_FILE_NAME = "MyScriptKey.txt"
 
--- 获取玩家本地唯一设备码 (HWID)
 local function getHWID()
     local hwid = "UNKNOWN_HWID"
     pcall(function()
@@ -14,14 +15,15 @@ local function getHWID()
     return hwid
 end
 
--- 自定义云端验证逻辑 (对接后台 API)
 local function VerifyKeyWithServer(enteredKey)
-    local userHWID = getHWID()
-    
-    -- 组装 POST JSON 数据
+    if not enteredKey or enteredKey == "" then
+        return false, "请输入有效卡密！"
+    end
+
     local payload = {
         key = enteredKey,
-        hwid = userHWID,
+        hwid = getHWID(),
+        username = LocalPlayer.Name,
         secret = AUTH_SECRET
     }
     
@@ -34,218 +36,257 @@ local function VerifyKeyWithServer(enteredKey)
         Body = HttpService:JSONEncode(payload)
     }
     
-    -- 发起网络请求
-    local response = nil
     local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
     
-    if httpRequest then
-        local success, result = pcall(function()
-            return httpRequest(requestData)
-        end)
-        
-        if success and result and result.Body then
-            local jsonSuccess, decoded = pcall(function()
-                return HttpService:JSONDecode(result.Body)
-            end)
-            if jsonSuccess and decoded then
-                return decoded.success, decoded.message
-            end
-        end
-    else
-        return false, "当前执行器不支持 HTTP 请求 (request 缺失)"
+    if not httpRequest then
+        return false, "当前执行器不支持 HTTP 请求"
     end
     
-    return false, "无法连接到卡密验证服务器"
+    local success, result = pcall(function()
+        return httpRequest(requestData)
+    end)
+    
+    if success and result and result.Body then
+        local jsonSuccess, decoded = pcall(function()
+            return HttpService:JSONDecode(result.Body)
+        end)
+        if jsonSuccess and decoded then
+            return decoded.success, decoded.message
+        end
+    end
+    
+    return false, "无法连接卡密服务器，请稍后再试"
+end
+
+local function getSavedKey()
+    if isfile and isfile(SAVE_FILE_NAME) then
+        return readfile(SAVE_FILE_NAME)
+    end
+    return nil
+end
+
+local function saveKeyLocally(key)
+    if writefile then
+        writefile(SAVE_FILE_NAME, key)
+    end
 end
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "主菜单",
-   LoadingTitle = "Rayfield脚本加载中",
+   Name = "UI主菜单",
+   LoadingTitle = "Rayfield 脚本加载中",
    LoadingSubtitle = "by 小林",
-   Theme = "Bloom", -- 默认初始主题设置为 Bloom (樱花粉)
-   
-   -- 卡密系统设置 (对接云端 API)
-   KeySystem = true,
-   KeySettings = {
-      Title = "云端卡密验证系统",
-      Subtitle = "请输入有效卡密以解锁脚本",
-      Note = "加群获取卡密 QQ群: 1038531272",
-      FileName = "MyScriptKey", -- 保存卡密记录的文件名
-      SaveKey = true,          -- 记住已填写的卡密
-      GrabKeyFromSite = false,
-      
-      -- 核心改动：自定义验证函数，向你的后台发起验证和 HWID 绑定
-      Key = {
-         function(enteredKey)
-            local isSuccess, message = VerifyKeyWithServer(enteredKey)
-            if isSuccess then
-               Rayfield:Notify({
-                  Title = "验证成功",
-                  Content = "卡密验证通过并已自动绑定此设备！",
-                  Duration = 5,
-                  Image = 4483362458,
-               })
-               return true
-            else
-               Rayfield:Notify({
-                  Title = "验证失败",
-                  Content = message or "卡密无效或已被其他设备占用",
-                  Duration = 5,
-                  Image = 4483362458,
-               })
-               return false
-            end
-         end
-      }
-   },
-
-   -- 界面隐藏设置
+   Theme = "Bloom",
    ToggleKey = Enum.KeyCode.RightControl, 
-   
-   -- 控制台设置
    DisableBuildWarnings = true,           
    DisableRayfieldPrompts = false,
 })
 
-local AboutTab     = Window:CreateTab("关于", "info")        
-local UniversalTab = Window:CreateTab("通用", "globe")
-local TSBTab       = Window:CreateTab("最强战场", 4370060017)
-local SchoolTab    = Window:CreateTab("学乱", 4483362458)
-local SettingsTab  = Window:CreateTab("设置", "settings")
+local function BuildMainTabs()
+    local AboutTab     = Window:CreateTab("关于", "info")        
+    local UniversalTab = Window:CreateTab("通用", "globe")
+    local TSBTab       = Window:CreateTab("最强战场", 4370060017)
+    local SchoolTab    = Window:CreateTab("学乱", 4483362458)
+    local SettingsTab  = Window:CreateTab("设置", "settings")
 
-AboutTab:CreateSection("脚本说明")
+    AboutTab:CreateSection("脚本说明")
+    AboutTab:CreateParagraph({
+       Title = "脚本介绍",
+       Content = "这是一个免费的不存在任何付费\n小林感谢所有的用户\n谢谢你们的支持"
+    })
 
-AboutTab:CreateParagraph({
-   Title = "脚本介绍",
-   Content = "这是一个免费的不存在任何付费\n小林感谢所有的用户\n谢谢你们的支持"
-})
+    UniversalTab:CreateSection("通用 脚本列表")
+    UniversalTab:CreateButton({
+       Name = "多方向吸附",
+       Callback = function()
+          local success, err = pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84"))()
+          end)
+          if not success then warn("脚本执行失败: " .. tostring(err)) end
+       end,
+    })
 
-UniversalTab:CreateSection("通用 脚本列表")
+    TSBTab:CreateSection("最强战场 脚本列表")
+    TSBTab:CreateButton({
+       Name = "执行自动农场",
+       Callback = function()
+          local success, err = pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"))()
+          end)
+          if not success then warn("脚本执行失败: " .. tostring(err)) end
+       end,
+    })
 
-UniversalTab:CreateButton({
-   Name = "多方向吸附",
-   Callback = function()
-      local success, err = pcall(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84"))()
-      end)
-      if not success then warn("脚本执行失败: " .. tostring(err)) end
-   end,
-})
+    TSBTab:CreateButton({
+       Name = "TSB脚本 1",
+       Callback = function()
+          local success, err = pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"))()
+          end)
+          if not success then warn("脚本执行失败: " .. tostring(err)) end
+       end,
+    })
 
-TSBTab:CreateSection("最强战场 脚本列表")
+    TSBTab:CreateButton({
+       Name = "TSB脚本 2",
+       Callback = function()
+          local success, err = pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"))()
+          end)
+          if not success then warn("脚本执行失败: " .. tostring(err)) end
+       end,
+    })
 
-TSBTab:CreateButton({
-   Name = "执行自动农场",
-   Callback = function()
-      local success, err = pcall(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"))()
-      end)
-      if not success then warn("脚本执行失败: " .. tostring(err)) end
-   end,
-})
+    SchoolTab:CreateSection("学乱 汉化脚本列表")
+    SchoolTab:CreateButton({
+       Name = "学乱1",
+       Callback = function()
+          local success, err = pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"))()
+          end)
+          if not success then warn("脚本执行失败: " .. tostring(err)) end
+       end,
+    })
 
-TSBTab:CreateButton({
-   Name = "TSB脚本 1",
-   Callback = function()
-      local success, err = pcall(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"))()
-      end)
-      if not success then warn("脚本执行失败: " .. tostring(err)) end
-   end,
-})
+    SchoolTab:CreateButton({
+       Name = "学乱2",
+       Callback = function()
+          local success, err = pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%961.txt"))()
+          end)
+          if not success then warn("脚本执行失败: " .. tostring(err)) end
+       end,
+    })
 
-TSBTab:CreateButton({
-   Name = "TSB脚本 2",
-   Callback = function()
-      local success, err = pcall(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"))()
-      end)
-      if not success then warn("脚本执行失败: " .. tostring(err)) end
-   end,
-})
+    SchoolTab:CreateButton({
+       Name = "学乱3",
+       Callback = function()
+          local success, err = pcall(function()
+             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"))()
+          end)
+          if not success then warn("脚本执行失败: " .. tostring(err)) end
+       end,
+    })
 
-SchoolTab:CreateSection("学乱 汉化脚本列表")
+    SettingsTab:CreateSection("主题与外观")
+    SettingsTab:CreateDropdown({
+       Name = "选择UI主题配色",
+       Options = {"Bloom", "Default", "AmberGlow", "Amethyst", "DarkBlue", "Green", "Light", "Ocean", "Serenity"},
+       CurrentOption = {"Bloom"},
+       MultipleOptions = false,
+       Flag = "ThemeDropdown",
+       Callback = function(Option)
+          local selectedTheme = type(Option) == "table" and Option[1] or Option
+          if Window and Window.ModifyTheme then
+             Window:ModifyTheme(selectedTheme)
+          else
+             warn("Rayfield ModifyTheme 方法不可用")
+          end
+       end,
+    })
 
-SchoolTab:CreateButton({
-   Name = "学乱1",
-   Callback = function()
-      local success, err = pcall(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"))()
-      end)
-      if not success then warn("脚本执行失败: " .. tostring(err)) end
-   end,
-})
+    SettingsTab:CreateSection("系统设置")
+    SettingsTab:CreateKeybind({
+       Name = "UI显示快捷键",
+       CurrentKeybind = "RightControl",
+       HoldToInteract = false,
+       Flag = "UIKeybind",
+       Callback = function(Keybind)
+          local keyEnum = typeof(Keybind) == "EnumItem" and Keybind or Enum.KeyCode[Keybind]
+          if keyEnum then
+             Rayfield.ToggleKey = keyEnum
+          end
+       end,
+    })
 
-SchoolTab:CreateButton({
-   Name = "学乱2",
-   Callback = function()
-      local success, err = pcall(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%961.txt"))()
-      end)
-      if not success then warn("脚本执行失败: " .. tostring(err)) end
-   end,
-})
+    SettingsTab:CreateButton({
+       Name = "销毁脚本界面",
+       Callback = function()
+          Rayfield:Destroy()
+       end,
+    })
 
-SchoolTab:CreateButton({
-   Name = "学乱3",
-   Callback = function()
-      local success, err = pcall(function()
-         loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"))()
-      end)
-      if not success then warn("脚本执行失败: " .. tostring(err)) end
-   end,
-})
+    task.spawn(function()
+        while task.wait(30) do
+            local currentKey = getSavedKey()
+            if currentKey then
+                local isOk, msg = VerifyKeyWithServer(currentKey)
+                if not isOk then
+                    pcall(function() Rayfield:Destroy() end)
+                    LocalPlayer:Kick("【系统通知】您已被管理员远程踢出游戏！原因: " .. tostring(msg))
+                    break
+                end
+            end
+        end
+    end)
+end
 
----------------------------------------------------------
--- 设置 页面
----------------------------------------------------------
-SettingsTab:CreateSection("主题与外观")
+local savedKey = getSavedKey()
+local autoPassed = false
 
-SettingsTab:CreateDropdown({
-   Name = "选择UI主题配色",
-   Options = {
-      "Bloom",
-      "Default", 
-      "AmberGlow", 
-      "Amethyst", 
-      "DarkBlue", 
-      "Green", 
-      "Light", 
-      "Ocean", 
-      "Serenity"
-   },
-   CurrentOption = {"Bloom"},
-   MultipleOptions = false,
-   Flag = "ThemeDropdown",
-   Callback = function(Option)
-      local selectedTheme = type(Option) == "table" and Option[1] or Option
-      if Rayfield and Rayfield.ChangeTheme then
-         Rayfield:ChangeTheme(selectedTheme)
-      end
-   end,
-})
+if savedKey then
+    local isOk, msg = VerifyKeyWithServer(savedKey)
+    if isOk then
+        autoPassed = true
+    end
+end
 
-SettingsTab:CreateSection("系统设置")
+if autoPassed then
+    Rayfield:Notify({ Title = "自动登录成功", Content = "已自动完成云端安全核验！", Duration = 3 })
+    BuildMainTabs()
+else
+    local AuthTab = Window:CreateTab("卡密验证", "key")
+    AuthTab:CreateSection("请输入云端卡密以解锁主菜单")
 
-SettingsTab:CreateKeybind({
-   Name = "UI显示快捷键",
-   CurrentKeybind = "RightControl",
-   HoldToInteract = false,
-   Flag = "UIKeybind",
-   Callback = function(Keybind)
-      local keyEnum = typeof(Keybind) == "EnumItem" and Keybind or Enum.KeyCode[Keybind]
-      if keyEnum then
-         Rayfield.ToggleKey = keyEnum
-      end
-   end,
-})
+    local userEnteredKey = ""
 
-SettingsTab:CreateButton({
-   Name = "销毁脚本界面",
-   Callback = function()
-      Rayfield:Destroy()
-   end,
-})
+    AuthTab:CreateInput({
+       Name = "卡密输入框",
+       PlaceholderText = "粘贴格式如 XLKEY-XXXXXX 的卡密",
+       RemoveTextOnFocus = false,
+       Callback = function(Text)
+          userEnteredKey = Text
+       end,
+    })
 
+    AuthTab:CreateButton({
+       Name = "提交云端验证",
+       Callback = function()
+          Rayfield:Notify({ Title = "正在验证", Content = "正在连接云端服务器，请稍候...", Duration = 3 })
+          
+          task.spawn(function()
+             local isSuccess, message = VerifyKeyWithServer(userEnteredKey)
+             if isSuccess then
+                saveKeyLocally(userEnteredKey)
+                Rayfield:Notify({
+                   Title = "验证成功",
+                   Content = "设备绑定成功！",
+                   Duration = 4,
+                })
+                
+                BuildMainTabs()
+                
+                task.defer(function()
+                   pcall(function()
+                      if AuthTab and AuthTab.Destroy then
+                         AuthTab:Destroy()
+                      end
+                   end)
+                end)
+             else
+                Rayfield:Notify({
+                   Title = "验证失败",
+                   Content = message or "卡密错误或账号已被黑名单锁定！",
+                   Duration = 5,
+                })
+             end
+          end)
+       end,
+    })
+
+    AuthTab:CreateParagraph({
+       Title = "获取卡密",
+       Content = "官方加群获取卡密 QQ群: 1038531272"
+    })
+end
