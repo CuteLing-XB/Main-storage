@@ -1,224 +1,233 @@
 do
     local Translations = {
-        -- ================= 警告与加载弹窗 =================
-        ["Executor Warning"] = "执行器警告",
-        ["this executor isnt the best and can cause issues do you accept this risk?"] = "此执行器不是最好的，可能会导致问题，您是否接受此风险？",
-        ["No"] = "否",
-        ["Yes, continue"] = "是，继续",
-        ["Close UI"] = "关闭界面",
-        ["Loading gakuran — enjoy! Your script is running in the background."] = "正在加载学乱 — 尽情享受吧！脚本正在后台运行。",
-        
-        -- ================= 主菜单分类 =================
-        ["Information"] = "信息",
+        -- ================= 侧边栏菜单 (Sidebar Navigation) =================
+        ["Home"] = "主页",
         ["Combat"] = "战斗",
-        ["Visuals"] = "视觉",
+        ["Auto Parry"] = "自动招架",
+        ["Targeting"] = "目标锁定",
+        ["Rescue"] = "救援",
+        ["SEALED"] = "已封印",
+
+        -- ================= 主页 (Home Tab / Player & Server) =================
+        ["PLAYER & SERVER"] = "玩家与服务器",
+        ["Player"] = "玩家",
         ["Game"] = "游戏",
-        ["Chess"] = "下棋",
-        ["Config"] = "配置",
-        
-        -- ================= 信息界面 (Information) =================
-        ["Account"] = "账户",
-        ["User"] = "用户类型",
-        ["Free"] = "免费",
-        ["Status"] = "状态",
-        ["Working"] = "运行中",
-        ["Executor"] = "执行器",
-        ["Game Info"] = "游戏信息",
-        ["Place ID"] = "地图ID",
-        ["Session time"] = "本次时长",
         ["Server"] = "服务器",
-        ["Copy join script (Job ID)"] = "复制加入脚本 (Job ID)",
-        ["Scripts"] = "内置脚本",
-        ["Included in this hub"] = "包含在此脚本站中",
-        ["Features"] = "功能概览",
-        ["Wallhack"] = "透视",
-        ["Aimbot"] = "自瞄",
-        ["Silent Aim"] = "静默自瞄",
-        ["Speed"] = "速度",
-        ["Fly"] = "飞行",
-        ["Auto Farm"] = "自动刷取",
-        ["Misc Utilities"] = "杂项实用功能",
-        ["Socials"] = "社交链接",
-        ["Suggestions"] = "建议反馈",
-        ["Send feedback directly to the devs."] = "直接向开发者发送反馈。",
-        ["Report a Bug"] = "报告Bug",
-        ["Suggest a Feature"] = "建议新功能",
+        ["Script version"] = "脚本版本",
+        ["Run status"] = "运行状态",
+        ["Access"] = "权限等级",
+        ["Premium"] = "高级版",
+        ["Gakran engine ready"] = "Gakran 引擎已就绪",
+        ["made with ❤️"] = "精心制作 ❤️",
+        ["TAP THE CREST"] = "点击徽章",
 
-        -- ================= 战斗界面 (Combat) =================
-        ["Auto Parry"] = "自动格挡",
-        ["Other"] = "其他",
-        ["Enabled"] = "开启",
-        ["None"] = "无",
-        ["Hitbox Visualizer"] = "显示判定箱",
-        ["Auto Dodge (behind)"] = "自动闪避 (身后)",
-        ["Dodge fallback"] = "后备闪避",
-        ["Dodge Crits"] = "闪避重击",
-        ["No stun"] = "无僵直/无眩晕",
-        ["Recover after"] = "恢复时间",
+        -- ================= 战斗功能 (Combat Tab) =================
+        ["HEAVY TIMER"] = "重击计时器",
+        ["Heavy cooldown"] = "重击冷却",
+        ["Ready (7.0s cooldown)"] = "就绪 (7.0秒冷却)",
+        ["Heavy timer on screen"] = "屏幕显示重击计时",
+        ["Height above the bottom"] = "距离底部高度",
+        ["ATTACK AUTOMATION"] = "攻击自动化",
+        ["Auto attack"] = "自动攻击",
+        ["Auto heavy attack"] = "自动重击",
+        ["Auto block"] = "自动格挡",
+        ["Auto dodge"] = "自动闪避",
+        ["Attack mode"] = "攻击模式",
+        ["Facing"] = "朝向目标",
+        ["Anywhere"] = "任意方向",
+        ["Camera"] = "视角方向",
+        ["Attack arc"] = "攻击弧度",
+        ["Attack range"] = "攻击距离",
+        ["M1 interval"] = "轻击间隔",
+        ["Extra heavy delay"] = "额外重击延迟",
+        ["Dodge interval"] = "闪避间隔",
+        ["COMBAT SETUP"] = "战斗设置",
+        ["Smart auto equip"] = "智能自动装备",
+        ["Equip combat style"] = "装备战斗风格",
+        ["Stop combat inputs"] = "停止战斗输入",
+        ["RUN"] = "运行",
 
-        -- ================= 视觉界面 (Visuals) =================
-        ["Player ESP"] = "玩家透视",
-        ["Enable ESP"] = "开启透视",
-        ["Boxes"] = "方框透视",
-        ["Filled Boxes"] = "填充方框",
-        ["Health Bar"] = "血条",
-        ["Names"] = "名字显示",
-        ["Use Roblox Name"] = "使用Roblox名字",
-        ["Distance"] = "距离",
-        ["Combat Style"] = "战斗风格",
-        ["Grade"] = "段位/等级",
-        ["Age"] = "年龄",
-        ["Height"] = "身高",
-        ["Whitelist / hover colors"] = "白名单 / 悬停颜色",
-        ["Player Visuals"] = "玩家视觉效果",
-        ["Remove Stun Blur"] = "移除眩眩模糊",
-        ["HP Bar (Roblox)"] = "Roblox血条",
-        ["HP / Stamina + Crit Bars"] = "血量/体力/重击条",
-        ["Show Roblox Chat"] = "显示Roblox聊天",
+        -- ================= 自动招架 (Auto Parry Tab) =================
+        ["PARRY ENGINE"] = "招架引擎",
+        ["Perfect auto parry"] = "完美自动招架",
+        ["Parry heavy attacks"] = "招架重击",
+        ["Style calibration"] = "流派校准",
+        ["Adaptive"] = "自适应",
+        ["Striker"] = "打击者",
+        ["Parry range"] = "招架范围",
+        ["Timing lead"] = "时机预判",
+        ["Block hold"] = "格挡保持时长",
+        ["Session results"] = "本次数据统计",
+        ["perfect"] = "完美",
+        ["hit"] = "击中",
+        ["ADAPTIVE SAFEGUARDS"] = "自适应防护",
+        ["Auto punish"] = "自动反击/惩罚",
+        ["Angle-based facing check"] = "基于角度的朝向检查",
+        ["Network compensation"] = "网络延迟补偿",
+        ["Animation progress sync"] = "动画进度同步",
+        ["Learn attack timing"] = "学习攻击时机",
+        ["Feint protection"] = "假动作防范",
+        ["Multi-attack queue"] = "多段攻击队列",
+        ["Panic block"] = "紧急格挡",
+        ["Panic health"] = "紧急格挡血量线",
 
-        -- ================= 游戏界面 (Game) =================
-        ["Infinite Stamina"] = "无限体力",
-        ["Low HP Sprint Bypass"] = "低血量强行疾跑",
-        ["Infinite Dashes"] = "无限冲刺",
-        ["Auto Instrument"] = "自动乐器",
+        -- ================= 目标锁定 (Targeting Tab) =================
+        ["PLAYER TARGET"] = "玩家目标设置",
+        ["Target"] = "锁定目标方式",
+        ["Nearest"] = "最近玩家",
+        ["Refresh player list"] = "刷新玩家列表",
+        ["Ignore friends"] = "忽略好友",
+        ["Ignore same team"] = "忽略同队玩家",
+        ["Aim lock"] = "自瞄锁定",
+        ["Camera lock"] = "视角锁定",
+        ["Aim smoothing"] = "瞄准平滑度",
+        ["Spectate target"] = "观战目标",
+        ["Teleport to target"] = "传送至目标",
+        ["Teleport offset"] = "传送距离偏移",
+        ["TARGET FILTERS"] = "目标过滤",
+        ["Target field of view"] = "目标视角范围 (FOV)",
+        ["Require line of sight"] = "需要视线无遮挡",
+        ["Ignore downed targets"] = "忽略倒地目标",
+        ["Minimum target health"] = "最低目标血量",
+        ["Maximum target health"] = "最高目标血量",
+        ["TARGET LOCK"] = "按键锁定设置",
+        ["Lock keybind"] = "锁定快捷键",
+        ["Toggle target lock"] = "切换目标锁定状态",
+        ["Clear target lock"] = "清除锁定目标",
+        ["Locked target"] = "当前锁定目标",
+        ["Unlocked"] = "未锁定",
+        ["TARGET WHITELIST"] = "目标白名单",
+        ["Whitelist selected"] = "将选中玩家加入白名单",
+        ["Remove selected"] = "从白名单移除选中玩家",
+        ["Clear whitelist"] = "清空白名单",
+        ["Whitelist"] = "白名单列表",
 
-        -- ================= 下棋界面 (Chess) =================
-        ["Assistant"] = "助手",
-        ["Enable"] = "开启",
-        ["Copy view link"] = "复制视角链接",
-        ["Copy relay URL"] = "复制中继URL",
-        ["Free trial: 5 games (server-enforced)"] = "免费试用：5局 (服务器强制)",
-        ["Auto Play"] = "自动下棋",
-        ["Auto Play (fires your moves)"] = "自动下棋 (自动执行移动)",
-        ["Randomized delay (human-ish)"] = "随机延迟 (拟人)",
-        ["Delay min"] = "最小延迟",
-        ["Delay max"] = "最大延迟",
-        ["Only moves on your turn. Needs an"] = "仅在您的回合移动。",
+        -- ================= 救援与倒地 (Rescue Tab) =================
+        ["DOWNED PLAYERS"] = "倒地玩家处理",
+        ["Auto carry"] = "自动扛起/搬运",
+        ["Auto grip"] = "自动处决/补人",
+        ["Grip range extender"] = "处决距离延长",
+        ["Carry assist key"] = "搬运辅助快捷键",
+        ["Grip assist key"] = "处决辅助快捷键",
+        ["Carry nearest"] = "搬运最近的倒地玩家",
+        ["Grip nearest"] = "处决最近的倒地玩家",
+        ["SELF RECOVERY"] = "自我复苏",
+        ["Auto revive [experimental]"] = "自动复活 [实验性]",
+        ["Experimental. The heart prompt wants eight beats, the game paces them at 0.72s and only turns the prompt clickable about 4.5s after you go down, so the prompt itself cannot be finished before an execution. This asks the respawn service directly instead. Eight hits while downed still trigger an execution, and in group fights that can land first."] = "实验性功能。心跳提示需要敲击8次，游戏节奏为0.72秒，且在你倒下约4.5秒后提示才可点击，因此提示本身无法在被处决前完成。此功能直接向重生服务发送请求。倒地时受到8次打击仍会触发处决，在混战中可能先生效。",
 
-        -- ================= 配置/主题界面 (Config) =================
-        ["Menu"] = "菜单设置",
-        ["Appearance & keybinds"] = "外观与快捷键",
-        ["Custom Cursor"] = "自定义指针",
-        ["Notification Side"] = "通知弹出位置",
-        ["Left"] = "左侧",
-        ["Right"] = "右侧",
-        ["Menu Keybind"] = "菜单开关按键",
-        ["Background Image"] = "背景图片",
-        ["Theme list"] = "主题列表",
-        ["Custom theme name"] = "自定义主题名称",
-        ["Create theme"] = "创建主题",
-        ["Custom themes"] = "自定义主题列表",
-        ["Load theme"] = "加载主题",
-        ["Overwrite theme"] = "覆盖主题",
-        ["Delete theme"] = "删除主题",
-        ["Refresh list"] = "刷新列表",
-        ["Set as default"] = "设为默认",
-        ["Reset default"] = "重置默认",
-        ["Current default theme: none"] = "当前默认主题：无",
-        ["Configuration"] = "配置文件",
-        ["Config name"] = "配置名称",
-        ["Create config"] = "创建配置",
-        ["Config list"] = "配置列表",
-        ["Load config"] = "加载配置",
-        ["Overwrite config"] = "覆盖配置",
-        ["Delete config"] = "删除配置",
-        ["Set as autoload"] = "设为自动加载",
-        ["Reset autoload"] = "重置自动加载",
-        ["Current autoload config: none"] = "当前自动加载配置：无",
-        ["Config JSON"] = "配置 JSON 数据",
-        ["Import config"] = "导入配置",
-        ["Export current config"] = "导出当前配置"
+        -- ================= 状态栏与系统提示 (Status & System) =================
+        ["Combat equip requested"] = "已请求装备战斗风格",
     }
 
-    -- 极速且安全的纯文本匹配逻辑
     local function translateText(text)
-        if not text or type(text) ~= "string" or text == "" then return text end
+        if not text or type(text) ~= "string" then return text end
         
-        -- 1. 优先精确匹配 (O(1) 速度)
         if Translations[text] then
             return Translations[text]
         end
         
-        -- 2. 子字符串匹配 (关闭正则，防语法报错)
         for en, cn in pairs(Translations) do
-            if #en > 2 and text:find(en, 1, true) then
-                local b, e = text:find(en, 1, true)
-                return text:sub(1, b - 1) .. cn .. text:sub(e + 1)
+            if text:find(en) then
+                return text:gsub(en, cn)
             end
         end
         
         return text
     end
 
-    -- 无需修改元表的安全监听引擎
-    local function startSafeTranslator()
-        task.spawn(function()
-            local CoreGui = game:GetService("CoreGui")
-            local Players = game:GetService("Players")
-            local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
-            local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local function setupTranslationEngine()
+        local success, err = pcall(function()
+            local oldIndex = getrawmetatable(game).__newindex
+            setreadonly(getrawmetatable(game), false)
             
-            -- 使用弱引用防止内存泄漏，记录已绑定的控件
-            local boundObjects = setmetatable({}, {__mode = "k"})
-
-            local function processTextElement(obj)
-                if boundObjects[obj] then return end
-                if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-                    boundObjects[obj] = true
-                    
-                    -- 首次翻译
-                    pcall(function()
-                        local currentText = obj.Text
-                        if currentText and currentText ~= "" then
-                            local newText = translateText(currentText)
-                            if newText ~= currentText then
-                                obj.Text = newText
-                            end
-                        end
-                    end)
-                    
-                    -- 监听后续文字变化
-                    obj:GetPropertyChangedSignal("Text"):Connect(function()
+            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
+                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
+                    v = translateText(tostring(v))
+                end
+                return oldIndex(t, k, v)
+            end)
+            
+            setreadonly(getrawmetatable(game), true)
+        end)
+        
+        if not success then
+            warn("元表劫持失败:", err)
+           
+            local translated = {}
+            local function scanAndTranslate()
+                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+                    if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
                         pcall(function()
-                            local txt = obj.Text
-                            if txt and txt ~= "" then
-                                local tTxt = translateText(txt)
-                                if tTxt ~= txt then
-                                    obj.Text = tTxt
+                            local text = gui.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    gui.Text = translatedText
+                                    translated[gui] = true
                                 end
                             end
                         end)
-                    end)
+                    end
+                end
+                
+                local player = game:GetService("Players").LocalPlayer
+                if player and player:FindFirstChild("PlayerGui") then
+                    for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
+                        if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                            pcall(function()
+                                local text = gui.Text
+                                if text and text ~= "" then
+                                    local translatedText = translateText(text)
+                                    if translatedText ~= text then
+                                        gui.Text = translatedText
+                                        translated[gui] = true
+                                    end
+                                end
+                            end)
+                        end
+                    end
                 end
             end
-
-            local function bindContainer(container)
-                if not container then return end
-                container.DescendantAdded:Connect(function(descendant)
-                    task.wait(0.01)
-                    processTextElement(descendant)
+            
+            local function setupDescendantListener(parent)
+                parent.DescendantAdded:Connect(function(descendant)
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                        task.wait(0.1)
+                        pcall(function()
+                            local text = descendant.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    descendant.Text = translatedText
+                                end
+                            end
+                        end)
+                    end
                 end)
-                for _, desc in ipairs(container:GetDescendants()) do
-                    processTextElement(desc)
-                end
             end
-
-            -- 监听 CoreGui 与 PlayerGui 的 UI 生成
-            pcall(bindContainer, CoreGui)
-            pcall(bindContainer, PlayerGui)
-        end)
+            
+            pcall(setupDescendantListener, game:GetService("CoreGui"))
+            local player = game:GetService("Players").LocalPlayer
+            if player and player:FindFirstChild("PlayerGui") then
+                pcall(setupDescendantListener, player.PlayerGui)
+            end
+            
+            while true do
+                scanAndTranslate()
+                task.wait(3)
+            end
+        end
     end
 
-    -- 1. 启动完全无害的汉化引擎
-    startSafeTranslator()
+    task.wait(2)
+    setupTranslationEngine()
 
-    -- 2. 正常运行原 Luarmor 加密脚本 (不修改任何元表，不触发反作弊)
     local success, err = pcall(function()
-        loadstring(game:HttpGet('https://api.luarmor.net/files/v4/loaders/e4f879e72b8fcf03f318ec5e76201ec7.lua'))()
+        loadstring(game:HttpGet("https://api.jnkie.com/api/v1/loaders/public/db030a8e7623efa9647d6a9864f76d6b3234d17500326b41c81a7245d35ab29e/download"))()
     end)
 
     if not success then
-        warn("Luarmor 主脚本加载失败:", err)
+        warn("加载失败:", err)
     end
 end
 
