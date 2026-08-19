@@ -4,77 +4,133 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local API_URL = "https://gh-jkll.onrender.com/api/bind-hwid"
+local KICK_URL = "https://gh-jkll.onrender.com/api/admin-kick"
 local AUTH_SECRET = "XiaoLin666"
 local SAVE_FILE_NAME = "MyScriptKey.txt"
 
+-- =========================================================
+-- 🔑 本地管理员卡密（在本地写死，不走云端卡密库）
+-- 你可以随意在这里添加/修改你和管理的专属卡密！
+-- =========================================================
+local LOCAL_ADMIN_KEYS = {
+    ["LNMKG-917813"] = true,
+    ["XQWTU-78918888"] = true,
+}
+
+-- 检查卡密是否为本地管理员卡密
+local function isLocalAdminKey(key)
+    if not key then return false end
+    local clean = key:match("^%s*(.-)%s*$")
+    return LOCAL_ADMIN_KEYS[clean] == true
+end
+
+-- 获取设备 HWID
 local function getHWID()
     local hwid = "UNKNOWN_HWID"
-    pcall(function()
-        hwid = RbxAnalyticsService:GetClientId()
-    end)
+    pcall(function() hwid = RbxAnalyticsService:GetClientId() end)
     return hwid
 end
 
+-- 向服务器验证卡密 (自动带上自己的 Roblox Username)
 local function VerifyKeyWithServer(enteredKey)
-    if not enteredKey or enteredKey == "" then
-        return false, "请输入有效卡密！"
+    if not enteredKey or enteredKey == "" then 
+        return false, "请输入有效卡密！" 
+    end
+
+    local cleanKey = enteredKey:match("^%s*(.-)%s*$")
+
+    -- 如果是本地硬编码的管理员卡密，免 HWID 绑定直接通过
+    if isLocalAdminKey(cleanKey) then
+        return true, "管理员身份验证通过！"
     end
 
     local payload = {
-        key = enteredKey,
+        key = cleanKey,
         hwid = getHWID(),
-        username = LocalPlayer.Name,
+        username = LocalPlayer.Name, -- 获取唯一的 Roblox Username
         secret = AUTH_SECRET
     }
     
     local requestData = {
         Url = API_URL,
         Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json"
-        },
+        Headers = {["Content-Type"] = "application/json"},
         Body = HttpService:JSONEncode(payload)
     }
     
     local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    if not httpRequest then return false, "当前执行器不支持 HTTP 请求" end
     
-    if not httpRequest then
-        return false, "当前执行器不支持 HTTP 请求"
-    end
-    
-    local success, result = pcall(function()
-        return httpRequest(requestData)
-    end)
-    
+    local success, result = pcall(function() return httpRequest(requestData) end)
     if success and result and result.Body then
-        local jsonSuccess, decoded = pcall(function()
-            return HttpService:JSONDecode(result.Body)
-        end)
+        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(result.Body) end)
         if jsonSuccess and decoded then
             return decoded.success, decoded.message
         end
     end
-    
     return false, "无法连接卡密服务器，请稍后再试"
 end
 
+-- 远程踢人请求（强制发送目标玩家的 Roblox Username）
+local function RequestKickPlayerByUsername(targetUsername)
+    if not targetUsername or targetUsername == "" then
+        return false, "目标 Roblox Username 不能为空！"
+    end
+
+    local payload = {
+        adminKey = "XLKEY-ADMIN888",
+        targetUser = targetUsername:match("^%s*(.-)%s*$"), -- 精确传出 Roblox Username
+        secret = AUTH_SECRET
+    }
+    
+    local requestData = {
+        Url = KICK_URL,
+        Method = "POST",
+        Headers = {["Content-Type"] = "application/json"},
+        Body = HttpService:JSONEncode(payload)
+    }
+    
+    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    if not httpRequest then return false, "执行器不支持请求" end
+    
+    local success, result = pcall(function() return httpRequest(requestData) end)
+    if success and result and result.Body then
+        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(result.Body) end)
+        if jsonSuccess and decoded then
+            return decoded.success, decoded.message
+        end
+    end
+    return false, "请求失败或服务器无响应"
+end
+
+-- 获取同服务器所有在线玩家的 Roblox Username 列表
+local function GetOnlineUsernames()
+    local userList = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        table.insert(userList, player.Name) -- player.Name 即唯一的 Roblox Username
+    end
+    if #userList == 0 then table.insert(userList, LocalPlayer.Name) end
+    return userList
+end
+
+-- 本地文件操作
 local function getSavedKey()
-    if isfile and isfile(SAVE_FILE_NAME) then
-        return readfile(SAVE_FILE_NAME)
+    if isfile and isfile(SAVE_FILE_NAME) then 
+        local content = readfile(SAVE_FILE_NAME)
+        return content and content:match("^%s*(.-)%s*$")
     end
     return nil
 end
 
 local function saveKeyLocally(key)
-    if writefile then
-        writefile(SAVE_FILE_NAME, key)
-    end
+    if writefile then writefile(SAVE_FILE_NAME, key) end
 end
 
+-- 加载 Rayfield UI
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "UI主菜单",
+   Name = "小林 UI 主菜单",
    LoadingTitle = "Rayfield 脚本加载中",
    LoadingSubtitle = "by 小林",
    Theme = "Bloom",
@@ -83,7 +139,100 @@ local Window = Rayfield:CreateWindow({
    DisableRayfieldPrompts = false,
 })
 
-local function BuildMainTabs()
+-- 通用脚本执行封装
+local function SafeExecute(scriptName, url)
+    Rayfield:Notify({Title = "正在加载", Content = "正在获取 " .. scriptName .. "，请稍候...", Duration = 3, Image = "code"})
+    task.spawn(function()
+        local success, err = pcall(function() loadstring(game:HttpGet(url))() end)
+        if success then
+            Rayfield:Notify({Title = "执行成功", Content = scriptName .. " 已运行！", Duration = 4, Image = "check"})
+        else
+            Rayfield:Notify({Title = "执行失败", Content = scriptName .. " 运行出错: " .. tostring(err), Duration = 6, Image = "alert-triangle"})
+        end
+    end)
+end
+
+-- 组装界面
+local function BuildMainTabs(isAdminUser)
+    Rayfield:Notify({
+        Title = "欢迎使用",
+        Content = isAdminUser and "管理员权限已解锁！控制台已就绪。" or "小林 UI 已成功加载！按 [RightControl] 隐藏/显示。",
+        Duration = 5,
+        Image = isAdminUser and "shield-check" or "bell"
+    })
+
+    -- =========================================================
+    -- 🛡️ 管理员后台 (输入本地管理员卡密才会解锁)
+    -- =========================================================
+    if isAdminUser then
+        local AdminTab = Window:CreateTab("管理后台", "shield-alert")
+        AdminTab:CreateSection("远程踢人控制台 (针对 Roblox Username)")
+
+        local selectedUsername = ""
+
+        -- 选项 1：下拉选择同服务器在线玩家
+        AdminTab:CreateDropdown({
+           Name = "快速选择本服玩家 (Roblox Username)",
+           Options = GetOnlineUsernames(),
+           CurrentOption = {LocalPlayer.Name},
+           MultipleOptions = false,
+           Flag = "TargetDropdown",
+           Callback = function(Option)
+              local chosen = type(Option) == "table" and Option[1] or Option
+              selectedUsername = chosen
+              Rayfield:Notify({Title = "已选中玩家", Content = "已选择 Username: " .. tostring(chosen), Duration = 2})
+           end,
+        })
+
+        -- 选项 2：手动输入任意玩家的 Roblox Username（可跨服踢人）
+        AdminTab:CreateInput({
+           Name = "手动输入 Roblox Username",
+           PlaceholderText = "例如: CuteLing_XB (必须是唯一用户名)",
+           RemoveTextOnFocus = false,
+           Callback = function(Text)
+              selectedUsername = Text
+           end,
+        })
+
+        -- 踢人按钮
+        AdminTab:CreateButton({
+           Name = "🚨 确认踢出并拉黑该 Roblox 账号",
+           Callback = function()
+              if selectedUsername == "" or selectedUsername == nil then
+                 Rayfield:Notify({Title = "参数空缺", Content = "请选择或输入要踢出的 Roblox Username！", Duration = 3, Image = "alert-circle"})
+                 return
+              end
+
+              Rayfield:Notify({Title = "正在处理", Content = "正在向云端提交黑名单操作: " .. selectedUsername, Duration = 3, Image = "send"})
+
+              task.spawn(function()
+                 local isOk, msg = RequestKickPlayerByUsername(selectedUsername)
+                 if isOk then
+                    Rayfield:Notify({
+                       Title = "命令执行成功",
+                       Content = "账号 [" .. selectedUsername .. "] 已加入黑名单，将在30秒内被自动踢出！",
+                       Duration = 6,
+                       Image = "user-x"
+                    })
+                 else
+                    Rayfield:Notify({
+                       Title = "操作失败",
+                       Content = msg or "服务器无响应，请重试！",
+                       Duration = 5,
+                       Image = "x-circle"
+                    })
+                 end
+              end)
+           end,
+        })
+
+        AdminTab:CreateParagraph({
+           Title = "提示说明",
+           Content = "1. 下拉菜单只能获取同服务器在线玩家的 Username。\n2. 手动输入框可以输入不在本服的 Roblox Username 进行跨服拉黑。"
+        })
+    end
+
+    -- 普通功能菜单
     local AboutTab     = Window:CreateTab("关于", "info")        
     local UniversalTab = Window:CreateTab("通用", "globe")
     local TSBTab       = Window:CreateTab("最强战场", 4370060017)
@@ -91,130 +240,29 @@ local function BuildMainTabs()
     local SettingsTab  = Window:CreateTab("设置", "settings")
 
     AboutTab:CreateSection("脚本说明")
-    AboutTab:CreateParagraph({
-       Title = "脚本介绍",
-       Content = "这是一个免费的不存在任何付费\n小林感谢所有的用户\n谢谢你们的支持"
-    })
+    AboutTab:CreateParagraph({ Title = "介绍", Content = "免费脚本，感谢大家支持！" })
 
-    UniversalTab:CreateSection("通用 脚本列表")
-    UniversalTab:CreateButton({
-       Name = "多方向吸附",
-       Callback = function()
-          local success, err = pcall(function()
-             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84"))()
-          end)
-          if not success then warn("脚本执行失败: " .. tostring(err)) end
-       end,
-    })
+    UniversalTab:CreateSection("通用 脚本")
+    UniversalTab:CreateButton({ Name = "多方向吸附", Callback = function() SafeExecute("多方向吸附", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84") end })
 
-    TSBTab:CreateSection("最强战场 脚本列表")
-    TSBTab:CreateButton({
-       Name = "执行自动农场",
-       Callback = function()
-          local success, err = pcall(function()
-             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"))()
-          end)
-          if not success then warn("脚本执行失败: " .. tostring(err)) end
-       end,
-    })
+    TSBTab:CreateSection("最强战场")
+    TSBTab:CreateButton({ Name = "执行自动农场", Callback = function() SafeExecute("TSB 自动农场", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt") end })
 
-    TSBTab:CreateButton({
-       Name = "TSB脚本 1",
-       Callback = function()
-          local success, err = pcall(function()
-             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"))()
-          end)
-          if not success then warn("脚本执行失败: " .. tostring(err)) end
-       end,
-    })
-
-    TSBTab:CreateButton({
-       Name = "TSB脚本 2",
-       Callback = function()
-          local success, err = pcall(function()
-             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"))()
-          end)
-          if not success then warn("脚本执行失败: " .. tostring(err)) end
-       end,
-    })
-
-    SchoolTab:CreateSection("学乱 汉化脚本列表")
-    SchoolTab:CreateButton({
-       Name = "学乱1",
-       Callback = function()
-          local success, err = pcall(function()
-             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"))()
-          end)
-          if not success then warn("脚本执行失败: " .. tostring(err)) end
-       end,
-    })
-
-    SchoolTab:CreateButton({
-       Name = "学乱2",
-       Callback = function()
-          local success, err = pcall(function()
-             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%961.txt"))()
-          end)
-          if not success then warn("脚本执行失败: " .. tostring(err)) end
-       end,
-    })
-
-    SchoolTab:CreateButton({
-       Name = "学乱3",
-       Callback = function()
-          local success, err = pcall(function()
-             loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"))()
-          end)
-          if not success then warn("脚本执行失败: " .. tostring(err)) end
-       end,
-    })
-
-    SettingsTab:CreateSection("主题与外观")
-    SettingsTab:CreateDropdown({
-       Name = "选择UI主题配色",
-       Options = {"Bloom", "Default", "AmberGlow", "Amethyst", "DarkBlue", "Green", "Light", "Ocean", "Serenity"},
-       CurrentOption = {"Bloom"},
-       MultipleOptions = false,
-       Flag = "ThemeDropdown",
-       Callback = function(Option)
-          local selectedTheme = type(Option) == "table" and Option[1] or Option
-          if Window and Window.ModifyTheme then
-             Window:ModifyTheme(selectedTheme)
-          else
-             warn("Rayfield ModifyTheme 方法不可用")
-          end
-       end,
-    })
+    SchoolTab:CreateSection("学乱")
+    SchoolTab:CreateButton({ Name = "学乱1", Callback = function() SafeExecute("学乱 1", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt") end })
 
     SettingsTab:CreateSection("系统设置")
-    SettingsTab:CreateKeybind({
-       Name = "UI显示快捷键",
-       CurrentKeybind = "RightControl",
-       HoldToInteract = false,
-       Flag = "UIKeybind",
-       Callback = function(Keybind)
-          local keyEnum = typeof(Keybind) == "EnumItem" and Keybind or Enum.KeyCode[Keybind]
-          if keyEnum then
-             Rayfield.ToggleKey = keyEnum
-          end
-       end,
-    })
+    SettingsTab:CreateButton({ Name = "销毁界面", Callback = function() Rayfield:Destroy() end })
 
-    SettingsTab:CreateButton({
-       Name = "销毁脚本界面",
-       Callback = function()
-          Rayfield:Destroy()
-       end,
-    })
-
+    -- 后台每 30 秒核验一次黑名单（普通卡密才查，管理员不过滤）
     task.spawn(function()
         while task.wait(30) do
             local currentKey = getSavedKey()
-            if currentKey then
+            if currentKey and not isLocalAdminKey(currentKey) then
                 local isOk, msg = VerifyKeyWithServer(currentKey)
                 if not isOk then
                     pcall(function() Rayfield:Destroy() end)
-                    LocalPlayer:Kick("【系统通知】您已被管理员远程踢出游戏！原因: " .. tostring(msg))
+                    LocalPlayer:Kick("【安全验证拦截】您已被管理员踢出游戏！原因: " .. tostring(msg))
                     break
                 end
             end
@@ -222,19 +270,26 @@ local function BuildMainTabs()
     end)
 end
 
+-- 登录与启动逻辑
 local savedKey = getSavedKey()
 local autoPassed = false
+local isAdminLogin = false
 
 if savedKey then
-    local isOk, msg = VerifyKeyWithServer(savedKey)
-    if isOk then
+    if isLocalAdminKey(savedKey) then
         autoPassed = true
+        isAdminLogin = true
+    else
+        local isOk, msg = VerifyKeyWithServer(savedKey)
+        if isOk then
+            autoPassed = true
+        end
     end
 end
 
 if autoPassed then
-    Rayfield:Notify({ Title = "自动登录成功", Content = "已自动完成云端安全核验！", Duration = 3 })
-    BuildMainTabs()
+    Rayfield:Notify({ Title = "自动登录", Content = "密钥核验通过！", Duration = 3 })
+    BuildMainTabs(isAdminLogin)
 else
     local AuthTab = Window:CreateTab("卡密验证", "key")
     AuthTab:CreateSection("请输入云端卡密以解锁主菜单")
@@ -243,7 +298,7 @@ else
 
     AuthTab:CreateInput({
        Name = "卡密输入框",
-       PlaceholderText = "粘贴格式如 XLKEY-XXXXXX 的卡密",
+       PlaceholderText = "输入卡密（或管理员专属卡密）",
        RemoveTextOnFocus = false,
        Callback = function(Text)
           userEnteredKey = Text
@@ -253,19 +308,29 @@ else
     AuthTab:CreateButton({
        Name = "提交云端验证",
        Callback = function()
-          Rayfield:Notify({ Title = "正在验证", Content = "正在连接云端服务器，请稍候...", Duration = 3 })
+          Rayfield:Notify({ Title = "正在验证", Content = "正在比对卡密，请稍候...", Duration = 3 })
           
           task.spawn(function()
-             local isSuccess, message = VerifyKeyWithServer(userEnteredKey)
+             local cleanKey = userEnteredKey:match("^%s*(.-)%s*$")
+             local isAdmin = isLocalAdminKey(cleanKey)
+
+             local isSuccess, message
+             if isAdmin then
+                 isSuccess = true
+                 message = "管理员登录成功"
+             else
+                 isSuccess, message = VerifyKeyWithServer(cleanKey)
+             end
+
              if isSuccess then
-                saveKeyLocally(userEnteredKey)
+                saveKeyLocally(cleanKey)
                 Rayfield:Notify({
                    Title = "验证成功",
-                   Content = "设备绑定成功！",
+                   Content = isAdmin and "解锁管理员特权控制台！" or "登录成功！正在加载界面...",
                    Duration = 4,
                 })
                 
-                BuildMainTabs()
+                BuildMainTabs(isAdmin)
                 
                 task.defer(function()
                    pcall(function()
@@ -277,7 +342,7 @@ else
              else
                 Rayfield:Notify({
                    Title = "验证失败",
-                   Content = message or "卡密错误或账号已被黑名单锁定！",
+                   Content = message or "卡密错误！",
                    Duration = 5,
                 })
              end
@@ -290,3 +355,4 @@ else
        Content = "官方加群获取卡密 QQ群: 1038531272"
     })
 end
+
