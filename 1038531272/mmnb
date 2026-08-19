@@ -33,22 +33,19 @@ local function getHWID()
     return hwid
 end
 
--- 通用网络请求函数（带 3 次重试机制）
+-- 通用网络请求函数
 local function SafeHttpRequest(requestData)
     local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
     if not httpRequest then return false, "当前执行器不支持 HTTP 请求" end
 
-    for attempt = 1, 3 do
-        local success, result = pcall(function() return httpRequest(requestData) end)
-        if success and result and result.Body then
-            return true, result.Body
-        end
-        task.wait(1)
+    local success, result = pcall(function() return httpRequest(requestData) end)
+    if success and result and result.Body then
+        return true, result.Body
     end
     return false, "网络连接超时"
 end
 
--- 验证卡密 & 发送心跳
+-- 验证卡密（登录时仅校验一次）
 local function VerifyKeyWithServer(enteredKey)
     if not enteredKey or enteredKey == "" then 
         return false, "请输入有效卡密！" 
@@ -81,7 +78,7 @@ local function VerifyKeyWithServer(enteredKey)
             return decoded.success, decoded.message
         end
     end
-    return false, "网络连接超时"
+    return false, "无法连接卡密服务器，请稍后再试"
 end
 
 -- 获取在线脚本玩家
@@ -450,7 +447,7 @@ local function BuildMainTabs(isAdminUser, currentAdminKey)
        Flag = "UIKeybind",
        Callback = function(Keybind)
           local keyEnum = typeof(Keybind) == "EnumItem" and Keybind or Enum.KeyCode[Keybind]
-          if keyEnum me then
+          if keyEnum then
              Rayfield.ToggleKey = keyEnum
              Rayfield:Notify({
                 Title = "快捷键设置成功",
@@ -469,32 +466,22 @@ local function BuildMainTabs(isAdminUser, currentAdminKey)
        end,
     })
 
-    -- 优化后的柔性心跳包检测循环
-    task.spawn(function()
-        while task.wait(20) do
-            local currentKey = getSavedKey()
-            if currentKey and not isLocalAdminKey(currentKey) then
-                local isOk, msg = VerifyKeyWithServer(currentKey)
-                
-                if not isOk then
-                    -- 只有当服务器明确回答“已被列入黑名单”时才强行踢出游戏
-                    if msg and (msg:find("黑名单") or msg:find("已被列入")) then
-                        pcall(function() Rayfield:Destroy() end)
-                        LocalPlayer:Kick("【安全拦截】该账号已被管理员列入黑名单！")
-                        break
-                    else
-                        -- 如果是网络连接超时、连不上等原因，绝不踢人！只弹窗温馨提醒
-                        Rayfield:Notify({
-                            Title = "网络连接波动",
-                            Content = "服务器心跳同步稍有延迟，脚本正常运行中...",
-                            Duration = 4,
-                            Image = "wifi-off"
-                        })
-                    end
+    -- 🛡️ 极轻量远程 Kick 拦截循环（不查卡密、不出错、不卡顿）
+    if not isAdminUser then
+        task.spawn(function()
+            local savedKey = getSavedKey() or "TEMP_KEY"
+            while task.wait(45) do -- 每 45 秒静默检测一次
+                local isOk, msg = VerifyKeyWithServer(savedKey)
+                -- 只有当服务器“百分百确定”返回黑名单拦截时才踢出！
+                if not isOk and msg and (msg:find("黑名单") or msg:find("拦截")) then
+                    pcall(function() Rayfield:Destroy() end)
+                    LocalPlayer:Kick("【安全拦截】您已被管理员强行踢出游戏！原因: " .. tostring(msg))
+                    break
                 end
+                -- 网络超时或连接失败时，静默忽略，绝不误踢！
             end
-        end
-    end)
+        end)
+    end
 end
 
 -- =========================================================
