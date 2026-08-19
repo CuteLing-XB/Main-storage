@@ -33,7 +33,7 @@ local function getHWID()
     return hwid
 end
 
--- 通用网络请求函数（带 3 次重试逻辑，防止网络抖动直接断开）
+-- 通用网络请求函数（带 3 次重试机制）
 local function SafeHttpRequest(requestData)
     local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
     if not httpRequest then return false, "当前执行器不支持 HTTP 请求" end
@@ -43,9 +43,9 @@ local function SafeHttpRequest(requestData)
         if success and result and result.Body then
             return true, result.Body
         end
-        task.wait(1) -- 重试前等待 1 秒
+        task.wait(1)
     end
-    return false, "无法连接卡密服务器，请稍后再试"
+    return false, "网络连接超时"
 end
 
 -- 验证卡密 & 发送心跳
@@ -81,7 +81,7 @@ local function VerifyKeyWithServer(enteredKey)
             return decoded.success, decoded.message
         end
     end
-    return false, "无法连接卡密服务器，请稍后再试"
+    return false, "网络连接超时"
 end
 
 -- 获取在线脚本玩家
@@ -450,7 +450,7 @@ local function BuildMainTabs(isAdminUser, currentAdminKey)
        Flag = "UIKeybind",
        Callback = function(Keybind)
           local keyEnum = typeof(Keybind) == "EnumItem" and Keybind or Enum.KeyCode[Keybind]
-          if keyEnum then
+          if keyEnum me then
              Rayfield.ToggleKey = keyEnum
              Rayfield:Notify({
                 Title = "快捷键设置成功",
@@ -469,25 +469,27 @@ local function BuildMainTabs(isAdminUser, currentAdminKey)
        end,
     })
 
-    -- 心跳包兼黑名单检测（增强防踢版）
+    -- 优化后的柔性心跳包检测循环
     task.spawn(function()
-        local failCount = 0
-        while task.wait(15) do
+        while task.wait(20) do
             local currentKey = getSavedKey()
-            if currentKey then
-                if not isLocalAdminKey(currentKey) then
-                    local isOk, msg = VerifyKeyWithServer(currentKey)
-                    if not isOk then
-                        failCount = failCount + 1
-                        -- 只有当连续失败 3 次以上（持续约 45 秒网络崩溃）或者服务器明确返回“踢出/黑名单”时才触发 Kick
-                        local isDefiniteKick = msg and (msg:find("黑名单") or msg:find("拦截") or msg:find("不存在"))
-                        if failCount >= 3 or isDefiniteKick then
-                            pcall(function() Rayfield:Destroy() end)
-                            LocalPlayer:Kick("【系统安全拦截】您已被管理员踢出游戏！原因: " .. tostring(msg))
-                            break
-                        end
+            if currentKey and not isLocalAdminKey(currentKey) then
+                local isOk, msg = VerifyKeyWithServer(currentKey)
+                
+                if not isOk then
+                    -- 只有当服务器明确回答“已被列入黑名单”时才强行踢出游戏
+                    if msg and (msg:find("黑名单") or msg:find("已被列入")) then
+                        pcall(function() Rayfield:Destroy() end)
+                        LocalPlayer:Kick("【安全拦截】该账号已被管理员列入黑名单！")
+                        break
                     else
-                        failCount = 0 -- 恢复正常时重置计数
+                        -- 如果是网络连接超时、连不上等原因，绝不踢人！只弹窗温馨提醒
+                        Rayfield:Notify({
+                            Title = "网络连接波动",
+                            Content = "服务器心跳同步稍有延迟，脚本正常运行中...",
+                            Duration = 4,
+                            Image = "wifi-off"
+                        })
                     end
                 end
             end
@@ -582,3 +584,4 @@ else
        Content = "官方加群获取卡密 QQ群: 1038531272"
     })
 end
+
