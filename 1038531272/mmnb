@@ -18,6 +18,7 @@ local SAVE_FILE_NAME = "MyScriptKey.txt"
 local LOCAL_ADMIN_KEYS = {
     ["LNMKG-917813"] = true,
     ["XQWTU-78918888"] = true,
+    ["XLKEY-TSS866NB"] = true,
 }
 
 local function isLocalAdminKey(key)
