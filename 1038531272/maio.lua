@@ -187,7 +187,7 @@ end
 
 for u,v in next,h do
 if not table.find({"ThemeTag"},u)then
-r[u]=v
+b.SafeSetProperty(r,u,v)
 end
 end
 
@@ -1001,66 +1001,75 @@ end
 
 function r.UpdateTheme(u,v,x,z,A,B)
 local function ApplyTheme(C)
+local function applyValue(object,property,value)
+local realProperty=property
+local readable=pcall(function()
+return object[realProperty]
+end)
+local isContainer=false
+pcall(function()
+isContainer=object:IsA("Frame")or object:IsA("TextButton")
+end)
+if isContainer and property=="ImageColor3" then
+realProperty="BackgroundColor3"
+readable=true
+elseif isContainer and property=="ImageTransparency" then
+realProperty="BackgroundTransparency"
+readable=true
+end
+if x and readable then
+r.Tween(object,z or 0.2,{[realProperty]=value},A or Enum.EasingStyle.Quint,B or Enum.EasingDirection.Out):Play()
+elseif v and readable then
+r.Tween(object,0.08,{[realProperty]=value}):Play()
+else
+safeSetProperty(object,property,value)
+end
+-- Keep border/glass children in sync when a visual Image* token is mapped.
+if isContainer and property=="ImageColor3" then
+local stroke=object:FindFirstChildOfClass("UIStroke")
+if stroke then
+if x then r.Tween(stroke,z or 0.2,{Color=value},A or Enum.EasingStyle.Quint,B or Enum.EasingDirection.Out):Play()
+elseif v then r.Tween(stroke,0.08,{Color=value}):Play()
+else pcall(function() stroke.Color=value end) end
+end
+elseif isContainer and property=="ImageTransparency" then
+local stroke=object:FindFirstChildOfClass("UIStroke")
+if stroke then
+local transparency=math.clamp(tonumber(value)or 0,0,1)
+if x then r.Tween(stroke,z or 0.2,{Transparency=transparency},A or Enum.EasingStyle.Quint,B or Enum.EasingDirection.Out):Play()
+elseif v then r.Tween(stroke,0.08,{Transparency=transparency}):Play()
+else pcall(function() stroke.Transparency=transparency end) end
+end
+end
+end
 for F,G in pairs(C.Properties or{})do
 local H=r.GetThemeProperty(G,r.Theme)
 if H~=nil then
 if typeof(H)=="Color3"then
 local J=C.Object:FindFirstChild"LibraryGradient"
-if J then
-J:Destroy()
-end
-
-if x then
-r.Tween(
-C.Object,
-z or 0.2,
-{[F]=H},
-A or Enum.EasingStyle.Quint,
-B or Enum.EasingDirection.Out
-):Play()
-elseif v then
-r.Tween(C.Object,0.08,{[F]=H}):Play()
-else
-C.Object[F]=H
-end
+if J then J:Destroy() end
+applyValue(C.Object,F,H)
 elseif typeof(H)=="table"and H.Color and H.Transparency then
-C.Object[F]=Color3.new(1,1,1)
-
+safeSetProperty(C.Object,F,Color3.new(1,1,1))
 local J=C.Object:FindFirstChild"LibraryGradient"
 if not J then
 J=Instance.new"UIGradient"
 J.Name="LibraryGradient"
 J.Parent=C.Object
 end
-
 J.Color=H.Color
 J.Transparency=H.Transparency
-
 for L,M in pairs(H)do
-if L~="Color"and L~="Transparency"and J[L]~=nil then
-J[L]=M
+if L~="Color"and L~="Transparency"then
+safeSetProperty(J,L,M)
 end
 end
 elseif typeof(H)=="number"then
-if x then
-r.Tween(
-C.Object,
-z or 0.2,
-{[F]=H},
-A or Enum.EasingStyle.Quint,
-B or Enum.EasingDirection.Out
-):Play()
-elseif v then
-r.Tween(C.Object,0.08,{[F]=H}):Play()
-else
-C.Object[F]=H
-end
+applyValue(C.Object,F,H)
 end
 else
 local J=C.Object:FindFirstChild"LibraryGradient"
-if J then
-J:Destroy()
-end
+if J then J:Destroy() end
 end
 end
 end
@@ -1158,16 +1167,71 @@ function r.AddIcons(u,v)
 return m.AddIcons(u,v)
 end
 
+local function safeSetProperty(object,propName,value)
+if not object then
+return false
+end
+local readable=pcall(function()
+return object[propName]
+end)
+if readable then
+local assigned=pcall(function()
+object[propName]=value
+end)
+if assigned then
+return true
+end
+end
+
+-- Native Frame/TextButton replacements do not expose Image* properties.
+local isContainer=false
+pcall(function()
+isContainer=object:IsA("Frame")or object:IsA("TextButton")
+end)
+local isGradient=false
+pcall(function() isGradient=object:IsA("UIGradient") end)
+if isGradient and propName=="ImageColor3" then
+pcall(function() object.Color=ColorSequence.new(value) end)
+return true
+elseif isGradient and propName=="ImageTransparency" then
+local transparency=math.clamp(tonumber(value)or 0,0,1)
+pcall(function() object.Transparency=NumberSequence.new(transparency) end)
+return true
+elseif isContainer and propName=="ImageColor3" then
+pcall(function() object.BackgroundColor3=value end)
+local stroke=object:FindFirstChildOfClass("UIStroke")
+if stroke then pcall(function() stroke.Color=value end) end
+local gradient=object:FindFirstChildOfClass("UIGradient")
+if gradient then
+pcall(function() gradient.Color=ColorSequence.new(value) end)
+end
+return true
+elseif isContainer and propName=="ImageTransparency" then
+pcall(function() object.BackgroundTransparency=value end)
+local stroke=object:FindFirstChildOfClass("UIStroke")
+if stroke then pcall(function() stroke.Transparency=value end) end
+local gradient=object:FindFirstChildOfClass("UIGradient")
+if gradient then
+local transparency=math.clamp(tonumber(value)or 0,0,1)
+pcall(function() gradient.Transparency=NumberSequence.new(transparency) end)
+end
+return true
+end
+return false
+end
+
+r.SafeSetProperty=safeSetProperty
+
 function r.New(u,v,x)
 local z=Instance.new(u)
 
 for A,B in next,r.DefaultProperties[u]or{}do
-z[A]=B
+safeSetProperty(z,A,B)
 end
 
 for A,B in next,v or{}do
 if A~="ThemeTag"then
-z[A]=B
+safeSetProperty(z,A,B)
 end
 if r.Localization and r.Localization.Enabled and A=="Text"then
 local C=string.match(B,"^"..r.Localization.Prefix.."(.+)")
@@ -1181,7 +1245,7 @@ end
 end
 
 for A,B in next,x or{}do
-B.Parent=z
+if B then pcall(function() B.Parent=z end) end
 end
 
 if v and v.ThemeTag then
@@ -2226,10 +2290,10 @@ NumberSequenceKeypoint.new(1,0.85),
 }
 buttonGradient.Parent=buttonSurface
 if ah=="Destructive" then
-buttonSurface.ImageColor3=Color3.fromRGB(255,59,48)
-buttonSurface.ImageTransparency=0.15
+ab.SafeSetProperty(buttonSurface,"ImageColor3",Color3.fromRGB(255,59,48))
+ab.SafeSetProperty(buttonSurface,"ImageTransparency",0.15)
 elseif ah=="Secondary" then
-buttonSurface.ImageTransparency=0.75
+ab.SafeSetProperty(buttonSurface,"ImageTransparency",0.75)
 end
 local buttonScale=Instance.new("UIScale")
 buttonScale.Name="LiquidGlassPressScale"
@@ -5955,8 +6019,8 @@ Offset=Vector2.new(-1,0),
 Parent=ay,
 })
 
-ax.ImageTransparency=0.65
-ay.ImageTransparency=0.88
+aa.SafeSetProperty(ax,"ImageTransparency",0.65)
+aa.SafeSetProperty(ay,"ImageTransparency",0.88)
 
 ad(h,0.75,{
 Offset=Vector2.new(1,0),
@@ -5968,8 +6032,8 @@ Offset=Vector2.new(1,0),
 
 task.spawn(function()
 task.wait(0.75)
-ax.ImageTransparency=1
-ay.ImageTransparency=1
+aa.SafeSetProperty(ax,"ImageTransparency",1)
+aa.SafeSetProperty(ay,"ImageTransparency",1)
 h:Destroy()
 i:Destroy()
 end)
@@ -6359,6 +6423,22 @@ toggleStroke.Thickness=1
 toggleStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
 toggleStroke.Parent=aq
 
+local glass=aq.Frame.Bar.Highlight.Glass
+local function setGlassImage(image,rectSize,rectOffset)
+pcall(function()
+if glass:IsA("ImageLabel")or glass:IsA("ImageButton")then
+glass.Image=image
+glass.ImageRectSize=rectSize
+glass.ImageRectOffset=rectOffset
+end
+end)
+end
+local function tweenGlassTransparency(duration,value,style,direction)
+local isImage=glass:IsA("ImageLabel")or glass:IsA("ImageButton")
+local property=isImage and"ImageTransparency"or"BackgroundTransparency"
+ad(glass,duration,{[property]=value},style,direction):Play()
+end
+
 local at=ak and 30 or 20
 local au=aq.Size.X.Offset
 
@@ -6370,25 +6450,13 @@ Position=UDim2.new(0,au-at-2,0.5,0),
 },Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.15)
 
-ad(
-aq.Frame.Bar.Highlight.Glass,
-0.15,
-{ImageTransparency=0},
-Enum.EasingStyle.Quint,
-Enum.EasingDirection.Out
-):Play()
+tweenGlassTransparency(0.15,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 else
 ad(aq.Frame,0.35,{
 Position=UDim2.new(0,2,0.5,0),
 },Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.15)
-ad(
-aq.Frame.Bar.Highlight.Glass,
-0.15,
-{ImageTransparency=0.85},
-Enum.EasingStyle.Quint,
-Enum.EasingDirection.Out
-):Play()
+tweenGlassTransparency(0.15,0.85,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 end
 else
 if aw then
@@ -6403,13 +6471,7 @@ ad(aq.Layer,0.1,{
 ImageTransparency=0,
 }):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.1)
-ad(
-aq.Frame.Bar.Highlight.Glass,
-0.1,
-{ImageTransparency=0},
-Enum.EasingStyle.Quint,
-Enum.EasingDirection.Out
-):Play()
+tweenGlassTransparency(0.1,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 
 if ao then
 ad(ao,0.1,{
@@ -6419,21 +6481,13 @@ end
 
 local az,aA,aB=am:GetGlassFrame(1)
 
-aq.Frame.Bar.Highlight.Glass.Image=az
-aq.Frame.Bar.Highlight.Glass.ImageRectSize=aA
-aq.Frame.Bar.Highlight.Glass.ImageRectOffset=aB
+setGlassImage(az,aA,aB)
 else
 ad(aq.Layer,0.1,{
 ImageTransparency=1,
 }):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.1)
-ad(
-aq.Frame.Bar.Highlight.Glass,
-0.1,
-{ImageTransparency=0.85},
-Enum.EasingStyle.Quint,
-Enum.EasingDirection.Out
-):Play()
+tweenGlassTransparency(0.1,0.85,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 
 if ao then
 ad(ao,0.1,{
@@ -6443,9 +6497,7 @@ end
 
 local az,aA,aB=am:GetGlassFrame(0)
 
-aq.Frame.Bar.Highlight.Glass.Image=az
-aq.Frame.Bar.Highlight.Glass.ImageRectSize=aA
-aq.Frame.Bar.Highlight.Glass.ImageRectOffset=aB
+setGlassImage(az,aA,aB)
 end
 
 ax=ax~=false
@@ -6513,9 +6565,7 @@ local h=math.max(2,math.min(aA+g,au-at-2))
 local i=math.clamp((h-2)/(au-at-4),0,1)
 
 local l,m,p=am:GetGlassFrame(i)
-aq.Frame.Bar.Highlight.Glass.Image=l
-aq.Frame.Bar.Highlight.Glass.ImageRectSize=m
-aq.Frame.Bar.Highlight.Glass.ImageRectOffset=p
+setGlassImage(l,m,p)
 
 ad(aq.Frame,0.12,{
 Position=UDim2.new(0,h,0.5,0),
@@ -10103,8 +10153,8 @@ aw:Lock()
 end
 
 function aw.Update(ay,az,aA)
-aw.UIElements.Colorpicker.ImageTransparency=aA or 0
-aw.UIElements.Colorpicker.ImageColor3=az
+aa.SafeSetProperty(aw.UIElements.Colorpicker,"ImageTransparency",aA or 0)
+aa.SafeSetProperty(aw.UIElements.Colorpicker,"ImageColor3",az)
 aw.Default=az
 if aA then
 aw.Transparency=aA
