@@ -15648,7 +15648,6 @@ aa.iOS26Theme=iOS26Theme
 function aa.ApplyiOS26(self,instance,options)
 return iOS26.Apply(instance,options)
 end
-return aa
 
 -- Control-only iOS26 Liquid Glass integration.
 -- The original window/background implementation above is intentionally preserved.
