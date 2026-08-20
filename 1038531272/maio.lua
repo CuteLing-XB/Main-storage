@@ -17188,6 +17188,7 @@ function aa.CreateAdvancedWindow(self,config)
  if config.Appearance==nil then config.Appearance=iOS26.Appearance or"Light" end
  if config.Quality==nil then config.Quality=PerformanceManager.Quality or"Balanced" end
  if config.Acrylic==nil then config.Acrylic=true end
+ if config.NewElements==nil then config.NewElements=true end
  return WindowManager:Create(config)
 end
 local advancedCreateWindow=aa.CreateWindow
