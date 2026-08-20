@@ -1258,7 +1258,36 @@ return z
 end
 
 function r.Tween(u,v,x,...)
-return f:Create(u,TweenInfo.new(v,...),x)
+local properties={}
+if u and type(x)=="table"then
+local isContainer=false
+local isGradient=false
+pcall(function()
+isContainer=u:IsA("Frame")or u:IsA("TextButton")
+isGradient=u:IsA("UIGradient")
+end)
+for property,value in pairs(x)do
+local realProperty=property
+local readable=pcall(function() return u[property] end)
+if isContainer and property=="ImageColor3" then
+realProperty="BackgroundColor3"
+readable=true
+elseif isContainer and property=="ImageTransparency" then
+realProperty="BackgroundTransparency"
+readable=true
+elseif isGradient and property=="ImageColor3" then
+realProperty="Color"
+readable=true
+elseif isGradient and property=="ImageTransparency" then
+realProperty="Transparency"
+readable=true
+end
+if readable then
+properties[realProperty]=value
+end
+end
+end
+return f:Create(u,TweenInfo.new(v,...),properties)
 end
 
 
@@ -6438,6 +6467,11 @@ local isImage=glass:IsA("ImageLabel")or glass:IsA("ImageButton")
 local property=isImage and"ImageTransparency"or"BackgroundTransparency"
 ad(glass,duration,{[property]=value},style,direction):Play()
 end
+local function tweenLayerTransparency(duration,value,style,direction)
+local isImage=aq.Layer:IsA("ImageLabel")or aq.Layer:IsA("ImageButton")
+local property=isImage and"ImageTransparency"or"BackgroundTransparency"
+ad(aq.Layer,duration,{[property]=value},style,direction):Play()
+end
 
 local at=ak and 30 or 20
 local au=aq.Size.X.Offset
@@ -6467,9 +6501,7 @@ end
 end
 
 if aw then
-ad(aq.Layer,0.1,{
-ImageTransparency=0,
-}):Play()
+tweenLayerTransparency(0.1,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.1)
 tweenGlassTransparency(0.1,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 
@@ -6483,9 +6515,7 @@ local az,aA,aB=am:GetGlassFrame(1)
 
 setGlassImage(az,aA,aB)
 else
-ad(aq.Layer,0.1,{
-ImageTransparency=1,
-}):Play()
+tweenLayerTransparency(0.1,1,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.1)
 tweenGlassTransparency(0.1,0.85,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 
@@ -12719,7 +12749,12 @@ local am=loadModule't'
 local an=loadModule'd'
 local ao=an.New
 local ap=an.Tween
-
+local function tweenVisualTransparency(object,duration,value,style,direction)
+if not object then return end
+local isImage=object:IsA("ImageLabel")or object:IsA("ImageButton")
+local property=isImage and"ImageTransparency"or"BackgroundTransparency"
+ap(object,duration,{[property]=value},style,direction):Play()
+end
 
 local aq=loadModule'w'.New
 local ar=loadModule'm'.New
@@ -14057,16 +14092,11 @@ Size=aw.Size,
 },Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 
 if aw.UIElements.BackgroundGradient then
-ap(aw.UIElements.BackgroundGradient,0.2,{
-ImageTransparency=0,
-},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
+tweenVisualTransparency(aw.UIElements.BackgroundGradient,0.2,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 end
 
-aw.UIElements.Main.Background.ImageTransparency=1
-ap(aw.UIElements.Main.Background,0.4,{
-
-ImageTransparency=aw.Transparent and av.WindUI.TransparencyValue or 0,
-},Enum.EasingStyle.Exponential,Enum.EasingDirection.Out):Play()
+tweenVisualTransparency(aw.UIElements.Main.Background,0.01,1,Enum.EasingStyle.Linear,Enum.EasingDirection.Out)
+tweenVisualTransparency(aw.UIElements.Main.Background,0.4,aw.Transparent and av.WindUI.TransparencyValue or 0,Enum.EasingStyle.Exponential,Enum.EasingDirection.Out)
 
 if i then
 if i:IsA"VideoFrame"then
@@ -14159,15 +14189,10 @@ ap(aw.UIElements.Main,0.9,{
 Size=UDim2.new(aw.Size.X.Scale,aw.Size.X.Offset,0,0),
 },Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 if aw.UIElements.BackgroundGradient then
-ap(aw.UIElements.BackgroundGradient,0.2,{
-ImageTransparency=1,
-},Enum.EasingStyle.Quint,Enum.EasingDirection.InOut):Play()
+tweenVisualTransparency(aw.UIElements.BackgroundGradient,0.2,1,Enum.EasingStyle.Quint,Enum.EasingDirection.InOut)
 end
 
-ap(aw.UIElements.Main.Background,0.3,{
-
-ImageTransparency=1,
-},Enum.EasingStyle.Exponential,Enum.EasingDirection.InOut):Play()
+tweenVisualTransparency(aw.UIElements.Main.Background,0.3,1,Enum.EasingStyle.Exponential,Enum.EasingDirection.InOut)
 
 
 
@@ -14266,7 +14291,7 @@ function aw.ToggleTransparency(C,F)
 aw.Transparent=F
 av.WindUI.Transparent=F
 
-aw.UIElements.Main.Background.ImageTransparency=F and av.WindUI.TransparencyValue or 0
+an.SafeSetProperty(aw.UIElements.Main.Background,"ImageTransparency",F and av.WindUI.TransparencyValue or 0)
 
 
 end
