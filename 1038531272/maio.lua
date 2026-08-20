@@ -645,13 +645,22 @@ d.Heartbeat
 
 local l="https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua"
 
-local m
-if d:IsStudio()or not writefile then
-m=loadModule'b'
+local m=loadModule'b'
+if not d:IsStudio() and writefile then
+local remoteOk,remoteIcons=pcall(function()
+local body=game.HttpGet and game:HttpGet(l) or h:GetAsync(l)
+assert(type(body)=="string" and #body>0,"empty icon response")
+local factory=loadstring(body)
+assert(type(factory)=="function","icon response is not executable")
+local result=factory()
+assert(type(result)=="table" and type(result.SetIconsType)=="function","invalid icon module")
+return result
+end)
+if remoteOk then
+m=remoteIcons
 else
-m=loadstring(
-game.HttpGet and game:HttpGet(l)or h:GetAsync(l)
-)()
+warn("[ WindUI ] Remote icon library unavailable; using built-in icons: "..tostring(remoteIcons))
+end
 end
 
 m.SetIconsType"lucide"
@@ -800,25 +809,27 @@ function r.SafeCallback(u,...)
 if type(u)~="function" then
 return false
 end
-local ok,err=pcall(u,...)
+local args=table.pack(...)
+task.spawn(function()
+local ok,err=xpcall(function()
+return u(table.unpack(args,1,args.n))
+end,debug.traceback)
 if ok then
-return true
+return
 end
-if p and p.Window and p.Window.Debug then
 local message=tostring(err)
-local _,position=message:find(":%d+: ")
-warn("[ WindUI: DEBUG Mode ] "..message)
-if p.Notify then
+warn("[ WindUI ] SafeCallback error: "..message)
+if p and p.Window and p.Window.Debug and p.Notify then
 pcall(function()
 p:Notify{
 Title="DEBUG Mode: Error",
-Content=not position and message or message:sub(position+1),
+Content=message,
 Duration=8,
 }
 end)
 end
-end
-return false
+end)
+return true
 end
 
 function r.Gradient(u,v)
@@ -1429,44 +1440,40 @@ Colors={
 L.Parent=J
 elseif string.find(x,"http")and not string.find(x,"roblox.com")then
 local L="WindUI/"..B.."/assets/."..C.."-"..z..".png"
-local M,N=pcall(function()
-task.spawn(function()
-local M=r.Request
-and r.Request{
-Url=x,
-Method="GET",
-}.Body
-or{}
-
-if not d:IsStudio()and writefile then
-writefile(L,M)
+local function keepImagePlaceholder(reason)
+J.ImageLabel.Image=""
+J.ImageLabel.BackgroundColor3=Color3.fromRGB(255,255,255)
+J.ImageLabel.BackgroundTransparency=0.88
+J.ImageLabel.Visible=true
+J.ImageLabel:SetAttribute("ExternalImageFallback",true)
+warn("[ WindUI.Creator ] External image fallback: "..tostring(reason))
 end
 
-
-local N,O=pcall(getcustomasset,L)
-if N then
-J.ImageLabel.Image=O
+local requestOk,requestError=pcall(function()
+local body
+if r.Request then
+local response=r.Request{Url=x,Method="GET"}
+body=response and response.Body
+elseif game.HttpGet then
+body=game:HttpGet(x)
+end
+if type(body)~="string" or #body==0 then
+error("image request returned no data")
+end
+if not d:IsStudio() and writefile then
+writefile(L,body)
 else
-warn(
-string.format(
-"[ WindUI.Creator ] Failed to load custom asset '%s': %s",
-L,
-tostring(O)
-)
-)
-J:Destroy()
-
-return
+error("writefile is unavailable")
+end
+local assetOk,assetOrError=pcall(getcustomasset,L)
+if assetOk and type(assetOrError)=="string" then
+J.ImageLabel.Image=assetOrError
+else
+keepImagePlaceholder(assetOrError)
 end
 end)
-end)
-if not M then
-warn(
-"[ WindUI.Creator ]  '"..identifyexecutor()
-or"Studio".."' doesnt support the URL Images. Error: "..N
-)
-
-J:Destroy()
+if not requestOk then
+keepImagePlaceholder(requestError)
 end
 elseif x==""then
 J.Visible=false
@@ -1996,7 +2003,7 @@ end
 return h
 end
 
-return ac end function moduleFactories.i()
+return f end function moduleFactories.i()
 
 
 
@@ -2008,14 +2015,35 @@ local aa={}
 
 function aa.New(ab,ac)
 local ad="https://sdkapi-public.luarmor.net/library.lua"
-
-local ae=loadstring(game.HttpGet and game:HttpGet(ad)or HttpService:GetAsync(ad))()
-local af=setclipboard or toclipboard
-
+local af=setclipboard or toclipboard or function()end
+local sdkOk,sdkOrError=pcall(function()
+local body=game.HttpGet and game:HttpGet(ad)or game:GetService("HttpService"):GetAsync(ad)
+assert(type(body)=="string" and #body>0,"empty Luarmor response")
+local factory=loadstring(body)
+assert(type(factory)=="function","Luarmor response is not executable")
+local sdk=factory()
+assert(type(sdk)=="table" and type(sdk.check_key)=="function","invalid Luarmor SDK")
+return sdk
+end)
+if not sdkOk then
+warn("[ WindUI ] Luarmor SDK unavailable; key validation will remain disabled: "..tostring(sdkOrError))
+return{
+Verify=function()
+return false,"Luarmor SDK unavailable in this environment."
+end,
+Copy=function()
+return false
+end,
+}
+end
+local ae=sdkOrError
 ae.script_id=ab
 
 function ValidateKey(ag)
-local ah=ae.check_key(ag)
+local checkOk,ah=pcall(ae.check_key,ag)
+if not checkOk or type(ah)~="table" then
+return false,"Luarmor key check failed."
+end
 
 
 if ah.code=="KEY_VALID"then
@@ -11805,6 +11833,17 @@ d:Disconnect()
 end)
 end)
 
+-- Backward-compatible external API aliases for callers using CreateX naming.
+ar.CreateButton=ar.Button
+ar.CreateToggle=ar.Toggle
+ar.CreateSlider=ar.Slider
+ar.CreateDropdown=ar.Dropdown
+ar.CreateInput=ar.Input
+ar.CreateKeybind=ar.Keybind
+ar.CreateColorpicker=ar.Colorpicker
+ar.CreateParagraph=ar.Paragraph
+ar.CreateProgressBar=ar.ProgressBar
+
 return ar
 end
 
@@ -14333,6 +14372,10 @@ aw
 )
 end
 
+-- Backward-compatible external API aliases.
+aw.CreateTab=aw.Tab
+aw.CreateSection=aw.Section
+
 function aw.IsResizable(H,J)
 aw.Resizable=J
 aw.CanResize=J
@@ -15548,6 +15591,4 @@ aa.iOS26Theme=iOS26Theme
 function aa.ApplyiOS26(self,instance,options)
 return iOS26.Apply(instance,options)
 end
-_G.WindUI=aa
-_G.iOS26=iOS26
 return aa
