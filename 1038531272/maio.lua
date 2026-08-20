@@ -13779,11 +13779,24 @@ end
 
 
 
+local function restoreWindowContent()
+if aw.Closed or aw.Destroyed then
+return
+end
+if aw.UIElements.Main then
+aw.UIElements.Main.Visible=true
+local content=aw.UIElements.Main:FindFirstChild("Main")
+if content then
+content.Visible=true
+end
+end
+end
 local z=an.Drag(
 aw.UIElements.Main,
 {aw.UIElements.Main.Main.Topbar,r.Frame},
 function(z,A)
 if not aw.Closed then
+restoreWindowContent()
 if z and A==r.Frame then
 ap(r,0.1,{ImageTransparency=0.35}):Play()
 else
@@ -14296,6 +14309,7 @@ return av.WindUI.UIScale
 end
 
 function aw.SetUIScale(C,F)
+F=math.clamp(tonumber(F)or 1,0.65,1.35)
 av.WindUI.UIScale=F
 ap(av.WindUI.UIScaleObj,0.2,{Scale=F},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 return aw
@@ -15653,9 +15667,14 @@ if not window or not window.UIElements then
 return window
 end
 local elements=window.UIElements
-iOS26DecorateInstance(elements.Main and elements.Main.Background,{CornerRadius=iOS26.Material.WindowCornerRadius,Transparency=0.68,Shadow=true,ShadowTransparency=0.72})
+iOS26DecorateInstance(elements.Main and elements.Main.Background,{CornerRadius=iOS26.Material.WindowCornerRadius,Transparency=0.68,Shadow=false})
 iOS26DecorateInstance(elements.MainBar and elements.MainBar.Background,{CornerRadius=16,Transparency=iOS26.Material.PanelTransparency,Shadow=false})
 iOS26DecorateInstance(elements.SideBarContainer,{CornerRadius=16,Transparency=iOS26.Material.PanelTransparency,Shadow=false})
+if elements.Main and elements.Main.Main then
+pcall(function()
+elements.Main.Main.Visible=true
+end)
+end
 iOS26DecorateInstance(elements.BackgroundGradient,{CornerRadius=iOS26.Material.WindowCornerRadius,Transparency=0.84,Shadow=false})
 return window
 end
