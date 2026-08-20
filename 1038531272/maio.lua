@@ -1002,44 +1002,15 @@ end
 function r.UpdateTheme(u,v,x,z,A,B)
 local function ApplyTheme(C)
 local function applyValue(object,property,value)
-local realProperty=property
 local readable=pcall(function()
-return object[realProperty]
+return object[property]
 end)
-local isContainer=false
-pcall(function()
-isContainer=object:IsA("Frame")or object:IsA("TextButton")
-end)
-if isContainer and property=="ImageColor3" then
-realProperty="BackgroundColor3"
-readable=true
-elseif isContainer and property=="ImageTransparency" then
-realProperty="BackgroundTransparency"
-readable=true
-end
 if x and readable then
-r.Tween(object,z or 0.2,{[realProperty]=value},A or Enum.EasingStyle.Quint,B or Enum.EasingDirection.Out):Play()
+r.Tween(object,z or 0.2,{[property]=value},A or Enum.EasingStyle.Quint,B or Enum.EasingDirection.Out):Play()
 elseif v and readable then
-r.Tween(object,0.08,{[realProperty]=value}):Play()
+r.Tween(object,0.08,{[property]=value}):Play()
 else
 r.SafeSetProperty(object,property,value)
-end
--- Keep border/glass children in sync when a visual Image* token is mapped.
-if isContainer and property=="ImageColor3" then
-local stroke=object:FindFirstChildOfClass("UIStroke")
-if stroke then
-if x then r.Tween(stroke,z or 0.2,{Color=value},A or Enum.EasingStyle.Quint,B or Enum.EasingDirection.Out):Play()
-elseif v then r.Tween(stroke,0.08,{Color=value}):Play()
-else pcall(function() stroke.Color=value end) end
-end
-elseif isContainer and property=="ImageTransparency" then
-local stroke=object:FindFirstChildOfClass("UIStroke")
-if stroke then
-local transparency=math.clamp(tonumber(value)or 0,0,1)
-if x then r.Tween(stroke,z or 0.2,{Transparency=transparency},A or Enum.EasingStyle.Quint,B or Enum.EasingDirection.Out):Play()
-elseif v then r.Tween(stroke,0.08,{Transparency=transparency}):Play()
-else pcall(function() stroke.Transparency=transparency end) end
-end
 end
 end
 for F,G in pairs(C.Properties or{})do
@@ -1182,40 +1153,23 @@ if assigned then
 return true
 end
 end
-
 -- Native Frame/TextButton replacements do not expose Image* properties.
-local isContainer=false
-pcall(function()
-isContainer=object:IsA("Frame")or object:IsA("TextButton")
+if propName=="ImageColor3" then
+local isContainer=pcall(function()
+return object:IsA("Frame")or object:IsA("TextButton")
 end)
-local isGradient=false
-pcall(function() isGradient=object:IsA("UIGradient") end)
-if isGradient and propName=="ImageColor3" then
-pcall(function() object.Color=ColorSequence.new(value) end)
-return true
-elseif isGradient and propName=="ImageTransparency" then
-local transparency=math.clamp(tonumber(value)or 0,0,1)
-pcall(function() object.Transparency=NumberSequence.new(transparency) end)
-return true
-elseif isContainer and propName=="ImageColor3" then
+if isContainer then
 pcall(function() object.BackgroundColor3=value end)
-local stroke=object:FindFirstChildOfClass("UIStroke")
-if stroke then pcall(function() stroke.Color=value end) end
-local gradient=object:FindFirstChildOfClass("UIGradient")
-if gradient then
-pcall(function() gradient.Color=ColorSequence.new(value) end)
-end
 return true
-elseif isContainer and propName=="ImageTransparency" then
+end
+elseif propName=="ImageTransparency" then
+local isContainer=pcall(function()
+return object:IsA("Frame")or object:IsA("TextButton")
+end)
+if isContainer then
 pcall(function() object.BackgroundTransparency=value end)
-local stroke=object:FindFirstChildOfClass("UIStroke")
-if stroke then pcall(function() stroke.Transparency=value end) end
-local gradient=object:FindFirstChildOfClass("UIGradient")
-if gradient then
-local transparency=math.clamp(tonumber(value)or 0,0,1)
-pcall(function() gradient.Transparency=NumberSequence.new(transparency) end)
-end
 return true
+end
 end
 return false
 end
@@ -1245,7 +1199,7 @@ end
 end
 
 for A,B in next,x or{}do
-if B then pcall(function() B.Parent=z end) end
+B.Parent=z
 end
 
 if v and v.ThemeTag then
@@ -6048,8 +6002,8 @@ Offset=Vector2.new(-1,0),
 Parent=ay,
 })
 
-aa.SafeSetProperty(ax,"ImageTransparency",0.65)
-aa.SafeSetProperty(ay,"ImageTransparency",0.88)
+ax.ImageTransparency=0.65
+ay.ImageTransparency=0.88
 
 ad(h,0.75,{
 Offset=Vector2.new(1,0),
@@ -6061,8 +6015,8 @@ Offset=Vector2.new(1,0),
 
 task.spawn(function()
 task.wait(0.75)
-aa.SafeSetProperty(ax,"ImageTransparency",1)
-aa.SafeSetProperty(ay,"ImageTransparency",1)
+ax.ImageTransparency=1
+ay.ImageTransparency=1
 h:Destroy()
 i:Destroy()
 end)
@@ -6468,9 +6422,9 @@ local property=isImage and"ImageTransparency"or"BackgroundTransparency"
 ad(glass,duration,{[property]=value},style,direction):Play()
 end
 local function tweenLayerTransparency(duration,value,style,direction)
-local isImage=aq.Layer:IsA("ImageLabel")or aq.Layer:IsA("ImageButton")
+local isImage=aq.Frame.Bar.Highlight.Glass:IsA("ImageLabel")or aq.Frame.Bar.Highlight.Glass:IsA("ImageButton")
 local property=isImage and"ImageTransparency"or"BackgroundTransparency"
-ad(aq.Layer,duration,{[property]=value},style,direction):Play()
+ad(aq.Frame.Bar.Highlight.Glass,duration,{[property]=value},style,direction):Play()
 end
 
 local at=ak and 30 or 20
@@ -6501,7 +6455,9 @@ end
 end
 
 if aw then
-tweenLayerTransparency(0.1,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+ad(aq.Layer,0.1,{
+ImageTransparency=0,
+}):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.1)
 tweenGlassTransparency(0.1,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 
@@ -6515,7 +6471,9 @@ local az,aA,aB=am:GetGlassFrame(1)
 
 setGlassImage(az,aA,aB)
 else
-tweenLayerTransparency(0.1,1,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+ad(aq.Layer,0.1,{
+ImageTransparency=1,
+}):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.1)
 tweenGlassTransparency(0.1,0.85,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
 
@@ -10183,8 +10141,8 @@ aw:Lock()
 end
 
 function aw.Update(ay,az,aA)
-aa.SafeSetProperty(aw.UIElements.Colorpicker,"ImageTransparency",aA or 0)
-aa.SafeSetProperty(aw.UIElements.Colorpicker,"ImageColor3",az)
+aw.UIElements.Colorpicker.ImageTransparency=aA or 0
+aw.UIElements.Colorpicker.ImageColor3=az
 aw.Default=az
 if aA then
 aw.Transparency=aA
@@ -15665,5 +15623,76 @@ aa.LiquidGlass=iOS26
 aa.iOS26Theme=iOS26Theme
 function aa.ApplyiOS26(self,instance,options)
 return iOS26.Apply(instance,options)
+end
+
+-- Apply the embedded Liquid Glass material to the actual objects created by WindUI.
+-- This wrapper is intentionally small: it decorates only known GUI roots and never
+-- replaces the original component factories.
+local function iOS26ResolveRoot(value)
+if typeof(value)=="Instance" then
+return value
+end
+if type(value)~="table" then
+return nil
+end
+local elements=value.UIElements or{}
+return value.ElementFrame or value.ButtonFrame or value.Frame or elements.Main or elements.Container or elements.ContainerFrame
+end
+local function iOS26DecorateInstance(instance,options)
+if not instance then
+return
+end
+pcall(function()
+if instance:IsA("GuiObject") then
+iOS26.ApplyCard(instance,options or{})
+end
+end)
+end
+local function iOS26DecorateWindow(window)
+if not window or not window.UIElements then
+return window
+end
+local elements=window.UIElements
+iOS26DecorateInstance(elements.Main and elements.Main.Background,{CornerRadius=iOS26.Material.WindowCornerRadius,Transparency=0.68,Shadow=true,ShadowTransparency=0.72})
+iOS26DecorateInstance(elements.MainBar and elements.MainBar.Background,{CornerRadius=16,Transparency=iOS26.Material.PanelTransparency,Shadow=false})
+iOS26DecorateInstance(elements.SideBarContainer,{CornerRadius=16,Transparency=iOS26.Material.PanelTransparency,Shadow=false})
+iOS26DecorateInstance(elements.BackgroundGradient,{CornerRadius=iOS26.Material.WindowCornerRadius,Transparency=0.84,Shadow=false})
+return window
+end
+local iOS26OriginalCreateWindow=aa.CreateWindow
+aa.CreateWindow=function(self,config)
+config=config or{}
+if config.Theme==nil then
+config.Theme="iOS26"
+end
+if config.Acrylic==nil then
+config.Acrylic=true
+end
+local window=iOS26OriginalCreateWindow(self,config)
+iOS26DecorateWindow(window)
+if window and type(window.Tab)=="function" then
+local originalTab=window.Tab
+window.Tab=function(tabSelf,tabConfig)
+local tab=originalTab(tabSelf,tabConfig)
+if type(tab)=="table" then
+local function decorateMethod(name,options)
+local original=tab[name]
+if type(original)~="function" then
+return
+end
+tab[name]=function(elementSelf,elementConfig,...)
+local result=original(elementSelf,elementConfig,...)
+iOS26DecorateInstance(iOS26ResolveRoot(result),options)
+return result
+end
+end
+decorateMethod("Button",{CornerRadius=14,Transparency=0.68,Shadow=false})
+decorateMethod("Toggle",{CornerRadius=16,Transparency=0.72,Shadow=false})
+decorateMethod("Slider",{CornerRadius=16,Transparency=0.76,Shadow=false})
+end
+return tab
+end
+end
+return window
 end
 return aa
