@@ -14,11 +14,10 @@
     License: MIT
 ]]
 
-if _G.__iOS26LiquidGlassVersion=="4.0" and _G.WindUI then
+if _G.__iOS26LiquidGlassVersion=="5.0" and _G.WindUI then
 return _G.WindUI
 end
-
-_G.__iOS26LiquidGlassVersion="4.0"
+_G.__iOS26LiquidGlassVersion="5.0"
 
 type ConfigType__DARKLUA_TYPE_a={
 Object:Instance,
@@ -17183,7 +17182,14 @@ function aa.SaveAdvancedConfig(self,data,name) return ConfigManager:Save(data,na
 function aa.ExportAdvancedConfig(self) return ConfigManager:Export() end
 function aa.ImportAdvancedConfig(self,encoded,save) return ConfigManager:Import(encoded,save) end
 function aa.CloseAllWindows(self) return WindowManager:CloseAll() end
-function aa.CreateAdvancedWindow(self,config) return WindowManager:Create(config or{}) end
+function aa.CreateAdvancedWindow(self,config)
+ config=config or{}
+ if config.Theme==nil then config.Theme="iOS26" end
+ if config.Appearance==nil then config.Appearance=iOS26.Appearance or"Light" end
+ if config.Quality==nil then config.Quality=PerformanceManager.Quality or"Balanced" end
+ if config.Acrylic==nil then config.Acrylic=true end
+ return WindowManager:Create(config)
+end
 local advancedCreateWindow=aa.CreateWindow
 aa.CreateWindow=function(self,config)
  local window=advancedCreateWindow(self,config or{})
