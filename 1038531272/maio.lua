@@ -14,18 +14,18 @@
     License: MIT
 ]]
 
-type ConfigType__DARKLUA_TYPE_a={
-Object:Instance,
-Camera:Instance?,
-Interactive:boolean?,
-Height:number?,
-Focused:boolean,
+local moduleFactories = {}
+local moduleCache = {}
+local function loadModule(name)
+    if not moduleCache[name] then
+        local factory = moduleFactories[name]
+        assert(type(factory) == "function", "WindUI module not found: " .. tostring(name))
+        moduleCache[name] = factory()
+    end
+    return moduleCache[name]
+end
 
-Window:any,
-WindUI:any,
-Tab:any,
-Parent:Instance,
-}local a a={cache={}, load=function(b)if not a.cache[b]then a.cache[b]={c=a[b]()}end return a.cache[b].c end}do function a.a()
+do function moduleFactories.a()
 
 local b
 
@@ -158,14 +158,32 @@ local function GetShape(r)
 return d.Shapes[p[r]or r]or d.Shapes.Circle
 end
 
-local r=b.New(j and"ImageButton"or"ImageLabel",{
-Image="",
-ScaleType=l~=false and"Slice"or nil,
-SliceCenter=m.Type~="Squircle"and Rect.new(512,512,512,512)or nil,
-SliceScale=1,
+local r=b.New(j and"TextButton"or"Frame",{
 ThemeTag=h and h.ThemeTag or nil,
-BackgroundTransparency=1,
+BackgroundTransparency=0,
 },i)
+if j then r.Text="" r.AutoButtonColor=false end
+local corner = Instance.new("UICorner")
+corner.Parent = r
+if string.find(m.Type,"Outline") then
+    r.BackgroundTransparency=1
+    local stroke = Instance.new("UIStroke")
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Thickness = 1
+    stroke.Transparency = 0.78
+    stroke.Color = Color3.fromRGB(255,255,255)
+    stroke.Parent = r
+elseif string.find(m.Type,"Glass") then
+    r.BackgroundTransparency=0.72
+    local gradient = Instance.new("UIGradient")
+    gradient.Rotation = 90
+    gradient.Color = ColorSequence.new(Color3.fromRGB(255,255,255), Color3.fromRGB(0,122,255))
+    gradient.Transparency = NumberSequence.new{
+        NumberSequenceKeypoint.new(0, 0.35),
+        NumberSequenceKeypoint.new(1, 0.85)
+    }
+    gradient.Parent = r
+end
 
 for u,v in next,h do
 if not table.find({"ThemeTag"},u)then
@@ -175,15 +193,12 @@ end
 
 function m.SetRadius(u,v)
 m.Radius=v
-r.SliceScale=math.max(v/GetShape(m.Type).Radius,0.0001)
+corner.CornerRadius = UDim.new(0, v)
 return m
 end
 
 function m.SetType(u,v)
 m.Type=v
-local x=GetShape(v)
-r.Image=x.Image
-r.SliceCenter=x.Rect
 m:SetRadius(m.Radius)
 return m
 end
@@ -247,7 +262,7 @@ end)
 return r,m
 end
 
-return d end function a.b()
+return d end function moduleFactories.b()
 
 local b=(cloneref or clonereference or function(b)return b end)
 
@@ -482,7 +497,7 @@ end
 return g
 end
 
-return d end function a.c()
+return d end function moduleFactories.c()
 return function(b)
 return{
 
@@ -612,7 +627,7 @@ LabelBackgroundTransparency=0.95,
 ViewportBackground="ElementBackground",
 ViewportBackgroundTransparency="ElementBackgroundTransparency",
 }
-end end function a.d()
+end end function moduleFactories.d()
 
 local b=(cloneref or clonereference or function(b)
 return b
@@ -624,7 +639,7 @@ local f=b(game:GetService"TweenService")
 local g=b(game:GetService"LocalizationService")
 local h=b(game:GetService"HttpService")
 
-local i=a.load'a'local j=
+local i=loadModule'a'local j=
 
 d.Heartbeat
 
@@ -632,7 +647,7 @@ local l="https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua"
 
 local m
 if d:IsStudio()or not writefile then
-m=a.load'b'
+m=loadModule'b'
 else
 m=loadstring(
 game.HttpGet and game:HttpGet(l)or h:GetAsync(l)
@@ -752,7 +767,7 @@ ThemeChangeCallbacks={},
 function r.Init(u)
 p=u
 
-r.ThemeFallbacks=a.load'c'(r)
+r.ThemeFallbacks=loadModule'c'(r)
 
 r.UIScale=u.UIScale
 
@@ -760,37 +775,50 @@ i:Init(r)
 end
 
 function r.AddSignal(u,v)
+if not u or type(u.Connect)~="function" or type(v)~="function" then
+return nil
+end
 local x=u:Connect(v)
 table.insert(r.Signals,x)
 return x
 end
 
 function r.DisconnectAll()
-for u,v in next,r.Signals do
-local x=table.remove(r.Signals,u)
-x:Disconnect()
+for index=#r.Signals,1,-1 do
+local connection=table.remove(r.Signals,index)
+if connection then
+pcall(function()
+if connection.Connected~=false then
+connection:Disconnect()
+end
+end)
+end
 end
 end
 
 function r.SafeCallback(u,...)
-if not u then
-return
+if type(u)~="function" then
+return false
 end
-
-local v,x=pcall(u,...)
-if not v then
-if p and p.Window and p.Window.Debug then local
-z, A=x:find":%d+: "
-
-warn("[ WindUI: DEBUG Mode ] "..x)
-
-return p:Notify{
+local ok,err=pcall(u,...)
+if ok then
+return true
+end
+if p and p.Window and p.Window.Debug then
+local message=tostring(err)
+local _,position=message:find(":%d+: ")
+warn("[ WindUI: DEBUG Mode ] "..message)
+if p.Notify then
+pcall(function()
+p:Notify{
 Title="DEBUG Mode: Error",
-Content=not A and x or x:sub(A+1),
+Content=not position and message or message:sub(position+1),
 Duration=8,
 }
+end)
 end
 end
+return false
 end
 
 function r.Gradient(u,v)
@@ -1623,7 +1651,7 @@ end
 return nil,4
 end
 
-return r end function a.e()
+return r end function moduleFactories.e()
 
 local b={}
 
@@ -1648,8 +1676,8 @@ end
 
 
 
-return b end function a.f()
-local b=a.load'd'
+return b end function moduleFactories.f()
+local b=loadModule'd'
 local d=b.New
 local e=b.Tween
 
@@ -1968,376 +1996,7 @@ end
 return h
 end
 
-return f end function a.g()
-
-
-
-
-
-
-
-
-
-
-
-
-local b=4294967296;local d=b-1;local function c(e,f)local g,h=0,1;while e~=0 or f~=0 do local i,l=e%2,f%2;local m=(i+l)%2;g=g+m*h;e=math.floor(e/2)f=math.floor(f/2)h=h*2 end;return g%b end;local function k(e,f,g,...)local h;if f then e=e%b;f=f%b;h=c(e,f)if g then h=k(h,g,...)end;return h elseif e then return e%b else return 0 end end;local function n(e,f,g,...)local h;if f then e=e%b;f=f%b;h=(e+f-c(e,f))/2;if g then h=n(h,g,...)end;return h elseif e then return e%b else return d end end;local function o(e)return d-e end;local function q(e,f)if f<0 then return lshift(e,-f)end;return math.floor(e%4294967296/2^f)end;local function s(e,f)if f>31 or f<-31 then return 0 end;return q(e%b,f)end;local function lshift(e,f)if f<0 then return s(e,-f)end;return e*2^f%4294967296 end;local function t(e,f)e=e%b;f=f%32;local g=n(e,2^f-1)return s(e,f)+lshift(g,32-f)end;local e={0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}local function w(f)return string.gsub(f,".",function(g)return string.format("%02x",string.byte(g))end)end;local function y(f,g)local h=""for i=1,g do local l=f%256;h=string.char(l)..h;f=(f-l)/256 end;return h end;local function D(f,g)local h=0;for i=g,g+3 do h=h*256+string.byte(f,i)end;return h end;local function E(f,g)local h=64-(g+9)%64;g=y(8*g,8)f=f.."\128"..string.rep("\0",h)..g;assert(#f%64==0)return f end;local function I(f)f[1]=0x6a09e667;f[2]=0xbb67ae85;f[3]=0x3c6ef372;f[4]=0xa54ff53a;f[5]=0x510e527f;f[6]=0x9b05688c;f[7]=0x1f83d9ab;f[8]=0x5be0cd19;return f end;local function K(f,g,h)local i={}for l=1,16 do i[l]=D(f,g+(l-1)*4)end;for l=17,64 do local m=i[l-15]local p=k(t(m,7),t(m,18),s(m,3))m=i[l-2]i[l]=(i[l-16]+p+i[l-7]+k(t(m,17),t(m,19),s(m,10)))%b end;local l,m,p,r,u,v,x,z=h[1],h[2],h[3],h[4],h[5],h[6],h[7],h[8]for A=1,64 do local B=k(t(l,2),t(l,13),t(l,22))local C=k(n(l,m),n(l,p),n(m,p))local F=(B+C)%b;local G=k(t(u,6),t(u,11),t(u,25))local H=k(n(u,v),n(o(u),x))local J=(z+G+H+e[A]+i[A])%b;z=x;x=v;v=u;u=(r+J)%b;r=p;p=m;m=l;l=(J+F)%b end;h[1]=(h[1]+l)%b;h[2]=(h[2]+m)%b;h[3]=(h[3]+p)%b;h[4]=(h[4]+r)%b;h[5]=(h[5]+u)%b;h[6]=(h[6]+v)%b;h[7]=(h[7]+x)%b;h[8]=(h[8]+z)%b end;local function Z(f)f=E(f,#f)local g=I{}for h=1,#f,64 do K(f,h,g)end;return w(y(g[1],4)..y(g[2],4)..y(g[3],4)..y(g[4],4)..y(g[5],4)..y(g[6],4)..y(g[7],4)..y(g[8],4))end;local f;local g={["\\"]="\\",["\""]="\"",["\b"]="b",["\f"]="f",["\n"]="n",["\r"]="r",["\t"]="t"}local h={["/"]="/"}for i,l in pairs(g)do h[l]=i end;local i=function(i)return"\\"..(g[i]or string.format("u%04x",i:byte()))end;local l=function(l)return"null"end;local m=function(m,p)local r={}p=p or{}if p[m]then error"circular reference"end;p[m]=true;if rawget(m,1)~=nil or next(m)==nil then local u=0;for v in pairs(m)do if type(v)~="number"then error"invalid table: mixed or invalid key types"end;u=u+1 end;if u~=#m then error"invalid table: sparse array"end;for v,x in ipairs(m)do table.insert(r,f(x,p))end;p[m]=nil;return"["..table.concat(r,",").."]"else for u,v in pairs(m)do if type(u)~="string"then error"invalid table: mixed or invalid key types"end;table.insert(r,f(u,p)..":"..f(v,p))end;p[m]=nil;return"{"..table.concat(r,",").."}"end end;local p=function(p)return'"'..p:gsub('[%z\1-\31\\"]',i)..'"'end;local r=function(r)if r~=r or r<=-math.huge or r>=math.huge then error("unexpected number value '"..tostring(r).."'")end;return string.format("%.14g",r)end;local u={["nil"]=l,table=m,string=p,number=r,boolean=tostring}f=function(v,x)local z=type(v)local A=u[z]if A then return A(v,x)end;error("unexpected type '"..z.."'")end;local v=function(v)return f(v)end;local x;local z=function(...)local z={}for A=1,select("#",...)do z[select(A,...)]=true end;return z end;local A=z(" ","\t","\r","\n")local B=z(" ","\t","\r","\n","]","}",",")local C=z("\\","/",'"',"b","f","n","r","t","u")local F=z("true","false","null")local G={["true"]=true,["false"]=false,null=nil}local H=function(H,J,L,M)for N=J,#H do if L[H:sub(N,N)]~=M then return N end end;return#H+1 end;local J=function(J,L,M)local N=1;local O=1;for P=1,L-1 do O=O+1;if J:sub(P,P)=="\n"then N=N+1;O=1 end end;error(string.format("%s at line %d col %d",M,N,O))end;local L=function(L)local M=math.floor;if L<=0x7f then return string.char(L)elseif L<=0x7ff then return string.char(M(L/64)+192,L%64+128)elseif L<=0xffff then return string.char(M(L/4096)+224,M(L%4096/64)+128,L%64+128)elseif L<=0x10ffff then return string.char(M(L/262144)+240,M(L%262144/4096)+128,M(L%4096/64)+128,L%64+128)end;error(string.format("invalid unicode codepoint '%x'",L))end;local M=function(M)local N=tonumber(M:sub(1,4),16)local O=tonumber(M:sub(7,10),16)if O then return L((N-0xd800)*0x400+O-0xdc00+0x10000)else return L(N)end end;local N=function(N,O)local P=""local Q=O+1;local R=Q;while Q<=#N do local S=N:byte(Q)if S<32 then J(N,Q,"control character in string")elseif S==92 then P=P..N:sub(R,Q-1)Q=Q+1;local T=N:sub(Q,Q)if T=="u"then local U=N:match("^[dD][89aAbB]%x%x\\u%x%x%x%x",Q+1)or N:match("^%x%x%x%x",Q+1)or J(N,Q-1,"invalid unicode escape in string")P=P..M(U)Q=Q+#U else if not C[T]then J(N,Q-1,"invalid escape char '"..T.."' in string")end;P=P..h[T]end;R=Q+1 elseif S==34 then P=P..N:sub(R,Q-1)return P,Q+1 end;Q=Q+1 end;J(N,O,"expected closing quote for string")end;local O=function(O,P)local Q=H(O,P,B)local R=O:sub(P,Q-1)local S=tonumber(R)if not S then J(O,P,"invalid number '"..R.."'")end;return S,Q end;local P=function(P,Q)local R=H(P,Q,B)local S=P:sub(Q,R-1)if not F[S]then J(P,Q,"invalid literal '"..S.."'")end;return G[S],R end;local Q=function(Q,R)local S={}local T=1;R=R+1;while 1 do local U;R=H(Q,R,A,true)if Q:sub(R,R)=="]"then R=R+1;break end;U,R=x(Q,R)S[T]=U;T=T+1;R=H(Q,R,A,true)local V=Q:sub(R,R)R=R+1;if V=="]"then break end;if V~=","then J(Q,R,"expected ']' or ','")end end;return S,R end;local R=function(R,S)local T={}S=S+1;while 1 do local U,V;S=H(R,S,A,true)if R:sub(S,S)=="}"then S=S+1;break end;if R:sub(S,S)~='"'then J(R,S,"expected string for key")end;U,S=x(R,S)S=H(R,S,A,true)if R:sub(S,S)~=":"then J(R,S,"expected ':' after key")end;S=H(R,S+1,A,true)V,S=x(R,S)T[U]=V;S=H(R,S,A,true)local W=R:sub(S,S)S=S+1;if W=="}"then break end;if W~=","then J(R,S,"expected '}' or ','")end end;return T,S end;local S={['"']=N,["0"]=O,["1"]=O,["2"]=O,["3"]=O,["4"]=O,["5"]=O,["6"]=O,["7"]=O,["8"]=O,["9"]=O,["-"]=O,t=P,f=P,n=P,["["]=Q,["{"]=R}x=function(T,U)local V=T:sub(U,U)local W=S[V]if W then return W(T,U)end;J(T,U,"unexpected character '"..V.."'")end;local T=function(T)if type(T)~="string"then error("expected argument of type string, got "..type(T))end;local U,V=x(T,H(T,1,A,true))V=H(T,V,A,true)if V<=#T then J(T,V,"trailing garbage")end;return U end;
-local U,V,W=v,T,Z;
-
-
-
-
-
-local X={}
-
-local Y=(cloneref or clonereference or function(Y)return Y end)
-
-
-function X.New(_,aa)
-
-local ab=_;
-local ac=aa;
-local ad=true;
-
-
-local ae=function(ae)end;
-
-
-repeat task.wait(1)until game:IsLoaded();
-
-
-local af=false;
-local ag,ah,ai,aj,ak,al,am,an,ao=setclipboard or toclipboard,request or http_request or syn_request,string.char,tostring,string.sub,os.time,math.random,math.floor,gethwid or function()return Y(game:GetService"Players").LocalPlayer.UserId end
-local ap,aq="",0;
-
-
-local ar="https://api.platoboost.app";
-local as=ah{
-Url=ar.."/public/connectivity",
-Method="GET"
-};
-if as.StatusCode~=200 and as.StatusCode~=429 then
-ar="https://api.platoboost.net";
-end
-
-
-function cacheLink()
-if aq+(600)<al()then
-local at=ah{
-Url=ar.."/public/start",
-Method="POST",
-Body=U{
-service=ab,
-identifier=W(ao())
-},
-Headers={
-["Content-Type"]="application/json",
-["User-Agent"]="Roblox/Exploit"
-}
-};
-
-if at.StatusCode==200 then
-local au=V(at.Body);
-
-if au.success==true then
-ap=au.data.url;
-aq=al();
-return true,ap
-else
-ae(au.message);
-return false,au.message
-end
-elseif at.StatusCode==429 then
-local au="you are being rate limited, please wait 20 seconds and try again.";
-ae(au);
-return false,au
-end
-
-local au="Failed to cache link.";
-ae(au);
-return false,au
-else
-return true,ap
-end
-end
-
-cacheLink();
-
-
-local at=function()
-local at=""
-for au=1,16 do
-at=at..ai(an(am()*(26))+97)
-end
-return at
-end
-
-
-for au=1,5 do
-local av=at();
-task.wait(0.2)
-if at()==av then
-local aw="platoboost nonce error.";
-ae(aw);
-error(aw);
-end
-end
-
-
-local au=function()
-local au,av=cacheLink();
-
-if au then
-ag(av);
-end
-end
-
-
-local av=function(av)
-local aw=at();
-local ax=ar.."/public/redeem/"..aj(ab);
-
-local ay={
-identifier=W(ao()),
-key=av
-}
-
-if ad then
-ay.nonce=aw;
-end
-
-local az=ah{
-Url=ax,
-Method="POST",
-Body=U(ay),
-Headers={
-["Content-Type"]="application/json"
-}
-};
-
-if az.StatusCode==200 then
-local aA=V(az.Body);
-
-if aA.success==true then
-if aA.data.valid==true then
-if ad then
-if aA.data.hash==W("true".."-"..aw.."-"..ac)then
-return true
-else
-ae"failed to verify integrity.";
-return false
-end
-else
-return true
-end
-else
-ae"key is invalid.";
-return false
-end
-else
-if ak(aA.message,1,27)=="unique constraint violation"then
-ae"you already have an active key, please wait for it to expire before redeeming it.";
-return false
-else
-ae(aA.message);
-return false
-end
-end
-elseif az.StatusCode==429 then
-ae"you are being rate limited, please wait 20 seconds and try again.";
-return false
-else
-ae"server returned an invalid status code, please try again later.";
-return false
-end
-end
-
-
-local aw=function(aw)
-if af==true then
-return false,("A request is already being sent, please slow down.")
-else
-af=true;
-end
-
-local ax=at();
-local ay=ar.."/public/whitelist/"..aj(ab).."?identifier="..W(ao()).."&key="..aw;
-
-if ad then
-ay=ay.."&nonce="..ax;
-end
-
-local az=ah{
-Url=ay,
-Method="GET",
-};
-
-af=false;
-
-if az.StatusCode==200 then
-local aA=V(az.Body);
-
-if aA.success==true then
-if aA.data.valid==true then
-if ad then
-if aA.data.hash==W("true".."-"..ax.."-"..ac)then
-return true,""
-else
-return false,("failed to verify integrity.")
-end
-else
-return true
-end
-else
-if ak(aw,1,4)=="KEY_"then
-return true,av(aw)
-else
-return false,("Key is invalid.")
-end
-end
-else
-return false,(aA.message)
-end
-elseif az.StatusCode==429 then
-return false,("You are being rate limited, please wait 20 seconds and try again.")
-else
-return false,("Server returned an invalid status code, please try again later.")
-end
-end
-
-
-local ax=function(ax)
-local ay=at();
-local az=ar.."/public/flag/"..aj(ab).."?name="..ax;
-
-if ad then
-az=az.."&nonce="..ay;
-end
-
-local aA=ah{
-Url=az,
-Method="GET",
-};
-
-if aA.StatusCode==200 then
-local aB=V(aA.Body);
-
-if aB.success==true then
-if ad then
-if aB.data.hash==W(aj(aB.data.value).."-"..ay.."-"..ac)then
-return aB.data.value
-else
-ae"failed to verify integrity.";
-return nil
-end
-else
-return aB.data.value
-end
-else
-ae(aB.message);
-return nil
-end
-else
-return nil
-end
-end
-
-
-return{
-Verify=aw,
-GetFlag=ax,
-Copy=au,
-}
-end
-
-
-return X end function a.h()
-
-
-
-
-
-
-local aa=(cloneref or clonereference or function(aa)
-return aa
-end)
-
-local ab=aa(game:GetService"HttpService")
-local ac={}
-
-function ac.New(ad)
-local ae=gethwid or function()
-return aa(game:GetService"Players").LocalPlayer.UserId
-end
-local af,ag=request or http_request or syn_request,setclipboard or toclipboard
-
-function ValidateKey(ah)
-local ai="https://api.pandauth.com/api/v1/keys/validate"
-
-local aj={
-ServiceID=ad,
-HWID=tostring(ae()),
-Key=tostring(ah),
-}
-
-local ak=ab:JSONEncode(aj)
-local al,am=pcall(function()
-return af{
-Url=ai,
-Method="POST",
-Headers={
-["User-Agent"]="Roblox/Exploit",
-["Content-Type"]="application/json",
-},
-Body=ak,
-}
-end)
-
-if al and am then
-if am.Success then
-local an,ao=pcall(function()
-return ab:JSONDecode(am.Body)
-end)
-
-if an and ao then
-if ao.Authenticated_Status and ao.Authenticated_Status=="Success"then
-return true,"Authenticated"
-else
-local ap=ao.Note or"Unknown reason"
-return false,"Authentication failed: "..ap
-end
-else
-return false,"JSON decode error"
-end
-else
-warn(
-" HTTP request was not successful. Code: "
-..tostring(am.StatusCode)
-.." Message: "
-..am.StatusMessage
-)
-return false,"HTTP request failed: "..am.StatusMessage
-end
-else
-return false,"Request pcall error"
-end
-end
-
-function GetKeyLink()
-return"https://new.pandadevelopment.net/getkey/"..tostring(ad).."?hwid="..tostring(ae())
-end
-
-function CopyLink()
-return ag(GetKeyLink())
-end
-
-return{
-Verify=ValidateKey,
-Copy=CopyLink,
-}
-end
-
-return ac end function a.i()
+return ac end function moduleFactories.i()
 
 
 
@@ -2380,143 +2039,19 @@ Copy=CopyLink,
 }
 end
 
-return aa end function a.j()
-
-
-
-
-
-
-
-
-
-local aa={}
-
-function aa.New(ab,ac,ad)
-JunkieProtected.API_KEY=ac
-JunkieProtected.PROVIDER=ad
-JunkieProtected.SERVICE_ID=ab
-
-local function ValidateKey(ae)
-if not ae or ae==""then
-print"No key provided!"
-
-return false,"No key provided. Please get a key."
-end
-
-local af=JunkieProtected.IsKeylessMode()
-if af and af.keyless_mode then
-print"Keyless mode enabled. Starting script..."
-return true,"Keyless mode enabled. Starting script..."
-end
-
-local ag=JunkieProtected.ValidateKey{Key=ae}
-if ag=="valid"then
-print"Key is valid! Starting script..."
-load()
-if _G.JD_IsPremium then
-print"Premium user detected!"
-else
-print"Standard user"
-end
-
-return true,"Key is valid!"
-else
-local ah=JunkieProtected.GetKeyLink()
-print"Invalid key!"
-
-return false,"Invalid key. Get one from:"..ah
-end
-end
-
-local function copyLink()
-local ae=JunkieProtected.GetKeyLink()
-
-if setclipboard then
-setclipboard(ae)
-end
-end
-return{
-Verify=ValidateKey,
-Copy=copyLink
-}
-end
-
-return aa end function a.k()
-
-
-
-return{
-platoboost={
-Name="Platoboost",
-Icon="rbxassetid://75920162824531",
-Args={"ServiceId","Secret"},
-
-New=a.load'g'.New
-},
-pandadevelopment={
-Name="Panda Development",
-Icon="panda",
-Args={"ServiceId"},
-
-New=a.load'h'.New
-},
-luarmor={
-Name="Luarmor",
-Icon="rbxassetid://130918283130165",
-Args={"ScriptId","Discord"},
-
-New=a.load'i'.New
-},
-junkiedevelopment={
-Name="Junkie Development",
-Icon="rbxassetid://106310347705078",
-Args={"ServiceId","ApiKey","Provider"},
-
-New=a.load'j'.New
-},
-
-
-}end function a.l()
-
-
-
-return[[
-{
-    "name": "windui",
-    "version": "1.6.65",
-    "main": "./dist/main.lua",
-    "repository": "https://github.com/Footagesus/WindUI",
-    "discord": "https://discord.gg/ftgs-development-hub-1300692552005189632",
-    "author": "Footagesus",
-    "description": "Roblox UI Library for scripts",
-    "license": "MIT",
-    "scripts": {
-        "dev": "bash build/build.sh dev $INPUT_FILE",
-        "build": "bash build/build.sh build $INPUT_FILE",
-        "live": "python3 -m http.server 8642",
-        "watch": "chokidar . -i 'node_modules' -i 'dist' -i 'build' -c 'npm run dev --'",
-        "live-build": "concurrently \"npm run live\" \"npm run watch --\"",
-        "example-live-build": "INPUT_FILE=main_example.lua npm run live-build",
-        "updater": "python3 updater/main.py"
+return aa end function moduleFactories.k()
+return {
+    luarmor = {
+        Name = "Luarmor",
+        Icon = "rbxassetid://130918283130165",
+        Args = {"ScriptId", "Discord"},
+        New = loadModule'i'.New,
     },
-    "keywords": [
-        "ui-library",
-        "ui-design",
-        "script",
-        "script-hub",
-        "exploiting"
-    ],
-    "devDependencies": {
-        "chokidar-cli": "^3.0.0",
-        "concurrently": "^9.2.0"
-    }
-}
-]]end function a.m()
+}end function moduleFactories.m()
 
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New
 local ad=ab.Tween
 
@@ -2641,6 +2176,63 @@ TextSize=18,
 }),
 })
 
+local buttonSurface=ao:FindFirstChild("Squircle")
+if buttonSurface then
+local buttonCorner=Instance.new("UICorner")
+buttonCorner.CornerRadius=UDim.new(0,14)
+buttonCorner.Parent=buttonSurface
+local buttonStroke=Instance.new("UIStroke")
+buttonStroke.Name="LiquidGlassButtonStroke"
+buttonStroke.Color=Color3.fromRGB(255,255,255)
+buttonStroke.Thickness=1
+buttonStroke.Transparency=ah=="Primary" and 0.55 or 0.8
+buttonStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
+buttonStroke.Parent=buttonSurface
+local buttonGradient=Instance.new("UIGradient")
+buttonGradient.Name="LiquidGlassButtonGradient"
+buttonGradient.Rotation=90
+buttonGradient.Color=ColorSequence.new(Color3.fromRGB(255,255,255),Color3.fromRGB(0,122,255))
+buttonGradient.Transparency=NumberSequence.new{
+NumberSequenceKeypoint.new(0,ah=="Primary" and 0.35 or 0.72),
+NumberSequenceKeypoint.new(1,0.85),
+}
+buttonGradient.Parent=buttonSurface
+if ah=="Destructive" then
+buttonSurface.ImageColor3=Color3.fromRGB(255,59,48)
+buttonSurface.ImageTransparency=0.15
+elseif ah=="Secondary" then
+buttonSurface.ImageTransparency=0.75
+end
+local buttonScale=Instance.new("UIScale")
+buttonScale.Name="LiquidGlassPressScale"
+buttonScale.Scale=1
+buttonScale.Parent=ao
+ab.AddSignal(ao.MouseEnter,function()
+buttonStroke.Transparency=0.2
+ad(buttonGradient,0.12,{Rotation=115}):Play()
+end)
+ab.AddSignal(ao.MouseLeave,function()
+buttonStroke.Transparency=ah=="Primary" and 0.55 or 0.8
+ad(buttonGradient,0.18,{Rotation=90}):Play()
+end)
+local function onButtonDown()
+ad(buttonScale,0.08,{Scale=0.96},Enum.EasingStyle.Quart,Enum.EasingDirection.Out):Play()
+if ah=="Primary" then
+    buttonGradient.Offset=Vector2.new(-1,0)
+    ad(buttonGradient,0.25,{Offset=Vector2.new(1,0)},Enum.EasingStyle.Quart,Enum.EasingDirection.Out):Play()
+end
+end
+local function onButtonUp()
+ad(buttonScale,0.18,{Scale=1},Enum.EasingStyle.Quart,Enum.EasingDirection.Out):Play()
+end
+ab.AddSignal(ao.InputBegan,function(input)
+if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then onButtonDown() end
+end)
+ab.AddSignal(ao.InputEnded,function(input)
+if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then onButtonUp() end
+end)
+end
+
 ab.AddSignal(ao.MouseEnter,function()
 ad(ao.Frame,0.047,{ImageTransparency=0.95}):Play()
 end)
@@ -2659,11 +2251,11 @@ end)
 return ao
 end
 
-return aa end function a.n()
+return aa end function moduleFactories.n()
 
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New local ad=
 ab.Tween
 
@@ -2784,9 +2376,9 @@ end
 return ar
 end
 
-return aa end function a.o()
+return aa end function moduleFactories.o()
 
-local aa=a.load'd'
+local aa=loadModule'd'
 local ab=aa.New
 local ac=aa.Tween
 
@@ -2965,19 +2557,19 @@ end
 return aj
 end
 
-return ad end function a.p()
+return ad end function moduleFactories.p()
 
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New
 local ad=ab.Tween
 
-local ae=a.load'm'.New
-local af=a.load'n'.New
+local ae=loadModule'm'.New
+local af=loadModule'n'.New
 
 function aa.new(ag,ah,ai,aj)
-local ak=a.load'o'
+local ak=loadModule'o'
 local al=ak.Create(true,"Popup",ag.Window,ag.WindUI,ag.WindUI.ScreenGui.KeySystem)
 
 local am={}
@@ -3473,7 +3065,7 @@ aA.Position=UDim2.new(1,0,0.5,0)
 al:Open()
 end
 
-return aa end function a.q()
+return aa end function moduleFactories.q()
 
 
 
@@ -3495,18 +3087,18 @@ local ab=aa(game:GetService"Workspace").CurrentCamera.ViewportSize.Y
 return map(ab,0,2560,8,56)
 end
 
-return{viewportPointToWorld,getOffset}end function a.r()
+return{viewportPointToWorld,getOffset}end function moduleFactories.r()
 
 
 
 local aa=(cloneref or clonereference or function(aa)return aa end)
 
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New
 
 
-local ad,ae=unpack(a.load'q')
+local ad,ae=unpack(loadModule'q')
 local af=Instance.new("Folder",aa(game:GetService"Workspace").CurrentCamera)
 
 
@@ -3642,11 +3234,11 @@ ah.Frame=ak
 ah.Model=aj
 
 return ah
-end end function a.s()
+end end function moduleFactories.s()
 
 
-local aa=a.load'd'
-local ab=a.load'r'
+local aa=loadModule'd'
+local ab=loadModule'r'
 
 local ac=aa.New
 
@@ -3766,7 +3358,7 @@ ae.SetVisibility=af.SetVisibility
 end
 
 return ae,af
-end end function a.t()
+end end function moduleFactories.t()
 
 
 
@@ -3774,9 +3366,9 @@ local aa=(cloneref or clonereference or function(aa)return aa end)
 
 
 local ab={
-AcrylicBlur=a.load'r',
+AcrylicBlur=loadModule'r',
 
-AcrylicPaint=a.load's',
+AcrylicPaint=loadModule's',
 }
 
 function ab.init()
@@ -3823,11 +3415,11 @@ registerDefaults()
 ab.Enable()
 end
 
-return ab end function a.u()
+return ab end function moduleFactories.u()
 
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New local ad=
 ab.Tween
 
@@ -3844,7 +3436,7 @@ Buttons=ae.Buttons,
 IconSize=22,
 }
 
-local ah=a.load'o'
+local ah=loadModule'o'
 local ai=ah.Create(true,"Popup",ae.WindUI.Window,ae.WindUI,af)
 
 local aj=200
@@ -4005,7 +3597,7 @@ PaddingBottom=UDim.new(0,16),
 }),
 })
 
-local as=a.load'm'.New
+local as=loadModule'm'.New
 
 for at,au in next,ag.Buttons do
 as(au.Title,au.Icon,au.Callback,au.Variant,aq,ai)
@@ -4017,7 +3609,7 @@ ai:Open()
 return ag
 end
 
-return aa end function a.v()
+return aa end function moduleFactories.v()
 return function(aa,ab)
 return{
 Dark={
@@ -4397,11 +3989,11 @@ Button=aa:Gradient({
 Icon=Color3.fromHex"#ffffff",
 },
 }
-end end function a.w()
+end end function moduleFactories.w()
 
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New local ad=
 ab.Tween
 
@@ -4488,7 +4080,7 @@ am,
 return an
 end
 
-return aa end function a.x()
+return aa end function moduleFactories.x()
 
 local aa={}
 
@@ -4497,7 +4089,7 @@ return ab
 end
 local ac=ab(game:GetService"UserInputService")
 
-local ad=a.load'd'
+local ad=loadModule'd'
 local ae=ad.New
 
 function aa.New(af,ag,ah,ai,aj)
@@ -4637,11 +4229,11 @@ UpdateVisuals()
 return ak
 end
 
-return aa end function a.y()
+return aa end function moduleFactories.y()
 
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New
 local ad=ab.Tween
 
@@ -4805,7 +4397,7 @@ end)
 return ah
 end
 
-return aa end function a.z()
+return aa end function moduleFactories.z()
 
 local aa=(cloneref or clonereference or function(aa)return aa end)
 
@@ -5186,10 +4778,10 @@ function ae.GetConfig(af,ag)
 return ae.Configs[ag]
 end
 
-return ae end function a.A()
+return ae end function moduleFactories.A()
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New
 local ad=ab.Tween
 
@@ -5471,10 +5063,10 @@ end
 
 
 
-return aa end function a.B()
+return aa end function moduleFactories.B()
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New
 local ad=ab.Tween
 
@@ -5633,9 +5225,9 @@ end
 
 
 
-return aa end function a.C()
+return aa end function moduleFactories.C()
 game:GetService"ReplicatedStorage"
-local aa=a.load'd'
+local aa=loadModule'd'
 local ab=aa.New
 local ac=aa.NewRoundFrame
 local ad=aa.Tween
@@ -5646,7 +5238,7 @@ end)
 
 ae(game:GetService"UserInputService")
 
-local af=a.load'y'
+local af=loadModule'y'
 
 local function Color3ToHSB(ag)
 local ah,ai,aj=ag.R,ag.G,ag.B
@@ -5685,14 +5277,20 @@ local aj=ag.B
 return 0.299*ah+0.587*ai+0.114*aj
 end
 
-local function GetTextColorForHSB(ag)
-local ah=Color3ToHSB(ag)local
-ai, aj, ak=ah.h, ah.s, ah.b
-if GetPerceivedBrightness(ag)>0.5 then
-return Color3.fromHSV(ai/360,0,0.05)
-else
-return Color3.fromHSV(ai/360,0,0.98)
+local function GetTextColorForHSB(color)
+local function linear(channel)
+if channel<=0.04045 then
+return channel/12.92
 end
+return ((channel+0.055)/1.055)^2.4
+end
+local luminance=0.2126*linear(color.R)+0.7152*linear(color.G)+0.0722*linear(color.B)
+local whiteContrast=1.05/(luminance+0.05)
+local blackContrast=(luminance+0.05)/0.05
+if whiteContrast>=blackContrast then
+return Color3.fromRGB(255,255,255)
+end
+return Color3.fromRGB(15,15,18)
 end
 
 return function(ag)
@@ -6087,6 +5685,29 @@ PaddingBottom=UDim.new(0,ah.UIPadding),
 ah.UIElements.Main=d
 ah.UIElements.Locked=av
 
+-- Native Liquid Glass card primitives. These are created once per card rather than
+-- traversing the element tree after creation.
+local nativeCorner=d:FindFirstChild("LiquidGlassCorner") or Instance.new("UICorner")
+nativeCorner.Name="LiquidGlassCorner"
+nativeCorner.CornerRadius=UDim.new(0,16)
+nativeCorner.Parent=d
+local nativeStroke=d:FindFirstChild("LiquidGlassStroke") or Instance.new("UIStroke")
+nativeStroke.Name="LiquidGlassStroke"
+nativeStroke.Color=Color3.fromRGB(255,255,255)
+nativeStroke.Transparency=0.78
+nativeStroke.Thickness=1
+nativeStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
+nativeStroke.Parent=d
+local nativeGradient=d:FindFirstChild("LiquidGlassGradient") or Instance.new("UIGradient")
+nativeGradient.Name="LiquidGlassGradient"
+nativeGradient.Rotation=90
+nativeGradient.Color=ColorSequence.new(Color3.fromRGB(255,255,255),Color3.fromRGB(0,122,255))
+nativeGradient.Transparency=NumberSequence.new{
+NumberSequenceKeypoint.new(0,0.35),
+NumberSequenceKeypoint.new(1,0.85),
+}
+nativeGradient.Parent=d
+
 if ah.Hover then
 aa.AddSignal(d.MouseEnter,function()
 if am then
@@ -6350,14 +5971,14 @@ end
 
 
 return ah
-end end function a.D()
+end end function moduleFactories.D()
 
-local aa=a.load'd'
+local aa=loadModule'd'
 local ab=aa.New
 
 local ac={}
 
-local ad=a.load'm'.New
+local ad=loadModule'm'.New
 
 function ac.New(ae,af)
 af.Hover=false
@@ -6372,7 +5993,7 @@ Desc=af.Desc or nil,
 
 Locked=af.Locked or false,
 }
-local ah=a.load'C'(af)
+local ah=loadModule'C'(af)
 
 ag.ParagraphFrame=ah
 if af.Buttons and#af.Buttons>0 then
@@ -6407,9 +6028,9 @@ end
 return ag.__type,ag
 end
 
-return ac end function a.E()
+return ac end function moduleFactories.E()
 
-local aa=a.load'd'local ab=
+local aa=loadModule'd'local ab=
 aa.New
 
 local ac={}
@@ -6433,7 +6054,7 @@ UIElements={},
 
 local ag=true
 
-af.ButtonFrame=a.load'C'{
+af.ButtonFrame=loadModule'C'{
 Title=af.Title,
 Desc=af.Desc,
 Parent=ae.Parent,
@@ -6516,11 +6137,11 @@ end)
 return af.__type,af
 end
 
-return ac end function a.F()
+return ac end function moduleFactories.F()
 
 local aa={}
 
-local ab=a.load'd'
+local ab=loadModule'd'
 local ac=ab.New
 local ad=ab.Tween
 
@@ -6699,6 +6320,17 @@ Text="",
 local ar
 local as
 
+local toggleCorner=Instance.new("UICorner")
+toggleCorner.CornerRadius=UDim.new(1,0)
+toggleCorner.Parent=aq
+local toggleStroke=Instance.new("UIStroke")
+toggleStroke.Name="LiquidGlassToggleStroke"
+toggleStroke.Color=Color3.fromRGB(255,255,255)
+toggleStroke.Transparency=0.78
+toggleStroke.Thickness=1
+toggleStroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
+toggleStroke.Parent=aq
+
 local at=ak and 30 or 20
 local au=aq.Size.X.Offset
 
@@ -6810,7 +6442,7 @@ local b=false
 ad(
 aq.Frame.Bar.UIScale,
 0.28,
-{Scale=1.5},
+{Scale=1.12},
 Enum.EasingStyle.Quint,
 Enum.EasingDirection.Out
 ):Play()
@@ -6924,11 +6556,11 @@ end
 return ap,am
 end
 
-return aa end function a.G()
+return aa end function moduleFactories.G()
 
 local aa={}
 
-local ab=a.load'd'local ac=
+local ab=loadModule'd'local ac=
 ab.New
 local ad=ab.Tween
 
@@ -7025,13 +6657,13 @@ return an,ak
 end
 
 
-return aa end function a.H()
-local aa=a.load'd'local ab=
+return aa end function moduleFactories.H()
+local aa=loadModule'd'local ab=
 aa.New local ac=
 aa.Tween
 
-local ad=a.load'F'.New
-local ae=a.load'G'.New
+local ad=loadModule'F'.New
+local ae=loadModule'G'.New
 
 local af={}
 
@@ -7049,7 +6681,7 @@ Type=ah.Type or"Toggle",
 Callback=ah.Callback or function()end,
 UIElements={},
 }
-ai.ToggleFrame=a.load'C'{
+ai.ToggleFrame=loadModule'C'{
 Title=ai.Title,
 Desc=ai.Desc,
 
@@ -7168,7 +6800,7 @@ end
 return ai.__type,ai
 end
 
-return af end function a.I()
+return af end function moduleFactories.I()
 
 local aa=(cloneref or clonereference or function(aa)
 return aa
@@ -7177,7 +6809,7 @@ end)
 local ac=aa(game:GetService"UserInputService")
 local ad=aa(game:GetService"RunService")
 
-local ae=a.load'd'
+local ae=loadModule'd'
 local af=ae.New
 local ag=ae.Tween
 
@@ -7276,7 +6908,7 @@ av.Size=UDim2.new(0,al.IconSize,0,al.IconSize)
 aw=aw+al.IconSize-2
 end
 end
-al.SliderFrame=a.load'C'{
+al.SliderFrame=loadModule'C'{
 Title=al.Title,
 Desc=al.Desc,
 Parent=ak.Parent,
@@ -7292,7 +6924,7 @@ Tags=ak.Tags,
 
 al.UIElements.SliderIcon=ae.NewRoundFrame(99,"Squircle",{
 ImageTransparency=0.95,
-Size=UDim2.new(1,not al.IsTextbox and-aw or(-al.TextBoxWidth-8),0,4),
+Size=UDim2.new(1,not al.IsTextbox and-aw or(-al.TextBoxWidth-8),0,6),
 AnchorPoint=Vector2.new(0.5,0.5),
 Position=UDim2.new(0.5,0,0.5,0),
 Name="Frame",
@@ -7311,9 +6943,9 @@ ImageColor3="Slider",
 ae.NewRoundFrame(99,"Squircle",{
 Size=UDim2.new(
 0,
-ak.Window.NewElements and(al.ThumbSize*2)or(al.ThumbSize+2),
+28,
 0,
-ak.Window.NewElements and(al.ThumbSize+4)or(al.ThumbSize+2)
+16
 ),
 Position=UDim2.new(1,0,0.5,0),
 AnchorPoint=Vector2.new(0.5,0.5),
@@ -7370,7 +7002,7 @@ Visible=al.IsTextbox,
 
 local ax
 if al.IsTooltip then
-ax=a.load'B'.New(
+ax=loadModule'B'.New(
 ap,
 al.UIElements.SliderIcon.Frame.Thumb,
 true,
@@ -7464,13 +7096,17 @@ end)
 
 ao=ac.InputEnded:Connect(function(f)
 if
-(
 f.UserInputType==Enum.UserInputType.MouseButton1
 or f.UserInputType==Enum.UserInputType.Touch
-)and aB==f
 then
+if an then
 an:Disconnect()
+an=nil
+end
+if ao then
 ao:Disconnect()
+ao=nil
+end
 ai=false
 ay.ScrollingEnabled=true
 
@@ -7481,9 +7117,9 @@ ag(al.UIElements.SliderIcon.Frame.Thumb,0.2,{
 ImageTransparency=0,
 Size=UDim2.new(
 0,
-ak.Window.NewElements and(al.ThumbSize*2)or(al.ThumbSize+2),
+26,
 0,
-ak.Window.NewElements and(al.ThumbSize+4)or(al.ThumbSize+2)
+16
 ),
 },Enum.EasingStyle.Quint,Enum.EasingDirection.InOut):Play()
 end
@@ -7545,6 +7181,7 @@ end
 ae.AddSignal(al.UIElements.SliderContainer.TextBox.FocusLost,function(az)
 local aA=tonumber(al.UIElements.SliderContainer.TextBox.Text)
 if aA then
+aA = math.clamp(aA, al.Value.Min or 0, al.Value.Max or 100)
 al:Set(aA)
 else
 al.UIElements.SliderContainer.TextBox.Text=FormatValue(aq)
@@ -7593,9 +7230,9 @@ end)
 return al.__type,al
 end
 
-return ah end function a.J()
+return ah end function moduleFactories.J()
 
-local aa=a.load'd'
+local aa=loadModule'd'
 local ac=aa.New
 local ad=aa.Tween
 
@@ -7699,7 +7336,7 @@ end
 return tostring(math.floor(ar+0.5)).."%"
 end
 
-ao.ProgressBarFrame=a.load'C'{
+ao.ProgressBarFrame=loadModule'C'{
 Title=ao.Title,
 Desc=ao.Desc,
 Parent=ag.Parent,
@@ -7872,7 +7509,7 @@ Update(ao.Value.Default,true)
 return ao.__type,ao
 end
 
-return ae end function a.K()
+return ae end function moduleFactories.K()
 
 local aa=(cloneref or clonereference or function(aa)
 return aa
@@ -7880,7 +7517,7 @@ end)
 
 local ac=aa(game:GetService"UserInputService")
 
-local ad=a.load'd'
+local ad=loadModule'd'
 local ae=ad.New local af=
 ad.Tween
 
@@ -7889,7 +7526,7 @@ UICorner=6,
 UIPadding=8,
 }
 
-local ah=a.load'w'.New
+local ah=loadModule'w'.New
 
 function ag.New(ai,aj)
 local function NormalizeKeyCode(ak)
@@ -7925,7 +7562,7 @@ table.insert(al,Enum.KeyCode[NormalizeKeyCode"Escape"])
 
 local am=true
 
-ak.KeybindFrame=a.load'C'{
+ak.KeybindFrame=loadModule'C'{
 Title=ak.Title,
 Desc=ak.Desc,
 Parent=aj.Parent,
@@ -8072,19 +7709,19 @@ end)
 return ak.__type,ak
 end
 
-return ag end function a.L()
+return ag end function moduleFactories.L()
 
-local aa=a.load'd'local ac=
+local aa=loadModule'd'local ac=
 aa.New local ad=
 aa.Tween
 
 local ae={
 UICorner=8,
 UIPadding=8,
-}local af=a.load'm'
+}local af=loadModule'm'
 
 .New
-local ag=a.load'n'.New
+local ag=loadModule'n'.New
 
 function ae.New(ah,ai)
 local aj={
@@ -8106,7 +7743,7 @@ Width=150,
 
 local ak=true
 
-aj.InputFrame=a.load'C'{
+aj.InputFrame=loadModule'C'{
 Title=aj.Title,
 Desc=aj.Desc,
 Parent=ai.Parent,
@@ -8182,9 +7819,9 @@ end
 return aj.__type,aj
 end
 
-return ae end function a.M()
+return ae end function moduleFactories.M()
 
-local aa=a.load'd'
+local aa=loadModule'd'
 local ae=aa.New
 
 local af={}
@@ -8210,7 +7847,7 @@ ai
 return"Divider",{__type="Divider",ElementFrame=aj}
 end
 
-return af end function a.N()
+return af end function moduleFactories.N()
 local aa={}
 
 local ae=(cloneref or clonereference or function(ae)
@@ -8223,9 +7860,9 @@ local ah=ae(game:GetService"Workspace").CurrentCamera local ai=
 
 workspace.CurrentCamera
 
-local aj=a.load'n'.New
+local aj=loadModule'n'.New
 
-local ak=a.load'd'
+local ak=loadModule'd'
 local al=ak.New
 local am=ak.Tween
 
@@ -8311,20 +7948,11 @@ UDim2.fromOffset(0,ap.UIElements.UIListLayout.AbsoluteContentSize.Y)
 end
 
 local function RecalculateListSize()
-local at=ao.WindUI.DropdownGui.AbsoluteSize.Y
-
-local au=ap.UIElements.UIListLayout.AbsoluteContentSize.Y/ao.UIScale
-local av=ap.SearchBarEnabled and(aq.SearchBarHeight+(aq.MenuPadding*3))
-or(aq.MenuPadding*2)
-local aw=au+av
-
-if aw>at then
-ap.UIElements.MenuCanvas.Size=
-UDim2.fromOffset(ap.UIElements.MenuCanvas.AbsoluteSize.X,at)
-else
-ap.UIElements.MenuCanvas.Size=
-UDim2.fromOffset(ap.UIElements.MenuCanvas.AbsoluteSize.X,aw)
-end
+local maxH = math.max(100, ao.WindUI.DropdownGui.AbsoluteSize.Y - 80)
+local contentH = ap.UIElements.UIListLayout.AbsoluteContentSize.Y / ao.UIScale
+local padding = ap.SearchBarEnabled and (aq.SearchBarHeight + (aq.MenuPadding * 3)) or (aq.MenuPadding * 2)
+local targetH = math.min(maxH, contentH + padding)
+ap.UIElements.MenuCanvas.Size = UDim2.fromOffset(ap.UIElements.MenuCanvas.AbsoluteSize.X, targetH)
 end
 
 function UpdatePosition()
@@ -8759,7 +8387,7 @@ end
 
 RecalculateCanvasSize()
 RecalculateListSize()
-else a.load'M'
+else loadModule'M'
 :New{Parent=ap.UIElements.Menu.Frame.ScrollingFrame}
 end
 end
@@ -8807,6 +8435,17 @@ if not ap.Locked then
 ap.UIElements.Menu.Visible=true
 ap.UIElements.MenuCanvas.Visible=true
 ap.UIElements.MenuCanvas.Active=true
+if not ap.UIElements.Blocker then
+    ap.UIElements.Blocker = Instance.new("TextButton")
+    ap.UIElements.Blocker.Name = "DropdownBlocker"
+    ap.UIElements.Blocker.Size = UDim2.new(1,0,1,0)
+    ap.UIElements.Blocker.BackgroundTransparency = 1
+    ap.UIElements.Blocker.Text = ""
+    ap.UIElements.Blocker.ZIndex = ap.UIElements.MenuCanvas.ZIndex - 1
+    ap.UIElements.Blocker.Parent = ao.WindUI.DropdownGui
+    ak.AddSignal(ap.UIElements.Blocker.MouseButton1Click, function() as:Close() end)
+end
+ap.UIElements.Blocker.Visible = true
 ap.UIElements.Menu.Size=UDim2.new(1,0,0,0)
 am(ap.UIElements.Menu,0.1,{
 Size=UDim2.new(1,0,1,0),
@@ -8842,6 +8481,7 @@ task.spawn(function()
 task.wait(0.25)
 ap.UIElements.MenuCanvas.Visible=false
 ap.UIElements.MenuCanvas.Active=false
+if ap.UIElements.Blocker then ap.UIElements.Blocker.Visible = false end
 end)
 end
 
@@ -8855,33 +8495,7 @@ as:Open()
 end
 )
 
-ak.AddSignal(af.InputBegan,function(au)
-if
-au.UserInputType==Enum.UserInputType.MouseButton1
-or au.UserInputType==Enum.UserInputType.Touch
-then
-local av=ap.UIElements.MenuCanvas
-local aw,ax=av.AbsolutePosition,av.AbsoluteSize
 
-local ay=ap.UIElements.Dropdown or ap.DropdownFrame.UIElements.Main
-local az=ay.AbsolutePosition
-local aA=ay.AbsoluteSize
-
-local aB=ag.X>=az.X
-and ag.X<=az.X+aA.X
-and ag.Y>=az.Y
-and ag.Y<=az.Y+aA.Y
-
-local b=ag.X>=aw.X
-and ag.X<=aw.X+ax.X
-and ag.Y>=aw.Y
-and ag.Y<=aw.Y+ax.Y
-
-if ao.Window.CanDropdown and ap.Opened and not aB and not b then
-as:Close()
-end
-end
-end)
 
 ak.AddSignal(
 ap.UIElements.Dropdown and ap.UIElements.Dropdown:GetPropertyChangedSignal"AbsolutePosition"
@@ -8892,7 +8506,7 @@ UpdatePosition
 return as
 end
 
-return aa end function a.O()
+return aa end function moduleFactories.O()
 
 local aa=(cloneref or clonereference or function(aa)
 return aa
@@ -8902,13 +8516,13 @@ aa(game:GetService"UserInputService")
 aa(game:GetService"Players").LocalPlayer:GetMouse()local ae=
 aa(game:GetService"Workspace").CurrentCamera
 
-local af=a.load'd'
+local af=loadModule'd'
 local ag=af.New local ah=
 af.Tween
 
-local ai=a.load'w'.New local aj=a.load'n'
+local ai=loadModule'w'.New local aj=loadModule'n'
 .New
-local ak=a.load'N'.New local al=
+local ak=loadModule'N'.New local al=
 
 workspace.CurrentCamera
 
@@ -8952,7 +8566,7 @@ if ap.Values and typeof(ap.Value)=="number"then
 ap.Value=ap.Values[ap.Value]
 end
 
-ap.DropdownFrame=a.load'C'{
+ap.DropdownFrame=loadModule'C'{
 Title=ap.Title,
 Desc=ap.Desc,
 Parent=ao.Parent,
@@ -9025,7 +8639,7 @@ end
 return ap.__type,ap
 end
 
-return am end function a.P()
+return am end function moduleFactories.P()
 
 
 
@@ -9274,15 +8888,15 @@ end
 return table.concat(at)
 end
 
-return aa end function a.Q()
+return aa end function moduleFactories.Q()
 
 local aa={}
 
-local af=a.load'd'
+local af=loadModule'd'
 local ag=af.New
 local ai=af.Tween
 
-local ak=a.load'P'
+local ak=loadModule'P'
 
 function aa.New(al,am,an,ao,ap)
 local aq={
@@ -9513,13 +9127,13 @@ end
 return aq
 end
 
-return aa end function a.R()
+return aa end function moduleFactories.R()
 
-local aa=a.load'd'local af=
+local aa=loadModule'd'local af=
 aa.New
 
 
-local ag=a.load'Q'
+local ag=loadModule'Q'
 
 local ai={}
 
@@ -9615,9 +9229,9 @@ am.ElementFrame=ao.CodeFrame
 return am.__type,am
 end
 
-return ai end function a.S()
+return ai end function moduleFactories.S()
 
-local aa=a.load'd'
+local aa=loadModule'd'
 local af=aa.New local ag=
 aa.Tween
 
@@ -9634,8 +9248,8 @@ al.RenderStepped
 local ao=am.LocalPlayer
 local ap=ao:GetMouse()
 
-local aq=a.load'm'.New
-local ar=a.load'n'.New
+local aq=loadModule'm'.New
+local ar=loadModule'n'.New
 
 local as={
 UICorner=9,
@@ -9669,7 +9283,7 @@ end
 
 az:SetHSVFromRGB(az.Default)
 
-local b=a.load'o'
+local b=loadModule'o'
 local d=b.Create(nil,"Dialog",aw,ax,aw.UIElements.Main.Main)
 
 az.ColorpickerFrame=d
@@ -10412,7 +10026,7 @@ local ax=true
 
 
 
-aw.ColorpickerFrame=a.load'C'{
+aw.ColorpickerFrame=loadModule'C'{
 Title=aw.Title,
 Desc=aw.Desc,
 Parent=av.Parent,
@@ -10490,9 +10104,9 @@ end)
 return aw.__type,aw
 end
 
-return as end function a.T()
+return as end function moduleFactories.T()
 
-local aa=a.load'd'
+local aa=loadModule'd'
 local af=aa.New
 local ai=aa.Tween
 
@@ -10869,9 +10483,9 @@ end)
 return an.__type,an
 end
 
-return ak end function a.U()
+return ak end function moduleFactories.U()
 
-local aa=a.load'd'
+local aa=loadModule'd'
 local af=aa.New
 
 local ai={}
@@ -10886,8 +10500,8 @@ BackgroundTransparency=1,
 return"Space",{__type="Space",ElementFrame=am}
 end
 
-return ai end function a.V()
-local aa=a.load'd'
+return ai end function moduleFactories.V()
+local aa=loadModule'd'
 local af=aa.New
 
 local ai={}
@@ -10955,8 +10569,8 @@ end
 return am.__type,am
 end
 
-return ai end function a.W()
-local aa=a.load'd'
+return ai end function moduleFactories.W()
+local aa=loadModule'd'
 local af=aa.New
 
 local ai={}
@@ -11040,8 +10654,8 @@ al.Tab
 return am.__type,am
 end
 
-return ai end function a.X()
-local aa=a.load'd'
+return ai end function moduleFactories.X()
+local aa=loadModule'd'
 local af=aa.New
 
 local ai={}
@@ -11140,9 +10754,9 @@ end
 return am.__type,am
 end
 
-return ai end function a.Y()
+return ai end function moduleFactories.Y()
 
-local aa=a.load'd'
+local aa=loadModule'd'
 local af=aa.New
 
 local ai={}
@@ -11227,14 +10841,14 @@ al.Tab
 return am.__type,am
 end
 
-return ai end function a.Z()
+return ai end function moduleFactories.Z()
 local aa=(cloneref or clonereference or function(aa)
 return aa
 end)
 
 local af=aa(game:GetService"UserInputService")
 
-local ai=a.load'd'
+local ai=loadModule'd'
 local ak=ai.New
 
 local al={}
@@ -11463,28 +11077,28 @@ ao.Main=at
 return ao.__type,ao
 end
 
-return al end function a._()
+return al end function moduleFactories._()
 
 return{
 Elements={
-Paragraph=a.load'D',
-Button=a.load'E',
-Toggle=a.load'H',
-Slider=a.load'I',
-ProgressBar=a.load'J',
-Keybind=a.load'K',
-Input=a.load'L',
-Dropdown=a.load'O',
-Code=a.load'R',
-Colorpicker=a.load'S',
-Section=a.load'T',
-Divider=a.load'M',
-Space=a.load'U',
-Image=a.load'V',
-Group=a.load'W',
-HStack=a.load'X',
-VStack=a.load'Y',
-Viewport=a.load'Z',
+Paragraph=loadModule'D',
+Button=loadModule'E',
+Toggle=loadModule'H',
+Slider=loadModule'I',
+ProgressBar=loadModule'J',
+Keybind=loadModule'K',
+Input=loadModule'L',
+Dropdown=loadModule'O',
+Code=loadModule'R',
+Colorpicker=loadModule'S',
+Section=loadModule'T',
+Divider=loadModule'M',
+Space=loadModule'U',
+Image=loadModule'V',
+Group=loadModule'W',
+HStack=loadModule'X',
+VStack=loadModule'Y',
+Viewport=loadModule'Z',
 
 },
 Load=function(aa,af,ai,ak,al,am,an,ao,ap)
@@ -11613,7 +11227,7 @@ end
 end
 end
 end,
-}end function a.aa()
+}end function moduleFactories.aa()
 
 local aa=(cloneref or clonereference or function(aa)
 return aa
@@ -11624,11 +11238,11 @@ local af=game:GetService"Players"
 aa(game:GetService"UserInputService")
 local ai=af.LocalPlayer:GetMouse()
 
-local ak=a.load'd'
+local ak=loadModule'd'
 local al=ak.New
 
-local am=a.load'B'.New
-local an=a.load'x'.New
+local am=loadModule'B'.New
+local an=loadModule'x'.New
 
 
 
@@ -12067,7 +11681,7 @@ end
 
 
 
-local aA=a.load'_'
+local aA=loadModule'_'
 
 aA.Load(
 ar,
@@ -12261,16 +11875,16 @@ ao.OnChangeFunc(aq)
 end
 end
 
-return ao end function a.ab()
+return ao end function moduleFactories.ab()
 
 local aa={}
 
 
-local af=a.load'd'
+local af=loadModule'd'
 local ai=af.New
 local ak=af.Tween
 
-local al=a.load'aa'
+local al=loadModule'aa'
 
 function aa.New(am,an,ao,ap,aq)
 local ar={
@@ -12442,7 +12056,7 @@ return ar
 end
 
 
-return aa end function a.ac()
+return aa end function moduleFactories.ac()
 return{
 Tab="table-of-contents",
 Paragraph="type",
@@ -12454,7 +12068,7 @@ Input="text-cursor-input",
 Dropdown="chevrons-up-down",
 Code="terminal",
 Colorpicker="palette",
-}end function a.ad()
+}end function moduleFactories.ad()
 local aa=(cloneref or clonereference or function(aa)
 return aa
 end)
@@ -12466,7 +12080,7 @@ Margin=8,
 Padding=9,
 }
 
-local ai=a.load'd'
+local ai=loadModule'd'
 local ak=ai.New
 local al=ai.Tween
 
@@ -12478,7 +12092,7 @@ Radius=22,
 Width=400,
 MaxHeight=380,
 
-Icons=a.load'ac',
+Icons=loadModule'ac',
 }
 
 local aq=ak("TextBox",{
@@ -12986,14 +12600,18 @@ at.Frame.Results.Frame.Visible=false
 end
 end
 
+local searchDebounce
 ai.AddSignal(aq:GetPropertyChangedSignal"Text",function()
-ap:Search(aq.Text)
+if searchDebounce then task.cancel(searchDebounce) end
+searchDebounce = task.delay(0.15, function()
+    ap:Search(aq.Text)
+end)
 end)
 
 return ap
 end
 
-return af end function a.ae()
+return af end function moduleFactories.ae()
 
 
 
@@ -13007,19 +12625,19 @@ local ak=aa(game:GetService"Players")
 
 local al=workspace.CurrentCamera
 
-local am=a.load't'
+local am=loadModule't'
 
-local an=a.load'd'
+local an=loadModule'd'
 local ao=an.New
 local ap=an.Tween
 
 
-local aq=a.load'w'.New
-local ar=a.load'm'.New
-local as=a.load'x'.New
-local at=a.load'y'
+local aq=loadModule'w'.New
+local ar=loadModule'm'.New
+local as=loadModule'x'.New
+local at=loadModule'y'
 
-local au=a.load'z'
+local au=loadModule'z'
 
 
 
@@ -13973,6 +13591,24 @@ aw.TopBarButtons[100-F]={
 Name=A,
 Object=N,
 }
+if A=="Close" and not aw.SidebarToggle then
+    aw.SidebarToggle = aw:CreateTopbarButton("SidebarToggle", "menu", function()
+        if aw.UIElements.SideBarContainer.Visible then
+            aw.UIElements.SideBarContainer.Visible = false
+        else
+            aw.UIElements.SideBarContainer.Visible = true
+        end
+    end, 90, "Default", nil, 20)
+    local rs = game:GetService("RunService")
+    rs.RenderStepped:Connect(function()
+        if aw.UIElements.Main.AbsoluteSize.X < 600 then
+            aw.SidebarToggle.Visible = true
+        else
+            aw.SidebarToggle.Visible = false
+            aw.UIElements.SideBarContainer.Visible = true
+        end
+    end)
+end
 
 an.AddSignal(M.MouseButton1Click,function()
 if C then
@@ -14105,7 +13741,7 @@ end
 
 
 
-aw.OpenButtonMain=a.load'A'.New(aw)
+aw.OpenButtonMain=loadModule'A'.New(aw)
 
 task.spawn(function()
 if aw.Icon then
@@ -14669,8 +14305,8 @@ if aw.OpenButton and typeof(aw.OpenButton)=="table"then
 aw:EditOpenButton(aw.OpenButton)
 end
 
-local C=a.load'aa'
-local F=a.load'ab'
+local C=loadModule'aa'
+local F=loadModule'ab'
 local G=C.Init(aw,av.WindUI,av.WindUI.TooltipGui)
 G:OnChange(function(H)
 aw.CurrentTab=H
@@ -14744,7 +14380,7 @@ J,
 return L
 end
 
-local H=a.load'o'
+local H=loadModule'o'
 function aw.Dialog(J,L)
 local M={
 Title=L.Title or"Dialog",
@@ -15127,7 +14763,7 @@ end)
 
 
 if not aw.HideSearchBar then
-local Q=a.load'ad'
+local Q=loadModule'ad'
 local R=false
 
 
@@ -15221,9 +14857,9 @@ end end end
 local aa={
 Window=nil,
 Theme=nil,
-Creator=a.load'd',
-LocalizationModule=a.load'e',
-NotificationModule=a.load'f',
+Creator=loadModule'd',
+LocalizationModule=loadModule'e',
+NotificationModule=loadModule'f',
 Themes=nil,
 Transparent=false,
 
@@ -15234,7 +14870,7 @@ UIScale=1,
 ConfigManager=nil,
 Version="0.0.0",
 
-Services=a.load'k',
+Services=loadModule'k',
 
 OnThemeChangeFunction=nil,
 
@@ -15296,12 +14932,9 @@ end)
 
 local ap=ak.LocalPlayer or nil
 
-local aq=ai:JSONDecode(a.load'l')
-if aq then
-aa.Version=aq.version
-end
+aa.Version="1.6.65"
 
-local ar=a.load'p'
+local ar=loadModule'p'
 
 local as=aa.Creator
 
@@ -15310,7 +14943,7 @@ local at=as.New
 
 
 
-local au=a.load't'
+local au=loadModule't'
 
 local av=protectgui or(syn and syn.protect_gui)or function()end
 
@@ -15512,10 +15145,10 @@ end
 
 function aa.Popup(az,aA)
 aA.WindUI=aa
-return a.load'u'.new(aA,aa.ScreenGui.Popups)
+return loadModule'u'.new(aA,aa.ScreenGui.Popups)
 end
 
-aa.Themes=a.load'v'(aa,as)
+aa.Themes=loadModule'v'(aa,as)
 
 as.Themes=aa.Themes
 
@@ -15523,7 +15156,14 @@ aa:SetTheme"Dark"
 aa:SetLanguage(as.Language)
 
 function aa.CreateWindow(az,aA)
-local aB=a.load'ae'
+aA=aA or{}
+if aA.Theme==nil then
+ aA.Theme="iOS26"
+end
+if aA.Acrylic==nil then
+ aA.Acrylic=true
+end
+local aB=loadModule'ae'
 
 if not am:IsStudio()and writefile then
 if not isfolder"WindUI"then
@@ -15878,136 +15518,6 @@ end
 return root
 end
 
-local function iOS26DecorateTree(root,kind)
-if not root or root:GetAttribute("iOS26Decorated") then
-return root
-end
-root:SetAttribute("iOS26Decorated",true)
-if kind=="Window" then
-iOS26.ApplyWindow(root,{Shadow=true})
-elseif kind=="Dropdown" then
-iOS26.ApplyDropdown(root)
-else
-iOS26.ApplyCard(root)
-end
-if root:IsA("TextButton") or root:IsA("ImageButton") then
-iOS26.AttachButton(root)
-end
-for _,child in ipairs(root:GetDescendants()) do
-if child:IsA("TextButton") or child:IsA("ImageButton") then
-if child.Name~="Hitbox" and child.Name~="Frame" then
-iOS26.AttachButton(child)
-end
-elseif child:IsA("Frame") and(child.Name=="Card" or child.Name=="Background" or child.Name=="Content")then
-iOS26.ApplyCard(child)
-end
-end
-return root
-end
-
-local function iOS26FindRoot(element)
-if typeof(element)=="Instance" and element:IsA("GuiObject") then
-return element
-end
-if type(element)~="table" then
-return nil
-end
-if element.ElementFrame and typeof(element.ElementFrame)=="Instance" and element.ElementFrame:IsA("GuiObject") then
-return element.ElementFrame
-end
-if element.UIElements then
-for _,key in ipairs({"Main","Frame","Container","SliderFrame","ToggleFrame","DropdownFrame"})do
-local item=element.UIElements[key]
-if typeof(item)=="Instance" and item:IsA("GuiObject") then
-return item
-end
-end
-end
-return nil
-end
-
-local function iOS26WrapMethod(target,name,callback)
-if not target or type(target[name])~="function" then
-return
-end
-local marker="__iOS26Wrapped_"..name
-if target[marker] then
-return
-end
-local original=target[name]
-target[marker]=original
-target[name]=function(self,...)
-local result=original(self,...)
-return callback(self,result,...)
-end
-end
-
-local function iOS26DecorateElement(element,kind)
-local root=iOS26FindRoot(element)
-if root then
-iOS26DecorateTree(root,kind)
-end
-if element and type(element)=="table" then
-if kind=="Section" then
-iOS26WrapMethod(element,"Tab",function(self,result)
-return iOS26DecorateElement(result,"SectionElement")
-end)
-elseif kind=="Dropdown" then
-iOS26WrapMethod(element,"Open",function(self,result)
-local menu=self.UIElements and self.UIElements.MenuCanvas
-if menu then
-iOS26DecorateTree(menu,"Dropdown")
-end
-return result
-end)
-end
-end
-return element
-end
-
-local function iOS26DecorateTab(tab)
-if not tab or tab.__iOS26TabPatched then
-return tab
-end
-tab.__iOS26TabPatched=true
-for _,name in ipairs({"Button","Toggle","Slider","Dropdown","Input","Paragraph","ProgressBar","Keybind","Colorpicker","Code","Image","Group","HStack","VStack","Viewport","AddButton","AddToggle","AddSlider","AddDropdown","AddInput"})do
-iOS26WrapMethod(tab,name,function(self,result)
-return iOS26DecorateElement(result,name)
-end)
-end
-iOS26WrapMethod(tab,"Section",function(self,result)
-return iOS26DecorateElement(result,"Section")
-end)
-iOS26WrapMethod(tab,"AddSection",function(self,result)
-return iOS26DecorateElement(result,"Section")
-end)
-return tab
-end
-
-local function iOS26DecorateWindow(window)
-if not window or window.__iOS26WindowPatched then
-return window
-end
-window.__iOS26WindowPatched=true
-local main=window.UIElements and window.UIElements.Main
-if main then
-iOS26DecorateTree(main,"Window")
-end
-iOS26WrapMethod(window,"Tab",function(self,result)
-return iOS26DecorateTab(result)
-end)
-iOS26WrapMethod(window,"Section",function(self,result)
-return iOS26DecorateElement(result,"Section")
-end)
-iOS26WrapMethod(window,"Dialog",function(self,result)
-return iOS26DecorateElement(result,"Dialog")
-end)
-iOS26WrapMethod(window,"Popup",function(self,result)
-return iOS26DecorateElement(result,"Popup")
-end)
-return window
-end
-
 local iOS26Theme={}
 for key,value in pairs(aa.Themes.Dark or{})do
 iOS26Theme[key]=value
@@ -16038,244 +15548,6 @@ aa.iOS26Theme=iOS26Theme
 function aa.ApplyiOS26(self,instance,options)
 return iOS26.Apply(instance,options)
 end
-function aa.CreateLiquidToggle(self,parent,config)
-config=config or{}
-local width=config.Width or 52
-local height=config.Height or 32
-local knobSize=config.KnobSize or 26
-local state=config.Default==true
-local button=Instance.new("TextButton")
-button.Name=config.Name or "LiquidToggle"
-button.Size=UDim2.new(0,width,0,height)
-button.BackgroundColor3=state and iOS26.Theme.Accent or Color3.fromRGB(180,180,185)
-button.Text=""
-button.AutoButtonColor=false
-button.Parent=parent
-iOS26.Apply(button,{Transparency=0.35,CornerRadius=height/2,Shadow=false})
-local knob=Instance.new("Frame")
-knob.Name="Knob"
-knob.Size=UDim2.new(0,knobSize,0,knobSize)
-knob.Position=UDim2.new(0,state and(width-knobSize-3)or 3,0.5,0)
-knob.AnchorPoint=Vector2.new(0,0.5)
-knob.BackgroundColor3=Color3.fromRGB(255,255,255)
-knob.Parent=button
-local knobCorner=Instance.new("UICorner")
-knobCorner.CornerRadius=UDim.new(1,0)
-knobCorner.Parent=knob
-local function set(value,fire)
-state=value==true
-iOS26Tween(button,{BackgroundColor3=state and iOS26.Theme.Accent or Color3.fromRGB(180,180,185)},0.25)
-iOS26Tween(knob,{Position=UDim2.new(0,state and(width-knobSize-3)or 3,0.5,0)},0.25)
-if fire~=false and config.Callback then
-config.Callback(state)
-end
-end
-button.Activated:Connect(function()
-iOS26.Press(button)
-set(not state)
-end)
-set(state,false)
-return{Instance=button,Get=function()return state end,Set=function(value)set(value)end}
-end
-function aa.CreateLiquidSlider(self,parent,config)
-config=config or{}
-local min=tonumber(config.Min)or 0
-local max=tonumber(config.Max)or 100
-if max<=min then max=min+1 end
-local value=math.clamp(tonumber(config.Default)or min,min,max)
-local container=Instance.new("Frame")
-container.Name=config.Name or "LiquidSlider"
-container.Size=UDim2.new(0,config.Width or 220,0,config.Height or 36)
-container.BackgroundTransparency=1
-container.Parent=parent
-local track=Instance.new("Frame")
-track.Name="Track"
-track.Size=UDim2.new(1,0,0,config.TrackHeight or 8)
-track.Position=UDim2.new(0,0,0.5,0)
-track.AnchorPoint=Vector2.new(0,0.5)
-track.BackgroundColor3=Color3.fromRGB(190,190,195)
-track.Parent=container
-local trackCorner=Instance.new("UICorner")
-trackCorner.CornerRadius=UDim.new(1,0)
-trackCorner.Parent=track
-local fill=Instance.new("Frame")
-fill.Name="Fill"
-fill.BackgroundColor3=iOS26.Theme.Accent
-fill.Parent=track
-local fillCorner=Instance.new("UICorner")
-fillCorner.CornerRadius=UDim.new(1,0)
-fillCorner.Parent=fill
-local knob=Instance.new("Frame")
-knob.Name="Knob"
-knob.Size=UDim2.new(0,config.KnobSize or 22,0,config.KnobSize or 22)
-knob.AnchorPoint=Vector2.new(0.5,0.5)
-knob.BackgroundColor3=Color3.fromRGB(255,255,255)
-knob.Parent=track
-local knobCorner=Instance.new("UICorner")
-knobCorner.CornerRadius=UDim.new(1,0)
-knobCorner.Parent=knob
-local function set(nextValue,fire)
-value=math.clamp(tonumber(nextValue)or value,min,max)
-local percent=(value-min)/(max-min)
-iOS26Tween(fill,{Size=UDim2.new(percent,0,1,0)},0.18)
-iOS26Tween(knob,{Position=UDim2.new(percent,0,0.5,0)},0.18)
-if fire~=false and config.Callback then config.Callback(value) end
-end
-local function fromInput(input)
-local percent=math.clamp((input.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-set(min+(max-min)*percent)
-end
-local dragging=false
-local iOS26Input=game:GetService("UserInputService")
-track.InputBegan:Connect(function(input)
-if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
-dragging=true
-fromInput(input)
-iOS26.Press(knob)
-end
-end)
-iOS26Input.InputChanged:Connect(function(input)
-if dragging and(input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch)then fromInput(input) end
-end)
-iOS26Input.InputEnded:Connect(function(input)
-if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then dragging=false end
-end)
-set(value,false)
-return{Instance=container,Get=function()return value end,Set=function(nextValue)set(nextValue)end}
-end
-
--- Optional iOS26 component showcase.
--- The library remains unchanged unless the caller invokes WindUI:CreateiOS26Demo().
-function aa.CreateiOS26Demo(self,options)
-options=options or{}
-local window=self:CreateWindow({
-Title=options.Title or "iOS26 Liquid Glass",
-Author=options.Author or "Component Showcase",
-Size=options.Size or UDim2.new(0,620,0,500),
-Acrylic=options.Acrylic~=false,
-NewElements=true,
-Theme="iOS26",
-})
-local tab=window:Tab({
-Title=options.TabTitle or "Components",
-Icon="sparkles",
-ShowTabTitle=true,
-})
-
-tab:Paragraph({
-Title="Liquid Glass Controls",
-Desc="Buttons and sliders using the embedded iOS26 material and motion system.",
-Icon="wand-sparkles",
-})
-
-tab:Section({
-Title="Buttons",
-Icon="mouse-pointer-click",
-})
-
-tab:Button({
-Title="Primary Button",
-Desc="Blue iOS-style action with press feedback.",
-Icon="check",
-Variant="Primary",
-Callback=function()
-self:Notify({
-Title="Primary Button",
-Content="Primary button clicked.",
-Duration=2,
-})
-end,
-})
-
-tab:Button({
-Title="Secondary Button",
-Desc="Neutral glass action button.",
-Icon="layers-2",
-Variant="Secondary",
-Callback=function()
-self:Notify({
-Title="Secondary Button",
-Content="Secondary button clicked.",
-Duration=2,
-})
-end,
-})
-
-tab:Button({
-Title="Danger Button",
-Desc="Destructive-style action for testing variant contrast.",
-Icon="trash-2",
-Variant="Destructive",
-Callback=function()
-self:Notify({
-Title="Danger Button",
-Content="Danger button clicked.",
-Duration=2,
-})
-end,
-})
-
-tab:Section({
-Title="Sliders",
-Icon="sliders-horizontal",
-})
-
-tab:Slider({
-Title="Opacity",
-Desc="Continuous value from 0 to 100.",
-Icon="sun-medium",
-Value={Min=0,Max=100,Default=72},
-Step=1,
-IsTextbox=true,
-Callback=function(value)
-if options.OnOpacityChanged then
-options.OnOpacityChanged(value)
-end
-end,
-})
-
-tab:Slider({
-Title="Temperature",
-Desc="Decimal slider with two-step increments.",
-Icon="thermometer",
-Value={Min=-10,Max=40,Default=22},
-Step=0.5,
-IsTextbox=true,
-Callback=function(value)
-if options.OnTemperatureChanged then
-options.OnTemperatureChanged(value)
-end
-end,
-})
-
-tab:Slider({
-Title="Intensity",
-Desc="Slider with endpoint icons and tooltip feedback.",
-Icons={From="volume-1",To="volume-2"},
-Value={Min=0,Max=1,Default=0.65},
-Step=0.01,
-IsTooltip=true,
-IsTextbox=true,
-Callback=function(value)
-if options.OnIntensityChanged then
-options.OnIntensityChanged(value)
-end
-end,
-})
-
-return window
-end
-
-local iOS26CreateWindow=aa.CreateWindow
-aa.CreateWindow=function(self,config)
-config=config or{}
-if config.Acrylic==nil then
-config.Acrylic=true
-end
-local window=iOS26CreateWindow(self,config)
-return iOS26DecorateWindow(window)
-end
-
 _G.WindUI=aa
 _G.iOS26=iOS26
 return aa
