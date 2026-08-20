@@ -15656,108 +15656,105 @@ end
 return h
 end
 -- ============================================================
--- iOS 26 Black Gold Liquid Glass visual layer
--- Built on the original WindUI API and remains loadstring-compatible.
+-- iOS26 Black Gold Liquid Glass - safe compatibility layer
+-- Keeps the original WindUI public calling style and lifecycle.
 -- ============================================================
 local iOS26BlackGold={
- Version="1.0-black-gold",
+ Version="1.1-safe-black-gold",
  Quality="Balanced",
- MaxEffectFPS=30,
+ MaxEffectFPS=24,
  Gold=Color3.fromRGB(255,200,50),
  GoldLight=Color3.fromRGB(255,240,150),
- GoldDark=Color3.fromRGB(156,103,12),
  Theme={
   Background=Color3.fromRGB(20,20,20),
-  Glass=Color3.fromRGB(38,36,31),
+  Glass=Color3.fromRGB(42,39,32),
   Text=Color3.fromRGB(255,248,225),
   SecondaryText=Color3.fromRGB(205,190,155),
   Accent=Color3.fromRGB(255,200,50),
  },
- Material={Transparency=0.24,PanelTransparency=0.34,BorderTransparency=0.42,HighlightTransparency=0.28,CornerRadius=18,WindowCornerRadius=24},
- Animation={Fast=0.10,Normal=0.22,Slow=0.42,Press=0.08,Release=0.18},
+ Material={WindowTransparency=0.12,CardTransparency=0.20,BorderTransparency=0.42,CornerRadius=18,WindowCornerRadius=24},
  Connections={},
 }
 local Gold=iOS26BlackGold.Gold
 local GoldLight=iOS26BlackGold.GoldLight
-local function goldCopy(source)
+local function copy(source)
  local result={}
  for key,value in pairs(source or{}) do result[key]=value end
  return result
 end
-local blackGoldTheme=goldCopy(aa.Themes and aa.Themes.Dark or{})
-blackGoldTheme.Name="iOS26 Black Gold"
-blackGoldTheme.White=Color3.fromRGB(255,248,225)
-blackGoldTheme.Black=Color3.fromRGB(8,8,8)
-blackGoldTheme.Background=Color3.fromRGB(20,20,20)
-blackGoldTheme.BackgroundTransparency=0.12
-blackGoldTheme.Dialog=Color3.fromRGB(30,28,24)
-blackGoldTheme.Hover=Color3.fromRGB(84,69,32)
-blackGoldTheme.PanelBackground=Color3.fromRGB(38,36,31)
-blackGoldTheme.PanelBackgroundTransparency=0.24
-blackGoldTheme.WindowBackground=Color3.fromRGB(20,20,20)
-blackGoldTheme.WindowShadow=Color3.fromRGB(0,0,0)
-blackGoldTheme.WindowTopbarTitle=Color3.fromRGB(255,248,225)
-blackGoldTheme.WindowTopbarAuthor=Color3.fromRGB(205,190,155)
-blackGoldTheme.WindowTopbarIcon=Gold
-blackGoldTheme.WindowTopbarButtonIcon=GoldLight
-blackGoldTheme.WindowSearchBarBackground=Color3.fromRGB(45,42,34)
-blackGoldTheme.TabBackground=Color3.fromRGB(38,36,31)
-blackGoldTheme.TabBackgroundHover=Color3.fromRGB(72,59,29)
-blackGoldTheme.TabBackgroundActive=Color3.fromRGB(83,65,25)
-blackGoldTheme.TabText=Color3.fromRGB(218,204,170)
-blackGoldTheme.TabTitle=Color3.fromRGB(255,248,225)
-blackGoldTheme.TabIcon=Gold
-blackGoldTheme.TabBorder=Gold
-blackGoldTheme.TabBorderTransparencyActive=0.28
-blackGoldTheme.ElementBackground=Color3.fromRGB(48,44,35)
-blackGoldTheme.ElementBackgroundTransparency=0.20
-blackGoldTheme.ElementBackgroundHover=Color3.fromRGB(84,69,32)
-blackGoldTheme.ElementTitle=Color3.fromRGB(255,248,225)
-blackGoldTheme.ElementDesc=Color3.fromRGB(205,190,155)
-blackGoldTheme.ElementIcon=Gold
-blackGoldTheme.PopupBackground=Color3.fromRGB(30,28,24)
-blackGoldTheme.PopupTitle=Color3.fromRGB(255,248,225)
-blackGoldTheme.PopupContent=Color3.fromRGB(205,190,155)
-blackGoldTheme.Toggle=Gold
-blackGoldTheme.ToggleBar=Color3.fromRGB(104,85,36)
-blackGoldTheme.Checkbox=Gold
-blackGoldTheme.CheckboxIcon=Color3.fromRGB(20,20,20)
-blackGoldTheme.CheckboxBorder=Gold
-blackGoldTheme.Slider=Gold
-blackGoldTheme.SliderThumb=GoldLight
-blackGoldTheme.SliderIcon=Gold
-blackGoldTheme.ProgressBar=Gold
-blackGoldTheme.ProgressBarTrack=Color3.fromRGB(100,84,45)
-blackGoldTheme.ProgressBarTrackTransparency=0.65
-blackGoldTheme.ProgressBarText=Color3.fromRGB(255,248,225)
-blackGoldTheme.Tooltip=Color3.fromRGB(45,38,24)
-blackGoldTheme.TooltipText=Color3.fromRGB(255,248,225)
-blackGoldTheme.TooltipSecondary=Gold
-blackGoldTheme.TooltipSecondaryText=Color3.fromRGB(20,20,20)
-blackGoldTheme.SectionBox=Gold
-blackGoldTheme.SectionBoxTransparency=0.70
-blackGoldTheme.SectionBoxBorder=Gold
-blackGoldTheme.SectionBoxBorderTransparency=0.46
-blackGoldTheme.SectionBoxBackground=Color3.fromRGB(50,43,28)
-blackGoldTheme.SectionBoxBackgroundTransparency=0.52
-blackGoldTheme.Notification=Color3.fromRGB(30,28,24)
-blackGoldTheme.Notification2=Color3.fromRGB(78,61,27)
-blackGoldTheme.Notification2Transparency=0.32
-blackGoldTheme.NotificationTitle=Color3.fromRGB(255,248,225)
-blackGoldTheme.NotificationContent=Color3.fromRGB(205,190,155)
-blackGoldTheme.NotificationDuration=Gold
-blackGoldTheme.NotificationDurationTransparency=0.15
-blackGoldTheme.NotificationBorder=Gold
-blackGoldTheme.NotificationBorderTransparency=0.38
-blackGoldTheme.DropdownBackground=Color3.fromRGB(30,28,24)
-blackGoldTheme.DropdownTabBorder=Gold
-blackGoldTheme.DropdownTabBackground=Color3.fromRGB(48,44,35)
-blackGoldTheme.LabelBackground=Color3.fromRGB(84,69,32)
-blackGoldTheme.ViewportBackground=Color3.fromRGB(38,36,31)
-blackGoldTheme.ViewportBackgroundTransparency=0.34
-pcall(function() aa:AddTheme(blackGoldTheme) end)
+local theme=copy(aa.Themes and aa.Themes.Dark or{})
+theme.Name="iOS26 Black Gold"
+theme.White=Color3.fromRGB(255,248,225)
+theme.Black=Color3.fromRGB(8,8,8)
+theme.Background=Color3.fromRGB(20,20,20)
+theme.BackgroundTransparency=0.12
+theme.Dialog=Color3.fromRGB(30,28,24)
+theme.Hover=Color3.fromRGB(84,69,32)
+theme.PanelBackground=Color3.fromRGB(42,39,32)
+theme.PanelBackgroundTransparency=0.20
+theme.WindowBackground=Color3.fromRGB(20,20,20)
+theme.WindowShadow=Color3.fromRGB(0,0,0)
+theme.WindowTopbarTitle=Color3.fromRGB(255,248,225)
+theme.WindowTopbarAuthor=Color3.fromRGB(205,190,155)
+theme.WindowTopbarIcon=Gold
+theme.WindowTopbarButtonIcon=GoldLight
+theme.WindowSearchBarBackground=Color3.fromRGB(45,42,34)
+theme.TabBackground=Color3.fromRGB(42,39,32)
+theme.TabBackgroundHover=Color3.fromRGB(72,59,29)
+theme.TabBackgroundActive=Color3.fromRGB(83,65,25)
+theme.TabText=Color3.fromRGB(218,204,170)
+theme.TabTitle=Color3.fromRGB(255,248,225)
+theme.TabIcon=Gold
+theme.TabBorder=Gold
+theme.TabBorderTransparencyActive=0.28
+theme.ElementBackground=Color3.fromRGB(48,44,35)
+theme.ElementBackgroundTransparency=0.20
+theme.ElementBackgroundHover=Color3.fromRGB(84,69,32)
+theme.ElementTitle=Color3.fromRGB(255,248,225)
+theme.ElementDesc=Color3.fromRGB(205,190,155)
+theme.ElementIcon=Gold
+theme.PopupBackground=Color3.fromRGB(30,28,24)
+theme.PopupTitle=Color3.fromRGB(255,248,225)
+theme.PopupContent=Color3.fromRGB(205,190,155)
+theme.Toggle=Gold
+theme.ToggleBar=Color3.fromRGB(104,85,36)
+theme.Checkbox=Gold
+theme.CheckboxIcon=Color3.fromRGB(20,20,20)
+theme.CheckboxBorder=Gold
+theme.Slider=Gold
+theme.SliderThumb=GoldLight
+theme.SliderIcon=Gold
+theme.ProgressBar=Gold
+theme.ProgressBarTrack=Color3.fromRGB(100,84,45)
+theme.ProgressBarTrackTransparency=0.65
+theme.ProgressBarText=Color3.fromRGB(255,248,225)
+theme.Tooltip=Color3.fromRGB(45,38,24)
+theme.TooltipText=Color3.fromRGB(255,248,225)
+theme.TooltipSecondary=Gold
+theme.TooltipSecondaryText=Color3.fromRGB(20,20,20)
+theme.SectionBox=Gold
+theme.SectionBoxTransparency=0.70
+theme.SectionBoxBorder=Gold
+theme.SectionBoxBorderTransparency=0.46
+theme.SectionBoxBackground=Color3.fromRGB(50,43,28)
+theme.SectionBoxBackgroundTransparency=0.52
+theme.Notification=Color3.fromRGB(30,28,24)
+theme.Notification2=Color3.fromRGB(78,61,27)
+theme.Notification2Transparency=0.32
+theme.NotificationTitle=Color3.fromRGB(255,248,225)
+theme.NotificationContent=Color3.fromRGB(205,190,155)
+theme.NotificationDuration=Gold
+theme.NotificationDurationTransparency=0.15
+theme.NotificationBorder=Gold
+theme.NotificationBorderTransparency=0.38
+theme.DropdownBackground=Color3.fromRGB(30,28,24)
+theme.DropdownTabBorder=Gold
+theme.DropdownTabBackground=Color3.fromRGB(48,44,35)
+theme.LabelBackground=Color3.fromRGB(84,69,32)
+theme.ViewportBackground=Color3.fromRGB(42,39,32)
+theme.ViewportBackgroundTransparency=0.34
+pcall(function() aa:AddTheme(theme) end)
 pcall(function() aa:SetTheme("iOS26 Black Gold") end)
-
 local function getOrCreate(parent,className,name)
  if not parent then return nil end
  local object=parent:FindFirstChild(name)
@@ -15771,169 +15768,153 @@ end
 local function tween(object,properties,time,style,direction)
  if not object or not object.Parent then return nil end
  local ok,result=pcall(function()
-  local info=TweenInfo.new(time or iOS26BlackGold.Animation.Normal,style or Enum.EasingStyle.Quint,direction or Enum.EasingDirection.Out)
+  local info=TweenInfo.new(time or 0.2,style or Enum.EasingStyle.Quint,direction or Enum.EasingDirection.Out)
   local t=game:GetService("TweenService"):Create(object,info,properties)
   t:Play()
   return t
  end)
  return ok and result or nil
 end
-local function connect(connection)
+local function track(connection)
  if connection then table.insert(iOS26BlackGold.Connections,connection) end
  return connection
 end
-local function addCorner(object,radius)
- local corner=getOrCreate(object,"UICorner","iOS26BlackGoldCorner")
- if corner then corner.CornerRadius=UDim.new(0,radius or iOS26BlackGold.Material.CornerRadius) end
- return corner
+local function corner(object,radius)
+ local c=getOrCreate(object,"UICorner","iOS26BlackGoldCorner")
+ if c then c.CornerRadius=UDim.new(0,radius or iOS26BlackGold.Material.CornerRadius) end
 end
-local function addGradient(object,rotation)
- local gradient=getOrCreate(object,"UIGradient","iOS26BlackGoldGradient")
- if gradient then
-  gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Gold),ColorSequenceKeypoint.new(0.48,GoldLight),ColorSequenceKeypoint.new(1,Gold)})
-  gradient.Transparency=NumberSequence.new({ColorSequenceKeypoint.new(0,0.38),ColorSequenceKeypoint.new(0.48,0.08),ColorSequenceKeypoint.new(1,0.55)})
-  gradient.Rotation=rotation or 90
+local function stroke(object,thickness,transparency)
+ local s=getOrCreate(object,"UIStroke","iOS26BlackGoldStroke")
+ if s then s.Color=Gold s.Thickness=thickness or 1.2 s.Transparency=transparency or iOS26BlackGold.Material.BorderTransparency end
+ return s
+end
+local function gradient(object,rotation)
+ local g=getOrCreate(object,"UIGradient","iOS26BlackGoldGradient")
+ if g then
+  g.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Gold),ColorSequenceKeypoint.new(0.5,GoldLight),ColorSequenceKeypoint.new(1,Gold)})
+  g.Transparency=NumberSequence.new({ColorSequenceKeypoint.new(0,0.78),ColorSequenceKeypoint.new(0.5,0.90),ColorSequenceKeypoint.new(1,0.78)})
+  g.Rotation=rotation or 90
  end
- return gradient
+ return g
 end
-local function addStroke(object,thickness,transparency)
- local stroke=getOrCreate(object,"UIStroke","iOS26BlackGoldStroke")
- if stroke then
-  stroke.Color=Gold
-  stroke.Thickness=thickness or 1.25
-  stroke.Transparency=transparency or iOS26BlackGold.Material.BorderTransparency
-  stroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
- end
- return stroke
+local function glass(object,kind)
+ if not object or not object:IsA("GuiObject") then return end
+ local isWindow=kind=="Window"
+ object.BackgroundColor3=isWindow and Color3.fromRGB(20,20,20) or Color3.fromRGB(45,41,32)
+ object.BackgroundTransparency=isWindow and iOS26BlackGold.Material.WindowTransparency or iOS26BlackGold.Material.CardTransparency
+ corner(object,isWindow and iOS26BlackGold.Material.WindowCornerRadius or iOS26BlackGold.Material.CornerRadius)
+ stroke(object,isWindow and 1.5 or 1.1,isWindow and 0.30 or 0.50)
+ gradient(object,isWindow and 22 or 90)
+ object:SetAttribute("iOS26BlackGoldSafeGlass",true)
 end
-local function addShadow(object)
- if not object or object:FindFirstChild("iOS26BlackGoldShadow") then return end
- local shadow=Instance.new("ImageLabel")
- shadow.Name="iOS26BlackGoldShadow"
- shadow.BackgroundTransparency=1
- shadow.Image="rbxassetid://1316045217"
- shadow.ImageColor3=Color3.fromRGB(0,0,0)
- shadow.ImageTransparency=0.42
- shadow.ScaleType=Enum.ScaleType.Slice
- shadow.SliceCenter=Rect.new(99,99,99,99)
- shadow.Size=UDim2.new(1,28,1,28)
- shadow.Position=UDim2.new(0.5,0,0.5,4)
- shadow.AnchorPoint=Vector2.new(0.5,0.5)
- shadow.ZIndex=math.max((object.ZIndex or 1)-1,0)
- shadow.Parent=object
-end
-local function applyGlass(object,kind)
- if not object or not object:IsA("GuiObject") then return object end
- if object:GetAttribute("iOS26BlackGoldApplied") then return object end
- object:SetAttribute("iOS26BlackGoldApplied",true)
- object.BackgroundColor3=kind=="Window" and Color3.fromRGB(20,20,20) or Color3.fromRGB(45,41,32)
- object.BackgroundTransparency=kind=="Window" and 0.18 or 0.25
- addCorner(object,kind=="Window" and 24 or 16)
- addStroke(object,kind=="Window" and 1.6 or 1.1,kind=="Window" and 0.28 or 0.48)
- addGradient(object,kind=="Window" and 25 or 90)
- if kind=="Window" then addShadow(object) end
- return object
-end
-local function applyDynamicBlur()
+local function blurWorld()
  local ok,lighting=pcall(game.GetService,game,"Lighting")
  if not ok or not lighting then return nil end
  local blur=lighting:FindFirstChild("iOS26BlackGoldBlur")
- if not blur then
-  blur=Instance.new("BlurEffect")
-  blur.Name="iOS26BlackGoldBlur"
-  blur.Parent=lighting
- end
- blur.Size=iOS26BlackGold.Quality=="Low" and 10 or iOS26BlackGold.Quality=="High" and 24 or 18
+ if not blur then blur=Instance.new("BlurEffect") blur.Name="iOS26BlackGoldBlur" blur.Parent=lighting end
+ blur.Size=iOS26BlackGold.Quality=="Low" and 8 or iOS26BlackGold.Quality=="High" and 20 or 14
  return blur
 end
-local function findRoot(element)
+local function rootOf(element)
  if typeof(element)=="Instance" and element:IsA("GuiObject") then return element end
  if type(element)~="table" then return nil end
  if element.ElementFrame and typeof(element.ElementFrame)=="Instance" and element.ElementFrame:IsA("GuiObject") then return element.ElementFrame end
  if element.UIElements then
   for _,key in ipairs({"Main","Frame","Container","SliderFrame","ToggleFrame","DropdownFrame"}) do
-   local object=element.UIElements[key]
-   if typeof(object)=="Instance" and object:IsA("GuiObject") then return object end
+   local value=element.UIElements[key]
+   if typeof(value)=="Instance" and value:IsA("GuiObject") then return value end
   end
  end
  return nil
 end
 local function ripple(surface,position)
  if not surface or not surface:IsA("GuiObject") then return end
- local p=position or Vector3.new(surface.AbsolutePosition.X+surface.AbsoluteSize.X/2,surface.AbsolutePosition.Y+surface.AbsoluteSize.Y/2,0)
- local localX=p.X-surface.AbsolutePosition.X
- local localY=p.Y-surface.AbsolutePosition.Y
- local radius=math.max(surface.AbsoluteSize.X,surface.AbsoluteSize.Y)*1.35
- local ring=Instance.new("Frame")
- ring.Name="iOS26BlackGoldRipple"
- ring.AnchorPoint=Vector2.new(0.5,0.5)
- ring.Position=UDim2.fromOffset(localX,localY)
- ring.Size=UDim2.fromOffset(4,4)
- ring.BackgroundColor3=GoldLight
- ring.BackgroundTransparency=0.38
- ring.ZIndex=(surface.ZIndex or 1)+20
- ring.ClipsDescendants=true
- ring.Parent=surface
- addCorner(ring,999)
- tween(ring,{Size=UDim2.fromOffset(radius,radius),BackgroundTransparency=1},0.42,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
- task.delay(0.46,function() if ring and ring.Parent then ring:Destroy() end end)
+ local x=(position and position.X or surface.AbsolutePosition.X+surface.AbsoluteSize.X/2)-surface.AbsolutePosition.X
+ local y=(position and position.Y or surface.AbsolutePosition.Y+surface.AbsoluteSize.Y/2)-surface.AbsolutePosition.Y
+ local circle=Instance.new("Frame")
+ circle.Name="iOS26BlackGoldRipple"
+ circle.AnchorPoint=Vector2.new(0.5,0.5)
+ circle.Position=UDim2.fromOffset(x,y)
+ circle.Size=UDim2.fromOffset(4,4)
+ circle.BackgroundColor3=GoldLight
+ circle.BackgroundTransparency=0.38
+ circle.ZIndex=(surface.ZIndex or 1)+20
+ circle.Parent=surface
+ corner(circle,999)
+ local radius=math.max(surface.AbsoluteSize.X,surface.AbsoluteSize.Y)*1.25
+ tween(circle,{Size=UDim2.fromOffset(radius,radius),BackgroundTransparency=1},0.42)
+ task.delay(0.46,function() if circle.Parent then circle:Destroy() end end)
 end
-local function pressFeedback(button)
- if not button or not button:IsA("GuiButton") or button:GetAttribute("iOS26BlackGoldButton") then return end
+local function buttonFeedback(button)
+ if not button or not button:IsA("GuiButton") then return end
+ if button:GetAttribute("iOS26BlackGoldButton") then return end
+ if string.find(string.lower(button.Name),"close") or string.find(string.lower(button.Name),"minimize") or string.find(string.lower(button.Name),"maximize") then return end
  button:SetAttribute("iOS26BlackGoldButton",true)
- applyGlass(button,"Button")
- local scale=getOrCreate(button,"UIScale","iOS26BlackGoldPressScale")
- connect(button.MouseEnter:Connect(function() tween(button,{BackgroundTransparency=0.08},0.16) end))
- connect(button.MouseLeave:Connect(function() tween(button,{BackgroundTransparency=0.25},0.18) end))
- connect(button.InputBegan:Connect(function(input)
+ glass(button,"Button")
+ local scale=getOrCreate(button,"UIScale","iOS26BlackGoldButtonScale")
+ track(button.InputBegan:Connect(function(input)
   if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
-   tween(scale,{Scale=0.94},0.08,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
-   local stroke=button:FindFirstChild("iOS26BlackGoldStroke")
-   if stroke then tween(stroke,{Transparency=0.08,Thickness=2},0.10) end
+   tween(scale,{Scale=0.95},0.08,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
+   local s=button:FindFirstChild("iOS26BlackGoldStroke") if s then tween(s,{Transparency=0.08,Thickness=1.8},0.1) end
    ripple(button,input.Position)
   end
  end))
- connect(button.InputEnded:Connect(function(input)
+ track(button.InputEnded:Connect(function(input)
   if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
    tween(scale,{Scale=1},0.20,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
-   local stroke=button:FindFirstChild("iOS26BlackGoldStroke")
-   if stroke then tween(stroke,{Transparency=0.48,Thickness=1.1},0.20) end
+   local s=button:FindFirstChild("iOS26BlackGoldStroke") if s then tween(s,{Transparency=0.50,Thickness=1.1},0.18) end
   end
  end))
 end
-local function decorateTree(root,kind)
- if not root or not root:IsA("GuiObject") then return end
- applyGlass(root,kind)
- for _,child in ipairs(root:GetDescendants()) do
-  if child:IsA("GuiButton") then pressFeedback(child) end
- end
-end
 local function decorateElement(element,kind)
- local root=findRoot(element)
- if root then decorateTree(root,kind) end
+ local root=rootOf(element)
+ if not root then return element end
+ glass(root,kind)
+ for _,child in ipairs(root:GetDescendants()) do if child:IsA("GuiButton") then buttonFeedback(child) end end
  return element
 end
 local function decorateTab(tab)
- if not tab or tab.__iOS26BlackGoldTab then return tab end
- tab.__iOS26BlackGoldTab=true
+ if not tab or tab.__iOS26BlackGoldSafeTab then return tab end
+ tab.__iOS26BlackGoldSafeTab=true
  for _,name in ipairs({"Button","Toggle","Slider","Dropdown","Input","Paragraph","ProgressBar","Keybind","Colorpicker","Code","Image","Group","HStack","VStack","Viewport","Section","AddButton","AddToggle","AddSlider","AddDropdown","AddInput","AddSection"}) do
   local original=tab[name]
   if type(original)=="function" then
    tab[name]=function(self,...)
     local result=original(self,...)
-    decorateElement(result,name)
-    return result
+    return decorateElement(result,name)
    end
   end
  end
  return tab
 end
 local function decorateWindow(window)
- if not window or window.__iOS26BlackGoldWindow then return window end
- window.__iOS26BlackGoldWindow=true
- applyDynamicBlur()
+ if not window or window.__iOS26BlackGoldSafeWindow then return window end
+ window.__iOS26BlackGoldSafeWindow=true
+ blurWorld()
  local main=window.UIElements and window.UIElements.Main
- if main then decorateTree(main,"Window") end
+ if main then
+  glass(main,"Window")
+  local camera=workspace.CurrentCamera
+  if camera then
+   local scale=getOrCreate(main,"UIScale","iOS26BlackGoldResponsiveScale")
+   local function update() scale.Scale=math.clamp(camera.ViewportSize.X/820,0.80,1.16) end
+   update()
+   track(camera:GetPropertyChangedSignal("ViewportSize"):Connect(update))
+  end
+  local openScale=getOrCreate(main,"UIScale","iOS26BlackGoldOpenScale")
+  openScale.Scale=0.94
+  tween(openScale,{Scale=1},0.34,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
+  local reflection=gradient(main,22)
+  local runService=game:GetService("RunService")
+  local last=0
+  track(runService.RenderStepped:Connect(function()
+   if not main.Parent then return end
+   local now=os.clock()
+   if now-last<1/math.max(iOS26BlackGold.MaxEffectFPS,12) then return end
+   last=now
+   reflection.Offset=Vector2.new(-0.25+((now%5)/5)*0.5,0)
+  end))
+ end
  local originalTab=window.Tab
  if type(originalTab)=="function" then
   window.Tab=function(self,...)
@@ -15941,58 +15922,16 @@ local function decorateWindow(window)
    return decorateTab(tab)
   end
  end
- local camera=workspace.CurrentCamera
- if camera and main then
-  local scale=getOrCreate(main,"UIScale","iOS26BlackGoldResponsiveScale")
-  local function updateScale()
-   local width=camera.ViewportSize.X
-   scale.Scale=math.clamp(width/820,0.78,1.18)
-  end
-  updateScale()
-  connect(camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale))
- end
- if main then
-  local scale=getOrCreate(main,"UIScale","iOS26BlackGoldOpenScale")
-  scale.Scale=0.86
-  main.BackgroundTransparency=1
-  tween(scale,{Scale=1},0.52,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
-  tween(main,{BackgroundTransparency=0.18},0.34,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
-  local reflection=getOrCreate(main,"UIGradient","iOS26BlackGoldReflection")
-  reflection.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,GoldLight),ColorSequenceKeypoint.new(0.5,Color3.fromRGB(255,255,255)),ColorSequenceKeypoint.new(1,Gold)})
-  reflection.Transparency=NumberSequence.new({ColorSequenceKeypoint.new(0,0.72),ColorSequenceKeypoint.new(0.5,0.92),ColorSequenceKeypoint.new(1,0.76)})
-  reflection.Rotation=22
-  local runService=game:GetService("RunService")
-  local last=0
-  connect(runService.RenderStepped:Connect(function()
-   if not main.Parent then return end
-   local now=os.clock()
-   if now-last<1/math.max(iOS26BlackGold.MaxEffectFPS,15) then return end
-   last=now
-   reflection.Offset=Vector2.new(-0.35+((now%4)/4)*0.7,0)
-  end))
- end
- if window.Destroy then
-  local oldDestroy=window.Destroy
-  window.Destroy=function(self,...)
-   for _,connection in ipairs(iOS26BlackGold.Connections) do pcall(function() connection:Disconnect() end) end
-   iOS26BlackGold.Connections={}
-   return oldDestroy(self,...)
-  end
- end
  return window
 end
 function iOS26BlackGold.SetQuality(level)
  local value=tostring(level or "Balanced")
- if value=="Low" then iOS26BlackGold.Quality="Low" iOS26BlackGold.MaxEffectFPS=15 elseif value=="High" then iOS26BlackGold.Quality="High" iOS26BlackGold.MaxEffectFPS=45 else iOS26BlackGold.Quality="Balanced" iOS26BlackGold.MaxEffectFPS=30 end
- applyDynamicBlur()
+ if value=="Low" then iOS26BlackGold.Quality="Low" iOS26BlackGold.MaxEffectFPS=12 elseif value=="High" then iOS26BlackGold.Quality="High" iOS26BlackGold.MaxEffectFPS=36 else iOS26BlackGold.Quality="Balanced" iOS26BlackGold.MaxEffectFPS=24 end
+ blurWorld()
  return iOS26BlackGold.Quality
 end
-function iOS26BlackGold.Apply(instance,options)
- return applyGlass(instance,(options and options.Kind) or "Card")
-end
-function iOS26BlackGold.Ripple(instance,position) return ripple(instance,position) end
-function iOS26BlackGold.Press(instance) return pressFeedback(instance) end
-iOS26BlackGold.Theme=blackGoldTheme
+function iOS26BlackGold.Apply(instance,options) glass(instance,(options and options.Kind) or "Card") return instance end
+function iOS26BlackGold.Ripple(instance,position) ripple(instance,position) end
 function aa.SetBlackGoldTheme(self) return aa:SetTheme("iOS26 Black Gold") end
 function aa.SetBlackGoldQuality(self,level) return iOS26BlackGold.SetQuality(level) end
 function aa.ApplyBlackGold(self,instance,options) return iOS26BlackGold.Apply(instance,options) end
@@ -16007,20 +15946,19 @@ function aa.LoadBlackGoldConfig(self,name)
  local file=name or "WindUI_BlackGold.json"
  if type(isfile)=="function" and type(readfile)=="function" and isfile(file) then
   local ok,data=pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(file)) end)
-  if ok and type(data)=="table" then
-   if data.Quality then iOS26BlackGold.SetQuality(data.Quality) end
-   return data
-  end
+  if ok and type(data)=="table" then if data.Quality then iOS26BlackGold.SetQuality(data.Quality) end return data end
  end
  return nil
 end
+-- Keep the original public call exactly: WindUI:CreateWindow(config).
+-- Only copy the configuration internally so caller-owned tables are untouched.
 local originalCreateWindow=aa.CreateWindow
 aa.CreateWindow=function(self,config)
- config=config or{}
- if config.Theme==nil or config.Theme=="Dark" then config.Theme="iOS26 Black Gold" end
- if config.Acrylic==nil then config.Acrylic=true end
- if config.NewElements==nil then config.NewElements=true end
- local window=originalCreateWindow(self,config)
+ local internal=copy(config or{})
+ if internal.Theme==nil then internal.Theme="iOS26 Black Gold" end
+ if internal.Acrylic==nil then internal.Acrylic=true end
+ if internal.NewElements==nil then internal.NewElements=true end
+ local window=originalCreateWindow(self,internal)
  return decorateWindow(window)
 end
 aa.iOS26BlackGold=iOS26BlackGold
