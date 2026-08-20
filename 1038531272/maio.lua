@@ -15670,14 +15670,14 @@ Success=Color3.fromRGB(52,199,89),
 Danger=Color3.fromRGB(255,59,48),
 },
 Material={
-Transparency=0.72,
-PanelTransparency=0.78,
-DropdownTransparency=0.62,
-BorderTransparency=0.65,
-HighlightTransparency=0.35,
-ShadowTransparency=0.82,
+Transparency=0.86,
+PanelTransparency=0.90,
+DropdownTransparency=0.78,
+BorderTransparency=0.78,
+HighlightTransparency=0.56,
+ShadowTransparency=0.86,
 CornerRadius=18,
-WindowCornerRadius=24,
+WindowCornerRadius=28,
 },
 Animation={
 Fast=0.12,
@@ -15725,9 +15725,9 @@ local function iOS26Gradient(instance,alpha)
 local gradient=iOS26GetOrCreate(instance,"UIGradient","iOS26Highlight")
 local startAlpha=math.clamp(alpha or(iOS26.Material.HighlightTransparency+0.25),0,1)
 gradient.Color=ColorSequence.new({
-ColorSequenceKeypoint.new(0,iOS26.Theme.Glass),
-ColorSequenceKeypoint.new(0.5,Color3.fromRGB(255,255,255)),
-ColorSequenceKeypoint.new(1,iOS26.Theme.Accent),
+ColorSequenceKeypoint.new(0,Color3.fromRGB(255,255,255)),
+ColorSequenceKeypoint.new(0.48,Color3.fromRGB(255,255,255)),
+ColorSequenceKeypoint.new(1,Color3.fromRGB(215,225,255)),
 })
 gradient.Transparency=NumberSequence.new({
 NumberSequenceKeypoint.new(0,startAlpha),
@@ -15735,6 +15735,7 @@ NumberSequenceKeypoint.new(0.48,iOS26.Material.HighlightTransparency),
 NumberSequenceKeypoint.new(1,math.clamp(startAlpha+0.12,0,1)),
 })
 gradient.Rotation=90
+gradient.Offset=Vector2.new(-0.12,0)
 return gradient
 end
 
@@ -15808,15 +15809,15 @@ end
 iOS26.ApplyWindow=function(instance,options)
 options=options or{}
 options.CornerRadius=options.CornerRadius or iOS26.Material.WindowCornerRadius
-options.Transparency=options.Transparency or 0.68
-options.ShadowTransparency=options.ShadowTransparency or 0.72
+options.Transparency=options.Transparency or 0.78
+options.ShadowTransparency=options.ShadowTransparency or 0.76
 return iOS26.Apply(instance,options)
 end
 
 iOS26.ApplyCard=function(instance,options)
 options=options or{}
 options.CornerRadius=options.CornerRadius or 16
-options.Transparency=options.Transparency or iOS26.Material.PanelTransparency
+options.Transparency=options.Transparency or 0.90
 options.Shadow=options.Shadow==true
 return iOS26.Apply(instance,options)
 end
@@ -15835,7 +15836,7 @@ return
 end
 local highlight=object:FindFirstChild("iOS26Highlight")
 if highlight then
-iOS26Tween(highlight,{Rotation=active and 110 or 90},iOS26.Animation.Fast)
+iOS26Tween(highlight,{Rotation=active and 112 or 90,Offset=active and Vector2.new(0.12,0) or Vector2.new(-0.12,0)},iOS26.Animation.Fast)
 end
 local border=object:FindFirstChild("iOS26Border")
 if border then
@@ -15849,7 +15850,7 @@ return button
 end
 button:SetAttribute("iOS26ButtonBound",true)
 local visual=button:FindFirstChild("Frame") or button:FindFirstChild("Squircle") or button
-iOS26.ApplyCard(visual,{CornerRadius=14,Transparency=0.68})
+iOS26.ApplyCard(visual,{CornerRadius=16,Transparency=0.84,Shadow=false,BorderTransparency=0.72})
 if button:IsA("GuiButton") then
 button.MouseEnter:Connect(function()
 iOS26.Hover(button,true)
@@ -15857,24 +15858,82 @@ end)
 button.MouseLeave:Connect(function()
 iOS26.Hover(button,false)
 end)
-button.MouseButton1Down:Connect(function()
+button.InputBegan:Connect(function(input)
+if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
 iOS26.Press(button)
+end
 end)
 end
 return button
 end
 
-function iOS26.AttachToggle(root)
-if root then
-iOS26.ApplyCard(root,{CornerRadius=16,Transparency=0.72})
+function iOS26.AttachToggle(root,state)
+if not root then
+return root
 end
+iOS26.ApplyCard(root,{CornerRadius=16,Transparency=0.97,Shadow=false,HighlightTransparency=0.86})
+local toggleFrame=root:FindFirstChild("ToggleFrame",true)
+if not toggleFrame then
+return root
+end
+local thumb=toggleFrame:FindFirstChild("Frame")
+local bar=thumb and thumb:FindFirstChild("Bar")
+local highlight=bar and bar:FindFirstChild("Highlight")
+if thumb then
+iOS26.Apply(thumb,{Color=Color3.fromRGB(255,255,255),Transparency=0.12,CornerRadius=999,Shadow=true,BorderTransparency=0.5})
+end
+if bar then
+local gradient=iOS26GetOrCreate(bar,"UIGradient","iOS26ToggleGradient")
+gradient.Color=ColorSequence.new(Color3.fromRGB(255,255,255),Color3.fromRGB(224,230,242))
+gradient.Transparency=NumberSequence.new(0.82)
+end
+local function refreshToggle(value)
+if bar and bar:IsA("ImageLabel") then
+iOS26Tween(bar,{ImageColor3=value and iOS26.Theme.Accent or Color3.fromRGB(92,96,108)},0.22,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+end
+if highlight then
+iOS26Tween(highlight,{ImageTransparency=value and 0 or 0.28},0.18)
+end
+if thumb then
+iOS26Tween(thumb:FindFirstChild("LiquidScale") or thumb,{ImageTransparency=value and 0 or 0},0.18)
+end
+end
+refreshToggle(state==true)
 return root
 end
 
 function iOS26.AttachSlider(root)
-if root then
-iOS26.ApplyCard(root,{CornerRadius=16,Transparency=0.76})
+if not root then
+return root
 end
+iOS26.ApplyCard(root,{CornerRadius=16,Transparency=0.97,Shadow=false,HighlightTransparency=0.88})
+local thumb
+for _,child in ipairs(root:GetDescendants()) do
+if child.Name=="Thumb" then
+thumb=child
+break
+end
+end
+if not thumb then
+return root
+end
+local fill=thumb.Parent
+local track=fill and fill.Parent
+if track and track:IsA("ImageLabel") then
+track.ImageTransparency=0.68
+local border=iOS26GetOrCreate(track,"UIStroke","iOS26SliderBorder")
+border.Color=Color3.fromRGB(255,255,255)
+border.Transparency=0.82
+border.Thickness=1
+end
+if fill and fill:IsA("ImageLabel") then
+fill.ImageColor3=iOS26.Theme.Accent
+fill.ImageTransparency=0.04
+iOS26Gradient(fill,0.22)
+end
+iOS26.Apply(thumb,{Color=Color3.fromRGB(255,255,255),Transparency=0.02,CornerRadius=999,Shadow=true,BorderTransparency=0.42})
+local scale=iOS26GetOrCreate(thumb,"UIScale","iOS26ThumbScale")
+scale.Scale=1.05
 return root
 end
 
@@ -15898,8 +15957,8 @@ if child:IsA("TextButton") or child:IsA("ImageButton") then
 if child.Name~="Hitbox" and child.Name~="Frame" then
 iOS26.AttachButton(child)
 end
-elseif child:IsA("Frame") and(child.Name=="Card" or child.Name=="Background" or child.Name=="Content")then
-iOS26.ApplyCard(child)
+elseif child:IsA("Frame") and((kind=="Window" and child.Name=="Background") or(kind=="Dropdown" and child.Name=="Frame"))then
+iOS26.ApplyCard(child,{Transparency=kind=="Dropdown" and 0.82 or 0.94,Shadow=false})
 end
 end
 return root
@@ -15946,6 +16005,11 @@ local function iOS26DecorateElement(element,kind)
 local root=iOS26FindRoot(element)
 if root then
 iOS26DecorateTree(root,kind)
+if kind=="Toggle" then
+ iOS26.AttachToggle(root,element and element.Value)
+elseif kind=="Slider" then
+ iOS26.AttachSlider(root)
+end
 end
 if element and type(element)=="table" then
 if kind=="Section" then
@@ -16212,6 +16276,35 @@ Title="Danger Button",
 Content="Danger button clicked.",
 Duration=2,
 })
+end,
+})
+
+tab:Section({
+Title="Toggles",
+Icon="toggle-right",
+})
+
+tab:Toggle({
+Title="Auto Mode",
+Desc="iOS-style switch with a soft state transition.",
+Icon="sparkles",
+Value=false,
+Callback=function(value)
+if options.OnAutoModeChanged then
+options.OnAutoModeChanged(value)
+end
+end,
+})
+
+tab:Toggle({
+Title="Notifications",
+Desc="Keep lightweight feedback enabled.",
+Icon="bell",
+Value=true,
+Callback=function(value)
+if options.OnNotificationsChanged then
+options.OnNotificationsChanged(value)
+end
 end,
 })
 
