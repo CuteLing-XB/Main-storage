@@ -251,7 +251,17 @@ return d end function a.b()
 
 local b=(cloneref or clonereference or function(b)return b end)
 
-local d=b(game:GetService"ReplicatedStorage":WaitForChild("GetIcons",99999):InvokeServer())
+local d
+local iconsRemote=game:GetService("ReplicatedStorage"):FindFirstChild("GetIcons")
+if iconsRemote and iconsRemote:IsA("RemoteFunction") then
+local ok,result=pcall(function()
+return iconsRemote:InvokeServer()
+end)
+if ok and type(result)=="table" then
+d=result
+end
+end
+d=d or{Icons={},IconsType="lucide"}
 
 local function parseIconString(e)
 if type(e)=="string"then
@@ -352,7 +362,7 @@ p[m],
 {ImageRectSize=Vector2.new(0,0),ImageRectPosition=Vector2.new(0,0)}
 }or p[m]
 end
-return nil
+return{"rbxassetid://6031094678",{ImageRectSize=Vector2.new(0,0),ImageRectPosition=Vector2.new(0,0)}}
 end
 
 function d.GetIcon(f,g)
@@ -16132,6 +16142,128 @@ if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==
 end)
 set(value,false)
 return{Instance=container,Get=function()return value end,Set=function(nextValue)set(nextValue)end}
+end
+
+-- Optional iOS26 component showcase.
+-- The library remains unchanged unless the caller invokes WindUI:CreateiOS26Demo().
+function aa.CreateiOS26Demo(self,options)
+options=options or{}
+local window=self:CreateWindow({
+Title=options.Title or "iOS26 Liquid Glass",
+Author=options.Author or "Component Showcase",
+Size=options.Size or UDim2.new(0,620,0,500),
+Acrylic=options.Acrylic~=false,
+NewElements=true,
+Theme="iOS26",
+})
+local tab=window:Tab({
+Title=options.TabTitle or "Components",
+Icon="sparkles",
+ShowTabTitle=true,
+})
+
+tab:Paragraph({
+Title="Liquid Glass Controls",
+Desc="Buttons and sliders using the embedded iOS26 material and motion system.",
+Icon="wand-sparkles",
+})
+
+tab:Section({
+Title="Buttons",
+Icon="mouse-pointer-click",
+})
+
+tab:Button({
+Title="Primary Button",
+Desc="Blue iOS-style action with press feedback.",
+Icon="check",
+Variant="Primary",
+Callback=function()
+self:Notify({
+Title="Primary Button",
+Content="Primary button clicked.",
+Duration=2,
+})
+end,
+})
+
+tab:Button({
+Title="Secondary Button",
+Desc="Neutral glass action button.",
+Icon="layers-2",
+Variant="Secondary",
+Callback=function()
+self:Notify({
+Title="Secondary Button",
+Content="Secondary button clicked.",
+Duration=2,
+})
+end,
+})
+
+tab:Button({
+Title="Danger Button",
+Desc="Destructive-style action for testing variant contrast.",
+Icon="trash-2",
+Variant="Destructive",
+Callback=function()
+self:Notify({
+Title="Danger Button",
+Content="Danger button clicked.",
+Duration=2,
+})
+end,
+})
+
+tab:Section({
+Title="Sliders",
+Icon="sliders-horizontal",
+})
+
+tab:Slider({
+Title="Opacity",
+Desc="Continuous value from 0 to 100.",
+Icon="sun-medium",
+Value={Min=0,Max=100,Default=72},
+Step=1,
+IsTextbox=true,
+Callback=function(value)
+if options.OnOpacityChanged then
+options.OnOpacityChanged(value)
+end
+end,
+})
+
+tab:Slider({
+Title="Temperature",
+Desc="Decimal slider with two-step increments.",
+Icon="thermometer",
+Value={Min=-10,Max=40,Default=22},
+Step=0.5,
+IsTextbox=true,
+Callback=function(value)
+if options.OnTemperatureChanged then
+options.OnTemperatureChanged(value)
+end
+end,
+})
+
+tab:Slider({
+Title="Intensity",
+Desc="Slider with endpoint icons and tooltip feedback.",
+Icons={From="volume-1",To="volume-2"},
+Value={Min=0,Max=1,Default=0.65},
+Step=0.01,
+IsTooltip=true,
+IsTextbox=true,
+Callback=function(value)
+if options.OnIntensityChanged then
+options.OnIntensityChanged(value)
+end
+end,
+})
+
+return window
 end
 
 local iOS26CreateWindow=aa.CreateWindow
