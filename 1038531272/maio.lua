@@ -251,7 +251,17 @@ return d end function a.b()
 
 local b=(cloneref or clonereference or function(b)return b end)
 
-local d=b(game:GetService"ReplicatedStorage":WaitForChild("GetIcons",99999):InvokeServer())
+local d
+local iconsRemote=game:GetService("ReplicatedStorage"):FindFirstChild("GetIcons")
+if iconsRemote and iconsRemote:IsA("RemoteFunction") then
+local ok,result=pcall(function()
+return iconsRemote:InvokeServer()
+end)
+if ok and type(result)=="table" then
+d=result
+end
+end
+d=d or{Icons={},IconsType="lucide"}
 
 local function parseIconString(e)
 if type(e)=="string"then
@@ -352,7 +362,7 @@ p[m],
 {ImageRectSize=Vector2.new(0,0),ImageRectPosition=Vector2.new(0,0)}
 }or p[m]
 end
-return nil
+return{"rbxassetid://6031094678",{ImageRectSize=Vector2.new(0,0),ImageRectPosition=Vector2.new(0,0)}}
 end
 
 function d.GetIcon(f,g)
@@ -6575,11 +6585,6 @@ Parent=ai,
 
 -- 液态玻璃适配注入点 (Toggle)
 local hasGlassModule, glassModule = pcall(require, script and script.Parent and script.Parent:FindFirstChild("LiquidGlass") or nil)
--- 如果无法 require，则降级为原来的创建方式，这里假设直接调用或者使用已加载的玻璃模块，
--- 由于要求只给这个 UI 适配滑块和开关，并保留原有逻辑。这里保留原本框架，
--- 或者将玻璃模块直接整合。考虑到是在 main.lua 中直接修改，最好是在这里加载 LiquidGlass。
--- 但用户提供了 液态玻璃ui模块.zip，说明可能希望整合在一起。
--- 我们先保留原有的 DOM 结构，只是把冲突的玻璃视觉效果删掉了。
 
 local aq=ab.NewRoundFrame(an,"Squircle",{
 ImageTransparency=0.85,
@@ -12258,6 +12263,7 @@ HeaderSize=42,
 IconSize=18,
 
 Expandable=false,
+UIElements={},
 }
 
 local as
@@ -12336,7 +12342,7 @@ Padding=UDim.new(0,10)
 at,
 ai("UIPadding",{
 PaddingLeft=UDim.new(0,11),
-PaddingRight=UDim.new(0,11),
+PaddingRight=UDim.new(0,11)
 })
 }),
 ai("Frame",{
@@ -12352,9 +12358,11 @@ FillDirection="Vertical",
 Padding=UDim.new(0,aq.Gap),
 VerticalAlignment="Bottom",
 }),
-})
+    })
 })
 
+ar.UIElements.Main=au
+ar.UIElements.Content=au.Content
 
 function ar.Tab(av,aw)
 if not ar.Expandable then
@@ -15628,4 +15636,626 @@ end
 return h
 end
 
+
+-- iOS26 Liquid Glass is embedded here so main.lua is self-contained.
+local iOS26 = {
+Theme={
+Background=Color3.fromRGB(18,18,20),
+Glass=Color3.fromRGB(255,255,255),
+Text=Color3.fromRGB(245,245,247),
+SecondaryText=Color3.fromRGB(160,160,165),
+Placeholder=Color3.fromRGB(142,142,147),
+Accent=Color3.fromRGB(0,122,255),
+Success=Color3.fromRGB(52,199,89),
+Danger=Color3.fromRGB(255,59,48),
+},
+Material={
+Transparency=0.72,
+PanelTransparency=0.78,
+DropdownTransparency=0.62,
+BorderTransparency=0.65,
+HighlightTransparency=0.35,
+ShadowTransparency=0.82,
+CornerRadius=18,
+WindowCornerRadius=24,
+},
+Animation={
+Fast=0.12,
+Normal=0.25,
+Slow=0.45,
+Press=0.08,
+Release=0.18,
+Style=Enum.EasingStyle.Quint,
+Direction=Enum.EasingDirection.Out,
+},
+}
+
+local function iOS26GetOrCreate(parent,className,name)
+local object=parent:FindFirstChild(name)
+if object and object.ClassName==className then
+return object
+end
+if object then
+object:Destroy()
+end
+object=Instance.new(className)
+object.Name=name
+object.Parent=parent
+return object
+end
+
+local function iOS26Tween(object,properties,time,style,direction)
+if not object or object.Parent==nil then
+return nil
+end
+local tween=game:GetService("TweenService"):Create(
+object,
+TweenInfo.new(
+time or iOS26.Animation.Normal,
+style or iOS26.Animation.Style,
+direction or iOS26.Animation.Direction
+),
+properties
+)
+tween:Play()
+return tween
+end
+
+local function iOS26Gradient(instance,alpha)
+local gradient=iOS26GetOrCreate(instance,"UIGradient","iOS26Highlight")
+local startAlpha=math.clamp(alpha or(iOS26.Material.HighlightTransparency+0.25),0,1)
+gradient.Color=ColorSequence.new({
+ColorSequenceKeypoint.new(0,iOS26.Theme.Glass),
+ColorSequenceKeypoint.new(0.5,Color3.fromRGB(255,255,255)),
+ColorSequenceKeypoint.new(1,iOS26.Theme.Accent),
+})
+gradient.Transparency=NumberSequence.new({
+NumberSequenceKeypoint.new(0,startAlpha),
+NumberSequenceKeypoint.new(0.48,iOS26.Material.HighlightTransparency),
+NumberSequenceKeypoint.new(1,math.clamp(startAlpha+0.12,0,1)),
+})
+gradient.Rotation=90
+return gradient
+end
+
+local function iOS26Shadow(instance,transparency)
+local shadow=instance:FindFirstChild("iOS26Shadow")
+if not shadow then
+shadow=Instance.new("ImageLabel")
+shadow.Name="iOS26Shadow"
+shadow.BackgroundTransparency=1
+shadow.Image="rbxassetid://8992230677"
+shadow.ScaleType="Slice"
+shadow.SliceCenter=Rect.new(99,99,99,99)
+shadow.Parent=instance
+end
+shadow.Size=UDim2.new(1,24,1,24)
+shadow.Position=UDim2.new(0.5,0,0.5,3)
+shadow.AnchorPoint=Vector2.new(0.5,0.5)
+shadow.ZIndex=math.max((instance.ZIndex or 0)-1,0)
+shadow.ImageTransparency=transparency or iOS26.Material.ShadowTransparency
+shadow.Visible=true
+return shadow
+end
+
+function iOS26.Apply(instance,options)
+if not instance then
+return nil
+end
+options=options or{}
+instance:SetAttribute("iOS26Glass",true)
+instance.BackgroundColor3=options.Color or iOS26.Theme.Glass
+instance.BackgroundTransparency=options.Transparency or iOS26.Material.Transparency
+local corner=iOS26GetOrCreate(instance,"UICorner","iOS26Corner")
+corner.CornerRadius=UDim.new(0,options.CornerRadius or iOS26.Material.CornerRadius)
+local stroke=iOS26GetOrCreate(instance,"UIStroke","iOS26Border")
+stroke.Color=options.BorderColor or Color3.fromRGB(255,255,255)
+stroke.Transparency=options.BorderTransparency or iOS26.Material.BorderTransparency
+stroke.Thickness=options.BorderThickness or 1
+stroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
+iOS26Gradient(instance,options.HighlightTransparency)
+if options.Shadow~=false then
+iOS26Shadow(instance,options.ShadowTransparency)
+end
+return instance
+end
+
+iOS26.Create=iOS26.Apply
+
+iOS26.Tween=function(object,property,value,time,style,direction)
+return iOS26Tween(object,{[property]=value},time,style,direction)
+end
+
+iOS26.Press=function(object)
+if not object then
+return
+end
+local scale=object:FindFirstChild("LiquidScale")
+if not scale then
+scale=Instance.new("UIScale")
+scale.Name="LiquidScale"
+scale.Scale=1
+scale.Parent=object
+end
+iOS26Tween(scale,{Scale=0.96},iOS26.Animation.Press)
+task.delay(iOS26.Animation.Press,function()
+if scale and scale.Parent then
+iOS26Tween(scale,{Scale=1},iOS26.Animation.Release)
+end
+end)
+end
+
+iOS26.ApplyWindow=function(instance,options)
+options=options or{}
+options.CornerRadius=options.CornerRadius or iOS26.Material.WindowCornerRadius
+options.Transparency=options.Transparency or 0.68
+options.ShadowTransparency=options.ShadowTransparency or 0.72
+return iOS26.Apply(instance,options)
+end
+
+iOS26.ApplyCard=function(instance,options)
+options=options or{}
+options.CornerRadius=options.CornerRadius or 16
+options.Transparency=options.Transparency or iOS26.Material.PanelTransparency
+options.Shadow=options.Shadow==true
+return iOS26.Apply(instance,options)
+end
+
+iOS26.ApplyDropdown=function(instance,options)
+options=options or{}
+options.CornerRadius=options.CornerRadius or 18
+options.Transparency=options.Transparency or iOS26.Material.DropdownTransparency
+options.ShadowTransparency=options.ShadowTransparency or 0.68
+return iOS26.Apply(instance,options)
+end
+
+function iOS26.Hover(object,active)
+if not object then
+return
+end
+local highlight=object:FindFirstChild("iOS26Highlight")
+if highlight then
+iOS26Tween(highlight,{Rotation=active and 110 or 90},iOS26.Animation.Fast)
+end
+local border=object:FindFirstChild("iOS26Border")
+if border then
+iOS26Tween(border,{Transparency=active and 0.18 or iOS26.Material.BorderTransparency},iOS26.Animation.Fast)
+end
+end
+
+function iOS26.AttachButton(button)
+if not button or button:GetAttribute("iOS26ButtonBound") then
+return button
+end
+button:SetAttribute("iOS26ButtonBound",true)
+local visual=button:FindFirstChild("Frame") or button:FindFirstChild("Squircle") or button
+iOS26.ApplyCard(visual,{CornerRadius=14,Transparency=0.68})
+if button:IsA("GuiButton") then
+button.MouseEnter:Connect(function()
+iOS26.Hover(button,true)
+end)
+button.MouseLeave:Connect(function()
+iOS26.Hover(button,false)
+end)
+button.MouseButton1Down:Connect(function()
+iOS26.Press(button)
+end)
+end
+return button
+end
+
+function iOS26.AttachToggle(root)
+if root then
+iOS26.ApplyCard(root,{CornerRadius=16,Transparency=0.72})
+end
+return root
+end
+
+function iOS26.AttachSlider(root)
+if root then
+iOS26.ApplyCard(root,{CornerRadius=16,Transparency=0.76})
+end
+return root
+end
+
+local function iOS26DecorateTree(root,kind)
+if not root or root:GetAttribute("iOS26Decorated") then
+return root
+end
+root:SetAttribute("iOS26Decorated",true)
+if kind=="Window" then
+iOS26.ApplyWindow(root,{Shadow=true})
+elseif kind=="Dropdown" then
+iOS26.ApplyDropdown(root)
+else
+iOS26.ApplyCard(root)
+end
+if root:IsA("TextButton") or root:IsA("ImageButton") then
+iOS26.AttachButton(root)
+end
+for _,child in ipairs(root:GetDescendants()) do
+if child:IsA("TextButton") or child:IsA("ImageButton") then
+if child.Name~="Hitbox" and child.Name~="Frame" then
+iOS26.AttachButton(child)
+end
+elseif child:IsA("Frame") and(child.Name=="Card" or child.Name=="Background" or child.Name=="Content")then
+iOS26.ApplyCard(child)
+end
+end
+return root
+end
+
+local function iOS26FindRoot(element)
+if typeof(element)=="Instance" and element:IsA("GuiObject") then
+return element
+end
+if type(element)~="table" then
+return nil
+end
+if element.ElementFrame and typeof(element.ElementFrame)=="Instance" and element.ElementFrame:IsA("GuiObject") then
+return element.ElementFrame
+end
+if element.UIElements then
+for _,key in ipairs({"Main","Frame","Container","SliderFrame","ToggleFrame","DropdownFrame"})do
+local item=element.UIElements[key]
+if typeof(item)=="Instance" and item:IsA("GuiObject") then
+return item
+end
+end
+end
+return nil
+end
+
+local function iOS26WrapMethod(target,name,callback)
+if not target or type(target[name])~="function" then
+return
+end
+local marker="__iOS26Wrapped_"..name
+if target[marker] then
+return
+end
+local original=target[name]
+target[marker]=original
+target[name]=function(self,...)
+local result=original(self,...)
+return callback(self,result,...)
+end
+end
+
+local function iOS26DecorateElement(element,kind)
+local root=iOS26FindRoot(element)
+if root then
+iOS26DecorateTree(root,kind)
+end
+if element and type(element)=="table" then
+if kind=="Section" then
+iOS26WrapMethod(element,"Tab",function(self,result)
+return iOS26DecorateElement(result,"SectionElement")
+end)
+elseif kind=="Dropdown" then
+iOS26WrapMethod(element,"Open",function(self,result)
+local menu=self.UIElements and self.UIElements.MenuCanvas
+if menu then
+iOS26DecorateTree(menu,"Dropdown")
+end
+return result
+end)
+end
+end
+return element
+end
+
+local function iOS26DecorateTab(tab)
+if not tab or tab.__iOS26TabPatched then
+return tab
+end
+tab.__iOS26TabPatched=true
+for _,name in ipairs({"Button","Toggle","Slider","Dropdown","Input","Paragraph","ProgressBar","Keybind","Colorpicker","Code","Image","Group","HStack","VStack","Viewport","AddButton","AddToggle","AddSlider","AddDropdown","AddInput"})do
+iOS26WrapMethod(tab,name,function(self,result)
+return iOS26DecorateElement(result,name)
+end)
+end
+iOS26WrapMethod(tab,"Section",function(self,result)
+return iOS26DecorateElement(result,"Section")
+end)
+iOS26WrapMethod(tab,"AddSection",function(self,result)
+return iOS26DecorateElement(result,"Section")
+end)
+return tab
+end
+
+local function iOS26DecorateWindow(window)
+if not window or window.__iOS26WindowPatched then
+return window
+end
+window.__iOS26WindowPatched=true
+local main=window.UIElements and window.UIElements.Main
+if main then
+iOS26DecorateTree(main,"Window")
+end
+iOS26WrapMethod(window,"Tab",function(self,result)
+return iOS26DecorateTab(result)
+end)
+iOS26WrapMethod(window,"Section",function(self,result)
+return iOS26DecorateElement(result,"Section")
+end)
+iOS26WrapMethod(window,"Dialog",function(self,result)
+return iOS26DecorateElement(result,"Dialog")
+end)
+iOS26WrapMethod(window,"Popup",function(self,result)
+return iOS26DecorateElement(result,"Popup")
+end)
+return window
+end
+
+local iOS26Theme={}
+for key,value in pairs(aa.Themes.Dark or{})do
+iOS26Theme[key]=value
+end
+iOS26Theme.Name="iOS26"
+iOS26Theme.Background=iOS26.Theme.Background
+iOS26Theme.WindowBackground=iOS26.Theme.Background
+iOS26Theme.PanelBackground=iOS26.Theme.Glass
+iOS26Theme.PanelBackgroundTransparency=iOS26.Material.PanelTransparency
+iOS26Theme.ElementBackground=iOS26.Theme.Glass
+iOS26Theme.ElementBackgroundTransparency=iOS26.Material.Transparency
+iOS26Theme.Button=iOS26.Theme.Accent
+iOS26Theme.Primary=iOS26.Theme.Accent
+iOS26Theme.Toggle=iOS26.Theme.Accent
+iOS26Theme.Slider=iOS26.Theme.Accent
+iOS26Theme.ProgressBar=iOS26.Theme.Accent
+iOS26Theme.Text=iOS26.Theme.Text
+iOS26Theme.Icon=iOS26.Theme.SecondaryText
+iOS26Theme.Placeholder=iOS26.Theme.Placeholder
+iOS26Theme.Dialog=Color3.fromRGB(30,30,34)
+aa.Themes.iOS26=iOS26Theme
+as.Themes=aa.Themes
+aa:SetTheme("iOS26")
+
+aa.iOS26=iOS26
+aa.LiquidGlass=iOS26
+aa.iOS26Theme=iOS26Theme
+function aa.ApplyiOS26(self,instance,options)
+return iOS26.Apply(instance,options)
+end
+function aa.CreateLiquidToggle(self,parent,config)
+config=config or{}
+local width=config.Width or 52
+local height=config.Height or 32
+local knobSize=config.KnobSize or 26
+local state=config.Default==true
+local button=Instance.new("TextButton")
+button.Name=config.Name or "LiquidToggle"
+button.Size=UDim2.new(0,width,0,height)
+button.BackgroundColor3=state and iOS26.Theme.Accent or Color3.fromRGB(180,180,185)
+button.Text=""
+button.AutoButtonColor=false
+button.Parent=parent
+iOS26.Apply(button,{Transparency=0.35,CornerRadius=height/2,Shadow=false})
+local knob=Instance.new("Frame")
+knob.Name="Knob"
+knob.Size=UDim2.new(0,knobSize,0,knobSize)
+knob.Position=UDim2.new(0,state and(width-knobSize-3)or 3,0.5,0)
+knob.AnchorPoint=Vector2.new(0,0.5)
+knob.BackgroundColor3=Color3.fromRGB(255,255,255)
+knob.Parent=button
+local knobCorner=Instance.new("UICorner")
+knobCorner.CornerRadius=UDim.new(1,0)
+knobCorner.Parent=knob
+local function set(value,fire)
+state=value==true
+iOS26Tween(button,{BackgroundColor3=state and iOS26.Theme.Accent or Color3.fromRGB(180,180,185)},0.25)
+iOS26Tween(knob,{Position=UDim2.new(0,state and(width-knobSize-3)or 3,0.5,0)},0.25)
+if fire~=false and config.Callback then
+config.Callback(state)
+end
+end
+button.Activated:Connect(function()
+iOS26.Press(button)
+set(not state)
+end)
+set(state,false)
+return{Instance=button,Get=function()return state end,Set=function(value)set(value)end}
+end
+function aa.CreateLiquidSlider(self,parent,config)
+config=config or{}
+local min=tonumber(config.Min)or 0
+local max=tonumber(config.Max)or 100
+if max<=min then max=min+1 end
+local value=math.clamp(tonumber(config.Default)or min,min,max)
+local container=Instance.new("Frame")
+container.Name=config.Name or "LiquidSlider"
+container.Size=UDim2.new(0,config.Width or 220,0,config.Height or 36)
+container.BackgroundTransparency=1
+container.Parent=parent
+local track=Instance.new("Frame")
+track.Name="Track"
+track.Size=UDim2.new(1,0,0,config.TrackHeight or 8)
+track.Position=UDim2.new(0,0,0.5,0)
+track.AnchorPoint=Vector2.new(0,0.5)
+track.BackgroundColor3=Color3.fromRGB(190,190,195)
+track.Parent=container
+local trackCorner=Instance.new("UICorner")
+trackCorner.CornerRadius=UDim.new(1,0)
+trackCorner.Parent=track
+local fill=Instance.new("Frame")
+fill.Name="Fill"
+fill.BackgroundColor3=iOS26.Theme.Accent
+fill.Parent=track
+local fillCorner=Instance.new("UICorner")
+fillCorner.CornerRadius=UDim.new(1,0)
+fillCorner.Parent=fill
+local knob=Instance.new("Frame")
+knob.Name="Knob"
+knob.Size=UDim2.new(0,config.KnobSize or 22,0,config.KnobSize or 22)
+knob.AnchorPoint=Vector2.new(0.5,0.5)
+knob.BackgroundColor3=Color3.fromRGB(255,255,255)
+knob.Parent=track
+local knobCorner=Instance.new("UICorner")
+knobCorner.CornerRadius=UDim.new(1,0)
+knobCorner.Parent=knob
+local function set(nextValue,fire)
+value=math.clamp(tonumber(nextValue)or value,min,max)
+local percent=(value-min)/(max-min)
+iOS26Tween(fill,{Size=UDim2.new(percent,0,1,0)},0.18)
+iOS26Tween(knob,{Position=UDim2.new(percent,0,0.5,0)},0.18)
+if fire~=false and config.Callback then config.Callback(value) end
+end
+local function fromInput(input)
+local percent=math.clamp((input.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+set(min+(max-min)*percent)
+end
+local dragging=false
+local iOS26Input=game:GetService("UserInputService")
+track.InputBegan:Connect(function(input)
+if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+dragging=true
+fromInput(input)
+iOS26.Press(knob)
+end
+end)
+iOS26Input.InputChanged:Connect(function(input)
+if dragging and(input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch)then fromInput(input) end
+end)
+iOS26Input.InputEnded:Connect(function(input)
+if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then dragging=false end
+end)
+set(value,false)
+return{Instance=container,Get=function()return value end,Set=function(nextValue)set(nextValue)end}
+end
+
+-- Optional iOS26 component showcase.
+-- The library remains unchanged unless the caller invokes WindUI:CreateiOS26Demo().
+function aa.CreateiOS26Demo(self,options)
+options=options or{}
+local window=self:CreateWindow({
+Title=options.Title or "iOS26 Liquid Glass",
+Author=options.Author or "Component Showcase",
+Size=options.Size or UDim2.new(0,620,0,500),
+Acrylic=options.Acrylic~=false,
+NewElements=true,
+Theme="iOS26",
+})
+local tab=window:Tab({
+Title=options.TabTitle or "Components",
+Icon="sparkles",
+ShowTabTitle=true,
+})
+
+tab:Paragraph({
+Title="Liquid Glass Controls",
+Desc="Buttons and sliders using the embedded iOS26 material and motion system.",
+Icon="wand-sparkles",
+})
+
+tab:Section({
+Title="Buttons",
+Icon="mouse-pointer-click",
+})
+
+tab:Button({
+Title="Primary Button",
+Desc="Blue iOS-style action with press feedback.",
+Icon="check",
+Variant="Primary",
+Callback=function()
+self:Notify({
+Title="Primary Button",
+Content="Primary button clicked.",
+Duration=2,
+})
+end,
+})
+
+tab:Button({
+Title="Secondary Button",
+Desc="Neutral glass action button.",
+Icon="layers-2",
+Variant="Secondary",
+Callback=function()
+self:Notify({
+Title="Secondary Button",
+Content="Secondary button clicked.",
+Duration=2,
+})
+end,
+})
+
+tab:Button({
+Title="Danger Button",
+Desc="Destructive-style action for testing variant contrast.",
+Icon="trash-2",
+Variant="Destructive",
+Callback=function()
+self:Notify({
+Title="Danger Button",
+Content="Danger button clicked.",
+Duration=2,
+})
+end,
+})
+
+tab:Section({
+Title="Sliders",
+Icon="sliders-horizontal",
+})
+
+tab:Slider({
+Title="Opacity",
+Desc="Continuous value from 0 to 100.",
+Icon="sun-medium",
+Value={Min=0,Max=100,Default=72},
+Step=1,
+IsTextbox=true,
+Callback=function(value)
+if options.OnOpacityChanged then
+options.OnOpacityChanged(value)
+end
+end,
+})
+
+tab:Slider({
+Title="Temperature",
+Desc="Decimal slider with two-step increments.",
+Icon="thermometer",
+Value={Min=-10,Max=40,Default=22},
+Step=0.5,
+IsTextbox=true,
+Callback=function(value)
+if options.OnTemperatureChanged then
+options.OnTemperatureChanged(value)
+end
+end,
+})
+
+tab:Slider({
+Title="Intensity",
+Desc="Slider with endpoint icons and tooltip feedback.",
+Icons={From="volume-1",To="volume-2"},
+Value={Min=0,Max=1,Default=0.65},
+Step=0.01,
+IsTooltip=true,
+IsTextbox=true,
+Callback=function(value)
+if options.OnIntensityChanged then
+options.OnIntensityChanged(value)
+end
+end,
+})
+
+return window
+end
+
+local iOS26CreateWindow=aa.CreateWindow
+aa.CreateWindow=function(self,config)
+config=config or{}
+if config.Acrylic==nil then
+config.Acrylic=true
+end
+local window=iOS26CreateWindow(self,config)
+return iOS26DecorateWindow(window)
+end
+
+_G.WindUI=aa
+_G.iOS26=iOS26
 return aa
