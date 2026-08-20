@@ -15661,7 +15661,8 @@ local ToggleSliderGlass={Version="1.0-minimal",Connections=0}
 local ToggleSliderTweenService=game:GetService("TweenService")
 local ToggleSliderAccent=Color3.fromRGB(105,210,255)
 local ToggleSliderLight=Color3.fromRGB(222,249,255)
-local ToggleSliderTrack=Color3.fromRGB(45,88,110)
+local ToggleSliderTrack=Color3.fromRGB(12,14,18)
+local ToggleSliderFill=Color3.fromRGB(26,30,36)
 local ToggleSliderOff=Color3.fromRGB(74,108,120)
 
 local function getThemeColor(name,fallback)
@@ -15772,16 +15773,24 @@ local function styleSlider(element)
  local thumb=fill and fill:FindFirstChild("Thumb")
  local accent=getThemeColor("Slider",ToggleSliderAccent)
  if track then
-  applyGlass(track,"MinimalSliderTrack",ToggleSliderTrack,0.22)
-  setImageColor(track,ToggleSliderTrack,0.08)
+  local trackStroke=applyGlass(track,"MinimalSliderTrack",ToggleSliderTrack,0.16)
+  setImageColor(track,ToggleSliderTrack,0.02)
+  if trackStroke then
+   trackStroke.Color=Color3.fromRGB(78,86,96)
+   trackStroke.Transparency=0.22
+  end
  end
  if fill then
-  applyGlass(fill,"MinimalSliderFill",accent,0.04)
-  setImageColor(fill,accent,0.02)
+  local fillStroke=applyGlass(fill,"MinimalSliderFill",ToggleSliderFill,0.02)
+  setImageColor(fill,ToggleSliderFill,0.01)
+  if fillStroke then
+   fillStroke.Color=Color3.fromRGB(96,104,114)
+   fillStroke.Transparency=0.28
+  end
   local gradient=getOrCreate(fill,"UIGradient","MinimalSliderFillGradient")
   if gradient then
-   gradient.Color=ColorSequence.new(accent,ToggleSliderLight)
-   gradient.Transparency=NumberSequence.new(0.06)
+   gradient.Color=ColorSequence.new(Color3.fromRGB(18,21,26),Color3.fromRGB(44,48,54))
+   gradient.Transparency=NumberSequence.new(0.04)
   end
  end
  if thumb then
