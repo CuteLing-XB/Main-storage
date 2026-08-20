@@ -6421,11 +6421,6 @@ local isImage=glass:IsA("ImageLabel")or glass:IsA("ImageButton")
 local property=isImage and"ImageTransparency"or"BackgroundTransparency"
 ad(glass,duration,{[property]=value},style,direction):Play()
 end
-local function tweenLayerTransparency(duration,value,style,direction)
-local isImage=aq.Frame.Bar.Highlight.Glass:IsA("ImageLabel")or aq.Frame.Bar.Highlight.Glass:IsA("ImageButton")
-local property=isImage and"ImageTransparency"or"BackgroundTransparency"
-ad(aq.Frame.Bar.Highlight.Glass,duration,{[property]=value},style,direction):Play()
-end
 
 local at=ak and 30 or 20
 local au=aq.Size.X.Offset
@@ -6438,13 +6433,25 @@ Position=UDim2.new(0,au-at-2,0.5,0),
 },Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.15)
 
-tweenGlassTransparency(0.15,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+ad(
+aq.Frame.Bar.Highlight.Glass,
+0.15,
+{ImageTransparency=0},
+Enum.EasingStyle.Quint,
+Enum.EasingDirection.Out
+):Play()
 else
 ad(aq.Frame,0.35,{
 Position=UDim2.new(0,2,0.5,0),
 },Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.15)
-tweenGlassTransparency(0.15,0.85,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+ad(
+aq.Frame.Bar.Highlight.Glass,
+0.15,
+{ImageTransparency=0.85},
+Enum.EasingStyle.Quint,
+Enum.EasingDirection.Out
+):Play()
 end
 else
 if aw then
@@ -6459,7 +6466,13 @@ ad(aq.Layer,0.1,{
 ImageTransparency=0,
 }):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.1)
-tweenGlassTransparency(0.1,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+ad(
+aq.Frame.Bar.Highlight.Glass,
+0.1,
+{ImageTransparency=0},
+Enum.EasingStyle.Quint,
+Enum.EasingDirection.Out
+):Play()
 
 if ao then
 ad(ao,0.1,{
@@ -6475,7 +6488,13 @@ ad(aq.Layer,0.1,{
 ImageTransparency=1,
 }):Play()
 ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.1)
-tweenGlassTransparency(0.1,0.85,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+ad(
+aq.Frame.Bar.Highlight.Glass,
+0.1,
+{ImageTransparency=0.85},
+Enum.EasingStyle.Quint,
+Enum.EasingDirection.Out
+):Play()
 
 if ao then
 ad(ao,0.1,{
@@ -12707,12 +12726,7 @@ local am=loadModule't'
 local an=loadModule'd'
 local ao=an.New
 local ap=an.Tween
-local function tweenVisualTransparency(object,duration,value,style,direction)
-if not object then return end
-local isImage=object:IsA("ImageLabel")or object:IsA("ImageButton")
-local property=isImage and"ImageTransparency"or"BackgroundTransparency"
-ap(object,duration,{[property]=value},style,direction):Play()
-end
+
 
 local aq=loadModule'w'.New
 local ar=loadModule'm'.New
@@ -13779,24 +13793,11 @@ end
 
 
 
-local function restoreWindowContent()
-if aw.Closed or aw.Destroyed then
-return
-end
-if aw.UIElements.Main then
-aw.UIElements.Main.Visible=true
-local content=aw.UIElements.Main:FindFirstChild("Main")
-if content then
-content.Visible=true
-end
-end
-end
 local z=an.Drag(
 aw.UIElements.Main,
 {aw.UIElements.Main.Main.Topbar,r.Frame},
 function(z,A)
 if not aw.Closed then
-restoreWindowContent()
 if z and A==r.Frame then
 ap(r,0.1,{ImageTransparency=0.35}):Play()
 else
@@ -14063,11 +14064,16 @@ Size=aw.Size,
 },Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 
 if aw.UIElements.BackgroundGradient then
-tweenVisualTransparency(aw.UIElements.BackgroundGradient,0.2,0,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+ap(aw.UIElements.BackgroundGradient,0.2,{
+ImageTransparency=0,
+},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 end
 
-tweenVisualTransparency(aw.UIElements.Main.Background,0.01,1,Enum.EasingStyle.Linear,Enum.EasingDirection.Out)
-tweenVisualTransparency(aw.UIElements.Main.Background,0.4,aw.Transparent and av.WindUI.TransparencyValue or 0,Enum.EasingStyle.Exponential,Enum.EasingDirection.Out)
+an.SafeSetProperty(aw.UIElements.Main.Background,"ImageTransparency",1)
+ap(aw.UIElements.Main.Background,0.4,{
+
+ImageTransparency=aw.Transparent and av.WindUI.TransparencyValue or 0,
+},Enum.EasingStyle.Exponential,Enum.EasingDirection.Out):Play()
 
 if i then
 if i:IsA"VideoFrame"then
@@ -14160,10 +14166,15 @@ ap(aw.UIElements.Main,0.9,{
 Size=UDim2.new(aw.Size.X.Scale,aw.Size.X.Offset,0,0),
 },Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 if aw.UIElements.BackgroundGradient then
-tweenVisualTransparency(aw.UIElements.BackgroundGradient,0.2,1,Enum.EasingStyle.Quint,Enum.EasingDirection.InOut)
+ap(aw.UIElements.BackgroundGradient,0.2,{
+ImageTransparency=1,
+},Enum.EasingStyle.Quint,Enum.EasingDirection.InOut):Play()
 end
 
-tweenVisualTransparency(aw.UIElements.Main.Background,0.3,1,Enum.EasingStyle.Exponential,Enum.EasingDirection.InOut)
+ap(aw.UIElements.Main.Background,0.3,{
+
+ImageTransparency=1,
+},Enum.EasingStyle.Exponential,Enum.EasingDirection.InOut):Play()
 
 
 
@@ -14309,7 +14320,6 @@ return av.WindUI.UIScale
 end
 
 function aw.SetUIScale(C,F)
-F=math.clamp(tonumber(F)or 1,0.65,1.35)
 av.WindUI.UIScale=F
 ap(av.WindUI.UIScaleObj,0.2,{Scale=F},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 return aw
@@ -15638,11 +15648,11 @@ aa.iOS26Theme=iOS26Theme
 function aa.ApplyiOS26(self,instance,options)
 return iOS26.Apply(instance,options)
 end
+return aa
 
--- Apply the embedded Liquid Glass material to the actual objects created by WindUI.
--- This wrapper is intentionally small: it decorates only known GUI roots and never
--- replaces the original component factories.
-local function iOS26ResolveRoot(value)
+-- Control-only iOS26 Liquid Glass integration.
+-- The original window/background implementation above is intentionally preserved.
+local function iOS26ResolveControlRoot(value)
 if typeof(value)=="Instance" then
 return value
 end
@@ -15650,67 +15660,86 @@ if type(value)~="table" then
 return nil
 end
 local elements=value.UIElements or{}
-return value.ElementFrame or value.ButtonFrame or value.Frame or elements.Main or elements.Container or elements.ContainerFrame
+local frame=value.ElementFrame or value.ButtonFrame or value.ToggleFrame or value.SliderFrame or value.Frame
+if typeof(frame)=="Instance" then
+return frame
 end
-local function iOS26DecorateInstance(instance,options)
+if type(frame)=="table" then
+local frameElements=frame.UIElements or{}
+local nested=frameElements.Main or frameElements.Container or frameElements.ContainerFrame
+if typeof(nested)=="Instance" then
+return nested
+end
+end
+local candidates={elements.Main,elements.Container,elements.ContainerFrame,elements.ToggleFrame,elements.SliderContainer,elements.SliderIcon}
+for _,candidate in ipairs(candidates)do
+if typeof(candidate)=="Instance" then
+return candidate
+end
+end
+return nil
+end
+local function iOS26ApplyControlGlass(instance,options)
 if not instance then
-return
+return nil
 end
 pcall(function()
 if instance:IsA("GuiObject") then
-iOS26.ApplyCard(instance,options or{})
+local config={}
+for key,value in pairs(options or{})do
+config[key]=value
+end
+config.Shadow=false
+config.Transparency=config.Transparency or iOS26.Material.Transparency
+iOS26.Apply(instance,config)
 end
 end)
+return instance
 end
-local function iOS26DecorateWindow(window)
-if not window or not window.UIElements then
-return window
+local function iOS26ApplyControlParts(result,options)
+local root=iOS26ResolveControlRoot(result)
+iOS26ApplyControlGlass(root,options)
+if type(result)=="table" then
+local elements=result.UIElements or{}
+if elements.SliderIcon then
+iOS26ApplyControlGlass(elements.SliderIcon,{CornerRadius=99,Transparency=0.84,BorderTransparency=0.55,HighlightTransparency=0.30})
 end
-local elements=window.UIElements
-iOS26DecorateInstance(elements.Main and elements.Main.Background,{CornerRadius=iOS26.Material.WindowCornerRadius,Transparency=0.68,Shadow=false})
-iOS26DecorateInstance(elements.MainBar and elements.MainBar.Background,{CornerRadius=16,Transparency=iOS26.Material.PanelTransparency,Shadow=false})
-iOS26DecorateInstance(elements.SideBarContainer,{CornerRadius=16,Transparency=iOS26.Material.PanelTransparency,Shadow=false})
-if elements.Main and elements.Main.Main then
-pcall(function()
-elements.Main.Main.Visible=true
-end)
+if elements.SliderContainer then
+iOS26ApplyControlGlass(elements.SliderContainer,{CornerRadius=16,Transparency=0.92,BorderTransparency=0.70,HighlightTransparency=0.30})
 end
-iOS26DecorateInstance(elements.BackgroundGradient,{CornerRadius=iOS26.Material.WindowCornerRadius,Transparency=0.84,Shadow=false})
-return window
+end
+return result
+end
+aa.ApplyControlGlass=function(self,instance,options)
+return iOS26ApplyControlGlass(instance,options)
 end
 local iOS26OriginalCreateWindow=aa.CreateWindow
 aa.CreateWindow=function(self,config)
-config=config or{}
-if config.Theme==nil then
-config.Theme="iOS26"
-end
-if config.Acrylic==nil then
-config.Acrylic=true
-end
 local window=iOS26OriginalCreateWindow(self,config)
-iOS26DecorateWindow(window)
-if window and type(window.Tab)=="function" then
+if not window or type(window.Tab)~="function" then
+return window
+end
 local originalTab=window.Tab
 window.Tab=function(tabSelf,tabConfig)
 local tab=originalTab(tabSelf,tabConfig)
-if type(tab)=="table" then
-local function decorateMethod(name,options)
+if type(tab)~="table" then
+return tab
+end
+local function decorateControlMethod(name,options)
 local original=tab[name]
 if type(original)~="function" then
 return
 end
 tab[name]=function(elementSelf,elementConfig,...)
 local result=original(elementSelf,elementConfig,...)
-iOS26DecorateInstance(iOS26ResolveRoot(result),options)
+iOS26ApplyControlParts(result,options)
 return result
 end
 end
-decorateMethod("Button",{CornerRadius=14,Transparency=0.68,Shadow=false})
-decorateMethod("Toggle",{CornerRadius=16,Transparency=0.72,Shadow=false})
-decorateMethod("Slider",{CornerRadius=16,Transparency=0.76,Shadow=false})
-end
+decorateControlMethod("Button",{CornerRadius=14,Transparency=0.72,BorderTransparency=0.55,HighlightTransparency=0.30})
+decorateControlMethod("Toggle",{CornerRadius=16,Transparency=0.72,BorderTransparency=0.55,HighlightTransparency=0.30})
+decorateControlMethod("Slider",{CornerRadius=16,Transparency=0.76,BorderTransparency=0.55,HighlightTransparency=0.30})
 return tab
-end
 end
 return window
 end
