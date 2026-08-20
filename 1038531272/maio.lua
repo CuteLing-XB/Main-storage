@@ -16965,6 +16965,251 @@ end
 return decorated
 end
 
+
+-- ============================================================
+-- iOS26 Advanced UI System v5
+-- Compatibility extension layer; existing WindUI APIs remain intact.
+-- ============================================================
+local AdvancedUI={
+ Version="5.0.0",
+ Glass={BlurStrength=7,Transparency=0.84,Reflection=0.42,GlowIntensity=0.34,CornerRadius=22,ShadowStrength=0.72,Quality="Balanced"},
+ Animation={Speed=1,Fast=0.12,Normal=0.24,Slow=0.42,Spring=0.42},
+}
+local function advTrace(scope,err)
+ local text="[iOS26 Advanced]["..tostring(scope).."] "..tostring(err)
+ if debug and type(debug.traceback)=="function" then return debug.traceback(text,2) end
+ return text
+end
+local function advCall(scope,fn,...)
+ if type(fn)~="function" then return false,nil end
+ local args={...}
+ local ok,result=xpcall(function() return fn(table.unpack(args)) end,function(err) return advTrace(scope,err) end)
+ if not ok then warn(result) end
+ return ok,result
+end
+
+local PerformanceManager={Quality="Balanced",MaxFPS=30,Connections={},Windows=setmetatable({}, {__mode="k"})}
+function PerformanceManager:SetQuality(level)
+ level=tostring(level or"Balanced")
+ if level=="Low" then self.Quality="Low" self.MaxFPS=15 elseif level=="High" then self.Quality="High" self.MaxFPS=45 else self.Quality="Balanced" self.MaxFPS=30 end
+ AdvancedUI.Glass.Quality=self.Quality
+ if iOS26 and iOS26.SetQuality then iOS26.SetQuality(self.Quality) end
+ return self.Quality
+end
+function PerformanceManager:Register(connection)
+ if connection then table.insert(self.Connections,connection) end return connection
+end
+function PerformanceManager:Track(window)
+ if window then self.Windows[window]=true end return window
+end
+function PerformanceManager:Release(window)
+ if window then self.Windows[window]=nil end return true
+end
+function PerformanceManager:StopAll()
+ for _,connection in ipairs(self.Connections) do advCall("Performance.Stop",function() connection:Disconnect() end) end
+ self.Connections={} return true
+end
+function PerformanceManager:GetStats()
+ local count=0 for _ in pairs(self.Windows) do count=count+1 end
+ return {Quality=self.Quality,MaxFPS=self.MaxFPS,ConnectionCount=#self.Connections,WindowCount=count}
+end
+
+local AnimationManager={Speed=1,Active={}}
+function AnimationManager:SetSpeed(speed) self.Speed=math.clamp(tonumber(speed)or 1,0.35,2.5) return self.Speed end
+function AnimationManager:Tween(object,props,time,style,direction)
+ if not object or not object.Parent then return nil end
+ return iOS26Tween(object,props,(time or iOS26.Animation.Normal)/self.Speed,style,direction)
+end
+function AnimationManager:Spring(object,props,time) return self:Tween(object,props,time or iOS26.Animation.SpringStyle,Enum.EasingStyle.Back,Enum.EasingDirection.Out) end
+function AnimationManager:Press(object,surface,position) return iOS26.Press(object,surface,position) end
+function AnimationManager:Ripple(surface,position) return iOS26.Ripple(surface,position) end
+function AnimationManager:Register(name,connection) if connection then self.Active[name]=connection end return connection end
+function AnimationManager:Cancel(name) local c=self.Active[name] if c then advCall("Animation.Cancel",function() c:Disconnect() end) self.Active[name]=nil end end
+
+local ThemeEngine={Current="iOS Light",Themes={}}
+local function copyTable(source) local result={} for k,v in pairs(source or{}) do result[k]=v end return result end
+ThemeEngine.Themes["iOS Light"]={Appearance="Light",Background=Color3.fromRGB(226,235,248),Glass=Color3.fromRGB(245,249,255),Accent=Color3.fromRGB(0,122,255),Text=Color3.fromRGB(28,32,42),SecondaryText=Color3.fromRGB(92,103,122),Transparency=0.84,Blur=7,Glow=0.34,AnimationSpeed=1}
+ThemeEngine.Themes["iOS Dark"]={Appearance="Dark",Background=Color3.fromRGB(42,48,64),Glass=Color3.fromRGB(100,115,145),Accent=Color3.fromRGB(10,132,255),Text=Color3.fromRGB(250,252,255),SecondaryText=Color3.fromRGB(188,201,221),Transparency=0.78,Blur=9,Glow=0.28,AnimationSpeed=1}
+ThemeEngine.Themes["OLED Dark"]={Appearance="Dark",Background=Color3.fromRGB(3,5,8),Glass=Color3.fromRGB(33,39,48),Accent=Color3.fromRGB(10,132,255),Text=Color3.fromRGB(255,255,255),SecondaryText=Color3.fromRGB(170,180,195),Transparency=0.68,Blur=12,Glow=0.2,AnimationSpeed=0.92}
+ThemeEngine.Themes["Glass Blue"]={Appearance="Light",Background=Color3.fromRGB(120,181,240),Glass=Color3.fromRGB(220,242,255),Accent=Color3.fromRGB(0,102,230),Text=Color3.fromRGB(20,45,78),SecondaryText=Color3.fromRGB(55,92,130),Transparency=0.72,Blur=10,Glow=0.48,AnimationSpeed=1.05}
+function ThemeEngine:Register(name,theme) if type(name)=="string" and type(theme)=="table" then self.Themes[name]=copyTable(theme) end return self.Themes[name] end
+function ThemeEngine:Get(name) return self.Themes[name or self.Current] end
+function ThemeEngine:Use(name)
+ local theme=self.Themes[name] if not theme then return false,"Theme not found: "..tostring(name) end
+ self.Current=name
+ AdvancedUI.Glass.Transparency=theme.Transparency or AdvancedUI.Glass.Transparency
+ AdvancedUI.Glass.BlurStrength=theme.Blur or AdvancedUI.Glass.BlurStrength
+ AdvancedUI.Glass.GlowIntensity=theme.Glow or AdvancedUI.Glass.GlowIntensity
+ AnimationManager:SetSpeed(theme.AnimationSpeed or 1)
+ iOS26.SetAppearance(theme.Appearance or"Light")
+ for key in pairs({Background=true,Glass=true,Accent=true,Text=true,SecondaryText=true}) do if theme[key] then iOS26.Theme[key]=theme[key] end end
+ iOS26Theme.Background=iOS26.Theme.Background iOS26Theme.PanelBackground=iOS26.Theme.Glass iOS26Theme.Text=iOS26.Theme.Text iOS26Theme.Icon=iOS26.Theme.SecondaryText
+ advCall("Theme.Use",function() aa:SetTheme("iOS26") end)
+ return true,theme
+end
+function ThemeEngine:Custom(name,theme) self:Register(name,theme) return self:Use(name) end
+
+local GlassEngine={Config=AdvancedUI.Glass,Attachments=setmetatable({}, {__mode="k"})}
+function GlassEngine:SetBlur(strength) self.Config.BlurStrength=math.clamp(tonumber(strength)or self.Config.BlurStrength,0,24) return iOS26.SetBlur(self.Config.BlurStrength) end
+function GlassEngine:Apply(instance,options)
+ if not instance then return nil end
+ options=options or{} local config=self.Config
+ local result=iOS26.Apply(instance,{Transparency=options.Transparency or config.Transparency,CornerRadius=options.CornerRadius or config.CornerRadius,ShadowTransparency=options.ShadowTransparency or(1-(options.ShadowStrength or config.ShadowStrength)),HighlightTransparency=options.HighlightTransparency or(1-config.Reflection),Shadow=options.Shadow~=false})
+ instance:SetAttribute("iOS26AdvancedGlass",true)
+ local gradient=iOS26GetOrCreate(instance,"UIGradient","iOS26DynamicReflection")
+ gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(255,255,255)),ColorSequenceKeypoint.new(0.48,Color3.fromRGB(255,255,255)),ColorSequenceKeypoint.new(1,Color3.fromRGB(185,220,255))})
+ gradient.Transparency=NumberSequence.new({ColorSequenceKeypoint.new(0,math.clamp(1-config.GlowIntensity,0,1)),ColorSequenceKeypoint.new(0.48,math.clamp(1-config.Reflection,0,1)),ColorSequenceKeypoint.new(1,math.clamp(1-config.GlowIntensity+0.1,0,1))})
+ gradient.Rotation=options.Rotation or 90
+ if options.Dynamic~=false and config.Quality~="Low" then
+  local runService=game:GetService("RunService") local last=0
+  local connection=runService.RenderStepped:Connect(function()
+   if not instance.Parent then connection:Disconnect() return end
+   local now=os.clock() if now-last<1/math.max(PerformanceManager.MaxFPS,15) then return end last=now
+   local phase=(now%3.8)/3.8 gradient.Offset=Vector2.new(-0.35+phase*0.7,0)
+  end)
+  PerformanceManager:Register(connection) self.Attachments[instance]=connection
+ end
+ if not instance:GetAttribute("iOS26AdvancedDestroyBound") then
+  instance:SetAttribute("iOS26AdvancedDestroyBound",true)
+  instance.Destroying:Connect(function() local c=self.Attachments[instance] if c then advCall("Glass.Destroy",function() c:Disconnect() end) end self.Attachments[instance]=nil end)
+ end
+ return result
+end
+function GlassEngine:Window(instance,options) options=options or{} options.CornerRadius=options.CornerRadius or 28 options.Transparency=options.Transparency or 0.78 return self:Apply(instance,options) end
+function GlassEngine:Card(instance,options) options=options or{} options.CornerRadius=options.CornerRadius or 18 options.Transparency=options.Transparency or 0.9 options.Shadow=options.Shadow==true return self:Apply(instance,options) end
+function GlassEngine:Dropdown(instance,options) options=options or{} options.CornerRadius=options.CornerRadius or 18 options.Transparency=options.Transparency or 0.78 return self:Apply(instance,options) end
+function GlassEngine:Reflect(instance,amount) local gradient=instance and instance:FindFirstChild("iOS26DynamicReflection") if gradient then gradient.Offset=Vector2.new(math.clamp(tonumber(amount)or 0,-1,1),0) end return gradient end
+
+local ConfigManager={SettingsFile="iOS26_Advanced_Settings.json",Memory={}}
+function ConfigManager:Load(name)
+ local file=name or self.SettingsFile
+ if type(isfile)=="function" and type(readfile)=="function" and isfile(file) then local ok,data=pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(file)) end) if ok and type(data)=="table" then self.Memory=data return data end end
+ return self.Memory
+end
+function ConfigManager:Save(data,name)
+ self.Memory=data or self.Memory local file=name or self.SettingsFile
+ if type(writefile)~="function" then return false,"writefile unavailable" end
+ local ok,result=pcall(function() writefile(file,game:GetService("HttpService"):JSONEncode(self.Memory)) end) return ok,ok and file or result
+end
+function ConfigManager:Get(key,default) local value=self.Memory[key] return value==nil and default or value end
+function ConfigManager:Set(key,value,save) self.Memory[key]=value if save~=false then self:Save() end return value end
+function ConfigManager:Export() return game:GetService("HttpService"):JSONEncode(self.Memory) end
+function ConfigManager:Import(encoded,save) local ok,data=pcall(function() return game:GetService("HttpService"):JSONDecode(encoded) end) if not ok or type(data)~="table" then return false,"invalid config" end self.Memory=data if save~=false then self:Save() end return true,data end
+ConfigManager:Load()
+
+local Favorites={Items={},Config=ConfigManager}
+function Favorites:Load() self.Items=self.Config:Get("Favorites",{}) or{} return self.Items end
+function Favorites:IsFavorite(id) return self.Items[tostring(id)]==true end
+function Favorites:Set(id,value) self.Items[tostring(id)]=value==true self.Config:Set("Favorites",self.Items) return self.Items[tostring(id)] end
+function Favorites:Toggle(id) return self:Set(id,not self:IsFavorite(id)) end
+Favorites:Load()
+local History={Items={},Limit=30,Config=ConfigManager}
+function History:Push(id) local value=tostring(id) for i=#self.Items,1,-1 do if self.Items[i]==value then table.remove(self.Items,i) end end table.insert(self.Items,1,value) while #self.Items>self.Limit do table.remove(self.Items) end self.Config:Set("History",self.Items) return self.Items end
+function History:Get() return self.Items end
+function History:Clear() self.Items={} self.Config:Set("History",self.Items) return self.Items end
+History.Items=ConfigManager:Get("History",{}) or{}
+
+local SearchSystem={}
+function SearchSystem:Query(window,text)
+ text=string.lower(tostring(text or"")) local results={} if text=="" then return results end
+ local function inspect(element,tab) if type(element)~="table" then return end local title=string.lower(tostring(element.Title or"")) local desc=string.lower(tostring(element.Desc or"")) if string.find(title,text,1,true) or string.find(desc,text,1,true) then table.insert(results,{Element=element,Tab=tab,Title=element.Title,Desc=element.Desc,Type=element.__type}) end end
+ for _,tab in pairs(window and window.TabModule and window.TabModule.Tabs or{}) do for _,element in pairs(tab.Elements or{}) do inspect(element,tab) end end
+ for _,element in pairs(window and window.AllElements or{}) do inspect(element,nil) end
+ return results
+end
+SearchSystem.Find=SearchSystem.Query
+
+local ComponentManager={Registry={},ByType={}}
+function ComponentManager:Register(element,kind,metadata) if not element then return nil end local record={Element=element,Type=kind or element.__type or"Unknown",Metadata=metadata or{},RegisteredAt=os.clock()} table.insert(self.Registry,record) self.ByType[record.Type]=self.ByType[record.Type] or{} table.insert(self.ByType[record.Type],record) return record end
+function ComponentManager:Get(kind) return self.ByType[kind] or{} end
+function ComponentManager:Count() return #self.Registry end
+function ComponentManager:Clear() self.Registry={} self.ByType={} return true end
+local function advancedRoot(element)
+ if type(element)~="table" then return nil end
+ if element.ElementFrame and typeof(element.ElementFrame)=="Instance" and element.ElementFrame:IsA("GuiObject") then return element.ElementFrame end
+ if element.UIElements then
+  for _,key in ipairs({"Main","Frame","Container","SliderFrame","ToggleFrame","DropdownFrame"}) do
+   local item=element.UIElements[key]
+   if typeof(item)=="Instance" and item:IsA("GuiObject") then return item end
+  end
+ end
+ return nil
+end
+local function bindAdvancedTab(tab)
+ if not tab or tab.__iOS26AdvancedTabBound then return tab end
+ tab.__iOS26AdvancedTabBound=true
+ local names={"Button","Toggle","Slider","Dropdown","Input","Paragraph","ProgressBar","Keybind","Colorpicker","Code","Image","Group","HStack","VStack","Viewport","Section","Divider","Space"}
+ for _,name in ipairs(names) do
+  local original=tab[name]
+  if type(original)=="function" then
+   tab[name]=function(self,...)
+    local result=original(self,...)
+    ComponentManager:Register(result,name,{Tab=self})
+    local root=advancedRoot(result)
+    if root and name~="Divider" and name~="Space" then GlassEngine:Card(root,{Dynamic=false}) end
+    return result
+   end
+  end
+ end
+ return tab
+end
+local function bindAdvancedWindow(window)
+ if not window or window.__iOS26AdvancedWindowBound then return window end
+ window.__iOS26AdvancedWindowBound=true
+ local originalTab=window.Tab
+ if type(originalTab)=="function" then
+  window.Tab=function(self,...)
+   local tab=originalTab(self,...)
+   return bindAdvancedTab(tab)
+  end
+ end
+ return window
+end
+local WindowManager={Windows=setmetatable({}, {__mode="k"})}
+function WindowManager:Register(window) if window then self.Windows[window]=true PerformanceManager:Track(window) end return window end
+function WindowManager:Create(config) return self:Register(aa.CreateWindow(aa,config or{})) end
+function WindowManager:List() local list={} for window in pairs(self.Windows) do table.insert(list,window) end return list end
+function WindowManager:CloseAll() for window in pairs(self.Windows) do advCall("Window.CloseAll",function() if window.Close then window:Close() end end) end self.Windows=setmetatable({}, {__mode="k"}) return true end
+
+AdvancedUI.PerformanceManager=PerformanceManager AdvancedUI.AnimationManager=AnimationManager AdvancedUI.GlassEngine=GlassEngine AdvancedUI.ThemeEngine=ThemeEngine AdvancedUI.Config=ConfigManager AdvancedUI.Favorites=Favorites AdvancedUI.History=History AdvancedUI.Search=SearchSystem AdvancedUI.Components=ComponentManager AdvancedUI.WindowManager=WindowManager
+aa.AdvancedUI=AdvancedUI aa.GlassEngine=GlassEngine aa.AnimationManager=AnimationManager aa.ThemeEngine=ThemeEngine aa.PerformanceManager=PerformanceManager aa.AdvancedConfig=ConfigManager aa.Favorites=Favorites aa.History=History aa.SearchUI=SearchSystem aa.ComponentManager=ComponentManager aa.WindowManager=WindowManager aa.Glass=GlassEngine aa.Animation=AnimationManager
+function aa.RegisterUIComponent(self,element,kind,metadata) return ComponentManager:Register(element,kind,metadata) end
+function aa.SearchComponents(self,window,text) return SearchSystem:Query(window,text) end
+function aa.SetAdvancedTheme(self,name) return ThemeEngine:Use(name) end
+function aa.RegisterAdvancedTheme(self,name,theme) return ThemeEngine:Register(name,theme) end
+function aa.SetPerformanceQuality(self,level) return PerformanceManager:SetQuality(level) end
+function aa.LoadAdvancedConfig(self,name) return ConfigManager:Load(name) end
+function aa.SaveAdvancedConfig(self,data,name) return ConfigManager:Save(data,name) end
+function aa.ExportAdvancedConfig(self) return ConfigManager:Export() end
+function aa.ImportAdvancedConfig(self,encoded,save) return ConfigManager:Import(encoded,save) end
+function aa.CloseAllWindows(self) return WindowManager:CloseAll() end
+function aa.CreateAdvancedWindow(self,config) return WindowManager:Create(config or{}) end
+local advancedCreateWindow=aa.CreateWindow
+aa.CreateWindow=function(self,config)
+ local window=advancedCreateWindow(self,config or{})
+ if window then
+  WindowManager:Register(window)
+  bindAdvancedWindow(window)
+  local main=window.UIElements and window.UIElements.Main
+  if main and not main:GetAttribute("iOS26AdvancedGlass") then GlassEngine:Window(main,{Dynamic=PerformanceManager.Quality~="Low"}) end
+ end
+ return window
+end
+
+function aa.CreateAdvancedShowcase(self,options)
+ options=options or{}
+ local window=self:CreateWindow({Title=options.Title or"iOS26 Advanced Glass",Author=options.Author or"Advanced UI System",Size=options.Size or UDim2.new(0,660,0,520),Acrylic=true,NewElements=options.NewElements~=false,Theme="iOS26",Appearance=options.Appearance or"Light",Quality=options.Quality or"Balanced"})
+ local tab=window:Tab({Title="Advanced",Icon="sparkles",ShowTabTitle=true})
+ tab:Paragraph({Title="Liquid Glass System",Desc="Glass / Animation / Theme / Performance / Config",Icon="sparkles"})
+ tab:Button({Title="Reflection Ripple",Desc="触发动态反射与水波。",Icon="wand-sparkles",Callback=function() local main=window.UIElements and window.UIElements.Main if main then GlassEngine:Reflect(main,0.45) AnimationManager:Ripple(main) end end})
+ tab:Dropdown({Title="Theme",Values={"iOS Light","iOS Dark","OLED Dark","Glass Blue"},Value=ThemeEngine.Current,Callback=function(value) ThemeEngine:Use(value) end})
+ tab:Dropdown({Title="Quality",Values={"Low","Balanced","High"},Value=PerformanceManager.Quality,Callback=function(value) PerformanceManager:SetQuality(value) end})
+ tab:Toggle({Title="Auto Appearance",Value=iOS26.AutoAppearance==true,Callback=function(value) iOS26.SetAutoAppearance(value) end})
+ tab:Button({Title="Save Config",Icon="save",Callback=function() ConfigManager:Save() end})
+ return window
+end
+
 _G.WindUI=aa
 _G.iOS26=iOS26
 return aa
+
