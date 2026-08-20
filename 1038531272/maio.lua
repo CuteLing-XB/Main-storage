@@ -6233,9 +6233,9 @@ Cols=10,
 },
 }
 
-function am.GetGlassFrame(an,ao:number):(string,Vector2,Vector2)
+function am.GetGlassFrame(an,ao)
 local ap=am.GlassSpritesheet
-local aq:number
+local aq
 
 if ao<=0.4 then
 aq=math.floor((ao/0.4)*(ap.Total-1))
@@ -10951,7 +10951,7 @@ local al={}
 
 
 
-function al.New(am,an:ConfigType__DARKLUA_TYPE_a)
+function al.New(am,an)
 local ao={
 __type="Viewport",
 Object=an.Object,
@@ -11083,7 +11083,7 @@ ai.AddSignal(at.CanvasGroup.Viewport.InputChanged,function(av)
 if ao.Interactive then
 if av.UserInputType==Enum.UserInputType.MouseWheel then
 local aw=av.Position.Z*2
-ao.Camera.CFrame+=ao.Camera.CFrame.LookVector*aw
+ao.Camera.CFrame=ao.Camera.CFrame+ao.Camera.CFrame.LookVector*aw
 end
 end
 end)
@@ -11102,7 +11102,7 @@ if aq then
 local az=(av[1]-av[2]).Magnitude
 local aA=(az-ar)*0.03
 ar=az
-ao.Camera.CFrame+=ao.Camera.CFrame.LookVector*aA
+ao.Camera.CFrame=ao.Camera.CFrame+ao.Camera.CFrame.LookVector*aA
 end
 elseif ay==Enum.UserInputState.End or ay==Enum.UserInputState.Cancel then
 aq=false
