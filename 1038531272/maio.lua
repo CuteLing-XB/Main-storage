@@ -15659,15 +15659,74 @@ end
 -- Minimal iOS26 Liquid Glass compatibility patch
 -- Original WindUI calling style is preserved.
 -- ============================================================
-local iOS26Minimal={Version="1.0-minimal",Connections={}}
+local iOS26Glacier={Version="1.0-glacier-blue",Connections={}}
 local TweenService=game:GetService("TweenService")
 local UserInputService=game:GetService("UserInputService")
-local Accent=Color3.fromRGB(0,122,255)
-local Glass=Color3.fromRGB(255,255,255)
+local Accent=Color3.fromRGB(102,204,255)
+local GlacierLight=Color3.fromRGB(191,241,255)
+local GlacierDeep=Color3.fromRGB(20,60,90)
+local Glass=Color3.fromRGB(238,250,255)
+local GlacierSurface=Color3.fromRGB(34,55,72)
+local GlacierText=Color3.fromRGB(238,250,255)
+local GlacierSecondary=Color3.fromRGB(170,210,230)
+local glacierTheme={}
+for key,value in pairs(aa.Themes and aa.Themes.Dark or{}) do glacierTheme[key]=value end
+glacierTheme.Name="iOS26 Glacier Blue"
+glacierTheme.White=GlacierText
+glacierTheme.Black=Color3.fromRGB(5,14,22)
+glacierTheme.Background=GlacierDeep
+glacierTheme.BackgroundTransparency=0.12
+glacierTheme.Dialog=Color3.fromRGB(25,50,68)
+glacierTheme.Hover=Color3.fromRGB(69,157,204)
+glacierTheme.PanelBackground=GlacierSurface
+glacierTheme.PanelBackgroundTransparency=0.24
+glacierTheme.WindowBackground=GlacierDeep
+glacierTheme.WindowTopbarTitle=GlacierText
+glacierTheme.WindowTopbarAuthor=GlacierSecondary
+glacierTheme.WindowTopbarIcon=Accent
+glacierTheme.WindowTopbarButtonIcon=GlacierLight
+glacierTheme.WindowSearchBarBackground=Color3.fromRGB(27,63,84)
+glacierTheme.TabBackground=GlacierSurface
+glacierTheme.TabBackgroundHover=Color3.fromRGB(44,101,132)
+glacierTheme.TabBackgroundActive=Color3.fromRGB(57,129,166)
+glacierTheme.TabText=GlacierSecondary
+glacierTheme.TabTitle=GlacierText
+glacierTheme.TabIcon=Accent
+glacierTheme.TabBorder=Accent
+glacierTheme.ElementBackground=Color3.fromRGB(39,69,88)
+glacierTheme.ElementBackgroundTransparency=0.18
+glacierTheme.ElementBackgroundHover=Color3.fromRGB(63,133,170)
+glacierTheme.ElementTitle=GlacierText
+glacierTheme.ElementDesc=GlacierSecondary
+glacierTheme.ElementIcon=Accent
+glacierTheme.PopupBackground=Color3.fromRGB(25,50,68)
+glacierTheme.PopupTitle=GlacierText
+glacierTheme.PopupContent=GlacierSecondary
+glacierTheme.Toggle=Accent
+glacierTheme.ToggleBar=Color3.fromRGB(54,104,130)
+glacierTheme.Checkbox=Accent
+glacierTheme.CheckboxIcon=Color3.fromRGB(10,28,40)
+glacierTheme.CheckboxBorder=Accent
+glacierTheme.Slider=Accent
+glacierTheme.SliderThumb=GlacierLight
+glacierTheme.SliderIcon=Accent
+glacierTheme.ProgressBar=Accent
+glacierTheme.ProgressBarTrack=Color3.fromRGB(62,104,126)
+glacierTheme.ProgressBarText=GlacierText
+glacierTheme.Notification=Color3.fromRGB(25,50,68)
+glacierTheme.Notification2=Color3.fromRGB(63,133,170)
+glacierTheme.Notification2Transparency=0.34
+glacierTheme.NotificationTitle=GlacierText
+glacierTheme.NotificationContent=GlacierSecondary
+glacierTheme.NotificationDuration=Accent
+glacierTheme.NotificationBorder=Accent
+glacierTheme.NotificationBorderTransparency=0.35
+glacierTheme.DropdownBackground=Color3.fromRGB(25,50,68)
+glacierTheme.DropdownTabBorder=Accent
+glacierTheme.DropdownTabBackground=Color3.fromRGB(39,69,88)
+pcall(function() aa:AddTheme(glacierTheme) aa:SetTheme("iOS26 Glacier Blue") end)
 local function resolveColor(name,fallback)
- local ok,value=pcall(function() return aa:GetThemeProperty(name,aa.Theme or{}) end)
- if ok and typeof(value)=="Color3" then return value end
- return fallback
+ return fallback or Accent
 end
 local function getOrCreate(parent,className,name)
  if not parent then return nil end
@@ -15690,7 +15749,7 @@ local function tween(object,properties,time,style,direction)
  return ok and result or nil
 end
 local function track(connection)
- if connection then table.insert(iOS26Minimal.Connections,connection) end
+ if connection then table.insert(iOS26Glacier.Connections,connection) end
  return connection
 end
 local function rootOf(element)
@@ -15706,11 +15765,11 @@ local function rootOf(element)
  return nil
 end
 local function addCorner(object,radius)
- local corner=getOrCreate(object,"UICorner","iOS26MinimalCorner")
+ local corner=getOrCreate(object,"UICorner","iOS26GlacierCorner")
  if corner then corner.CornerRadius=UDim.new(0,radius or 14) end
 end
 local function addStroke(object,color,transparency,thickness)
- local stroke=getOrCreate(object,"UIStroke","iOS26MinimalStroke")
+ local stroke=getOrCreate(object,"UIStroke","iOS26GlacierStroke")
  if stroke then
   stroke.Color=color or Accent
   stroke.Transparency=transparency or 0.52
@@ -15719,7 +15778,7 @@ local function addStroke(object,color,transparency,thickness)
  return stroke
 end
 local function addSoftGradient(object,color)
- local gradient=getOrCreate(object,"UIGradient","iOS26MinimalGradient")
+ local gradient=getOrCreate(object,"UIGradient","iOS26GlacierGradient")
  if gradient then
   local tint=color or Accent
   gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Glass),ColorSequenceKeypoint.new(0.5,tint),ColorSequenceKeypoint.new(1,Glass)})
@@ -15730,10 +15789,10 @@ local function addSoftGradient(object,color)
 end
 local function decorateNotification(root)
  if not root or not root:IsA("GuiObject") then return end
- if root:GetAttribute("iOS26MinimalNotification") then return end
- root:SetAttribute("iOS26MinimalNotification",true)
+ if root:GetAttribute("iOS26GlacierNotification") then return end
+ root:SetAttribute("iOS26GlacierNotification",true)
  local color=resolveColor("Primary",Accent)
- root.BackgroundColor3=Color3.fromRGB(32,35,42)
+ root.BackgroundColor3=GlacierSurface
  root.BackgroundTransparency=0.22
  addCorner(root,18)
  addStroke(root,color,0.34,1.2)
@@ -15787,11 +15846,11 @@ local function ripple(surface,position)
  local x=(position and position.X or surface.AbsolutePosition.X+surface.AbsoluteSize.X/2)-surface.AbsolutePosition.X
  local y=(position and position.Y or surface.AbsolutePosition.Y+surface.AbsoluteSize.Y/2)-surface.AbsolutePosition.Y
  local ring=Instance.new("Frame")
- ring.Name="iOS26MinimalRipple"
+ ring.Name="iOS26GlacierRipple"
  ring.AnchorPoint=Vector2.new(0.5,0.5)
  ring.Position=UDim2.fromOffset(x,y)
  ring.Size=UDim2.fromOffset(4,4)
- ring.BackgroundColor3=resolveColor("Primary",Accent)
+ ring.BackgroundColor3=Accent
  ring.BackgroundTransparency=0.45
  ring.ZIndex=(surface.ZIndex or 1)+10
  ring.Parent=surface
@@ -15802,21 +15861,21 @@ local function ripple(surface,position)
 end
 local function decorateButton(element)
  local root=rootOf(element)
- if not root or root:GetAttribute("iOS26MinimalButton") then return element end
- root:SetAttribute("iOS26MinimalButton",true)
+ if not root or root:GetAttribute("iOS26GlacierButton") then return element end
+ root:SetAttribute("iOS26GlacierButton",true)
  local color=resolveColor("Primary",Accent)
  root.BackgroundColor3=Glass
  root.BackgroundTransparency=0.90
  addCorner(root,14)
  addStroke(root,color,0.62,1)
- local scale=getOrCreate(root,"UIScale","iOS26MinimalButtonScale")
+ local scale=getOrCreate(root,"UIScale","iOS26GlacierButtonScale")
  for _,child in ipairs(root:GetDescendants()) do
-  if child:IsA("GuiButton") and not child:GetAttribute("iOS26MinimalBound") then
-   child:SetAttribute("iOS26MinimalBound",true)
+  if child:IsA("GuiButton") and not child:GetAttribute("iOS26GlacierBound") then
+   child:SetAttribute("iOS26GlacierBound",true)
    track(child.InputBegan:Connect(function(input)
     if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
      tween(scale,{Scale=0.965},0.08,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
-     local stroke=root:FindFirstChild("iOS26MinimalStroke")
+     local stroke=root:FindFirstChild("iOS26GlacierStroke")
      if stroke then tween(stroke,{Transparency=0.12,Thickness=1.5},0.10) end
      ripple(root,input.Position)
     end
@@ -15824,7 +15883,7 @@ local function decorateButton(element)
    track(child.InputEnded:Connect(function(input)
     if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
      tween(scale,{Scale=1},0.18,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
-     local stroke=root:FindFirstChild("iOS26MinimalStroke")
+     local stroke=root:FindFirstChild("iOS26GlacierStroke")
      if stroke then tween(stroke,{Transparency=0.62,Thickness=1},0.18) end
     end
    end))
@@ -15834,8 +15893,8 @@ local function decorateButton(element)
 end
 local function decorateSlider(element)
  local root=rootOf(element)
- if not root or root:GetAttribute("iOS26MinimalSlider") then return element end
- root:SetAttribute("iOS26MinimalSlider",true)
+ if not root or root:GetAttribute("iOS26GlacierSlider") then return element end
+ root:SetAttribute("iOS26GlacierSlider",true)
  local color=resolveColor("Primary",Accent)
  addCorner(root,14)
  addStroke(root,color,0.72,1)
@@ -15843,7 +15902,7 @@ local function decorateSlider(element)
   if child:IsA("Frame") then
    local name=string.lower(child.Name)
    if string.find(name,"track") or name=="bar" then
-    child.BackgroundColor3=Color3.fromRGB(90,96,108)
+    child.BackgroundColor3=Color3.fromRGB(57,96,120)
     child.BackgroundTransparency=0.34
     addCorner(child,999)
    elseif string.find(name,"fill") or string.find(name,"progress") or name=="indicator" then
@@ -15867,8 +15926,8 @@ local function decorateElement(element,kind)
  return element
 end
 local function bindTab(tab)
- if not tab or tab.__iOS26MinimalTab then return tab end
- tab.__iOS26MinimalTab=true
+ if not tab or tab.__iOS26GlacierTab then return tab end
+ tab.__iOS26GlacierTab=true
  for _,name in ipairs({"Button","Slider","AddButton","AddSlider"}) do
   local original=tab[name]
   if type(original)=="function" then
@@ -15880,12 +15939,49 @@ local function bindTab(tab)
  end
  return tab
 end
+local function attachDragWobble(window)
+ if not window or window.__iOS26GlacierWobble then return end
+ local main=window.UIElements and window.UIElements.Main
+ local shell=main and main:FindFirstChild("Main")
+ local topbar=shell and shell:FindFirstChild("Topbar")
+ if not main or not topbar then return end
+ window.__iOS26GlacierWobble=true
+ local dragging=false
+ local lastPosition
+ local lastTime=0
+ local function reset()
+  dragging=false
+  tween(main,{Rotation=0},0.24,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
+ end
+ track(topbar.InputBegan:Connect(function(input)
+  if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+   dragging=true
+   lastPosition=input.Position
+   lastTime=os.clock()
+  end
+ end))
+ track(UserInputService.InputChanged:Connect(function(input)
+  if not dragging then return end
+  if input.UserInputType~=Enum.UserInputType.MouseMovement and input.UserInputType~=Enum.UserInputType.Touch then return end
+  local now=os.clock()
+  local dt=math.max(now-lastTime,1/240)
+  local delta=input.Position-lastPosition
+  local horizontalSpeed=delta.X/dt
+  local angle=math.clamp(-horizontalSpeed/900,-3.2,3.2)
+  tween(main,{Rotation=angle},0.08,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+  lastPosition=input.Position
+  lastTime=now
+ end))
+ track(UserInputService.InputEnded:Connect(function(input)
+  if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then reset() end
+ end))
+end
 local originalCreateWindow=aa.CreateWindow
 aa.CreateWindow=function(self,config)
  -- Keep all original arguments and values. Only bind visual helpers after creation.
  local window=originalCreateWindow(self,config)
- if not window or window.__iOS26MinimalWindow then return window end
- window.__iOS26MinimalWindow=true
+ if not window or window.__iOS26GlacierWindow then return window end
+ window.__iOS26GlacierWindow=true
  local originalTab=window.Tab
  if type(originalTab)=="function" then
   window.Tab=function(self,...)
@@ -15893,11 +15989,13 @@ aa.CreateWindow=function(self,config)
    return bindTab(tab)
   end
  end
+ attachDragWobble(window)
  return window
 end
 function aa.ApplyLiquidGlassNotification(self,notification) decorateNotification(rootOf(notification) or findNotificationRoot(notification)) return notification end
 function aa.ApplyLiquidGlassButton(self,element) return decorateButton(element) end
 function aa.ApplyLiquidGlassSlider(self,element) return decorateSlider(element) end
-aa.iOS26Minimal=iOS26Minimal
+aa.iOS26Glacier=iOS26Glacier
+aa.GlacierBlueTheme=glacierTheme
 _G.WindUI=aa
 return aa
