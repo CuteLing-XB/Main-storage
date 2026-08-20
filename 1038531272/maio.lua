@@ -1918,7 +1918,64 @@ Parent=g.Holder,
 r,
 })
 
+-- iOS26 Liquid Glass notification treatment.
+r.ImageColor3=Color3.fromRGB(225,239,255)
+r.ImageTransparency=0.08
+r.ZIndex=20
+local notificationStroke=d("UIStroke",{
+Color=Color3.fromRGB(255,255,255),
+Transparency=0.28,
+Thickness=1.15,
+ApplyStrokeMode=Enum.ApplyStrokeMode.Border,
+Parent=r,
+})
+local notificationGradient=d("UIGradient",{
+Color=ColorSequence.new({
+ColorSequenceKeypoint.new(0,Color3.fromRGB(255,255,255)),
+ColorSequenceKeypoint.new(0.5,Color3.fromRGB(214,232,255)),
+ColorSequenceKeypoint.new(1,Color3.fromRGB(170,205,255)),
+}),
+Transparency=NumberSequence.new({
+NumberSequenceKeypoint.new(0,0.55),
+NumberSequenceKeypoint.new(0.46,0.18),
+NumberSequenceKeypoint.new(1,0.62),
+}),
+Rotation=18,
+Offset=Vector2.new(-0.85,0),
+Parent=r,
+})
+local notificationScale=d("UIScale",{
+Scale=0.88,
+Parent=r,
+})
+if p then
+p.ZIndex=22
+end
+if i then
+i.ZIndex=23
+end
+if l then
+l.ZIndex=24
+end
+local notificationRun=game:GetService("RunService")
+local notificationReflection
+notificationReflection=notificationRun.RenderStepped:Connect(function()
+if h.Closed or not r.Parent then
+if notificationReflection then
+notificationReflection:Disconnect()
+notificationReflection=nil
+end
+return
+end
+local phase=(os.clock()%2.8)/2.8
+notificationGradient.Offset=Vector2.new(-0.85+phase*1.7,0)
+end)
+
 function h.Close(v)
+if notificationReflection then
+notificationReflection:Disconnect()
+notificationReflection=nil
+end
 if not h.Closed then
 h.Closed=true
 e(
@@ -1928,6 +1985,8 @@ u,
 Enum.EasingStyle.Quint,
 Enum.EasingDirection.Out
 ):Play()
+e(notificationScale,0.34,{Scale=0.86},Enum.EasingStyle.Back,Enum.EasingDirection.In):Play()
+e(notificationStroke,0.28,{Transparency=1},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 e(r,0.55,{Position=UDim2.new(2,0,1,0)},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 task.wait(0.45)
 u:Destroy()
@@ -1943,6 +2002,8 @@ u,
 Enum.EasingStyle.Quint,
 Enum.EasingDirection.Out
 ):Play()
+e(notificationScale,0.5,{Scale=1},Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()
+e(notificationStroke,0.5,{Transparency=0.28},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 e(r,0.45,{Position=UDim2.new(0,0,1,0)},Enum.EasingStyle.Quint,Enum.EasingDirection.Out):Play()
 if h.Duration then
 m.Size=UDim2.new(0,r.DurationFrame.AbsoluteSize.X,1,0)
@@ -15660,11 +15721,11 @@ end
 -- iOS26 Liquid Glass is embedded here so main.lua is self-contained.
 local iOS26 = {
 Theme={
-Background=Color3.fromRGB(18,18,20),
-Glass=Color3.fromRGB(255,255,255),
-Text=Color3.fromRGB(245,245,247),
-SecondaryText=Color3.fromRGB(160,160,165),
-Placeholder=Color3.fromRGB(142,142,147),
+Background=Color3.fromRGB(72,82,104),
+Glass=Color3.fromRGB(240,247,255),
+Text=Color3.fromRGB(250,252,255),
+SecondaryText=Color3.fromRGB(210,220,235),
+Placeholder=Color3.fromRGB(190,202,220),
 Accent=Color3.fromRGB(0,122,255),
 Success=Color3.fromRGB(52,199,89),
 Danger=Color3.fromRGB(255,59,48),
@@ -15787,10 +15848,11 @@ iOS26.Tween=function(object,property,value,time,style,direction)
 return iOS26Tween(object,{[property]=value},time,style,direction)
 end
 
-iOS26.Press=function(object)
+iOS26.Press=function(object,surface)
 if not object then
 return
 end
+local target=surface or object
 local scale=object:FindFirstChild("LiquidScale")
 if not scale then
 scale=Instance.new("UIScale")
@@ -15798,10 +15860,34 @@ scale.Name="LiquidScale"
 scale.Scale=1
 scale.Parent=object
 end
-iOS26Tween(scale,{Scale=0.96},iOS26.Animation.Press)
+local glow=iOS26GetOrCreate(target,"Frame","iOS26PressGlow")
+glow.Size=UDim2.new(1,0,1,0)
+glow.Position=UDim2.new(0,0,0,0)
+glow.BackgroundColor3=Color3.fromRGB(255,255,255)
+glow.BackgroundTransparency=1
+glow.ZIndex=(target.ZIndex or 1)+2
+iOS26GetOrCreate(glow,"UICorner","iOS26PressCorner").CornerRadius=UDim.new(0,18)
+local glowGradient=iOS26GetOrCreate(glow,"UIGradient","iOS26PressGradient")
+glowGradient.Color=ColorSequence.new(Color3.fromRGB(255,255,255),Color3.fromRGB(180,215,255))
+glowGradient.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(0.45,0.42),NumberSequenceKeypoint.new(1,1)})
+glowGradient.Rotation=90
+glowGradient.Offset=Vector2.new(-0.65,0)
+iOS26Tween(scale,{Scale=0.965},iOS26.Animation.Press,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
+iOS26Tween(glow,{BackgroundTransparency=0.72},iOS26.Animation.Press,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+iOS26Tween(glowGradient,{Offset=Vector2.new(0.65,0)},0.34,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+local border=target:FindFirstChild("iOS26Border")
+if border then
+iOS26Tween(border,{Transparency=0.18,Thickness=1.5},0.1,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+end
 task.delay(iOS26.Animation.Press,function()
 if scale and scale.Parent then
-iOS26Tween(scale,{Scale=1},iOS26.Animation.Release)
+iOS26Tween(scale,{Scale=1},iOS26.Animation.Release,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
+end
+if glow and glow.Parent then
+iOS26Tween(glow,{BackgroundTransparency=1},iOS26.Animation.Release)
+end
+if border and border.Parent then
+iOS26Tween(border,{Transparency=iOS26.Material.BorderTransparency,Thickness=1},iOS26.Animation.Release)
 end
 end)
 end
@@ -15860,7 +15946,7 @@ iOS26.Hover(button,false)
 end)
 button.InputBegan:Connect(function(input)
 if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
-iOS26.Press(button)
+iOS26.Press(button,visual)
 end
 end)
 end
@@ -16078,11 +16164,12 @@ iOS26Theme[key]=value
 end
 iOS26Theme.Name="iOS26"
 iOS26Theme.Background=iOS26.Theme.Background
+iOS26Theme.BackgroundTransparency=0.22
 iOS26Theme.WindowBackground=iOS26.Theme.Background
 iOS26Theme.PanelBackground=iOS26.Theme.Glass
-iOS26Theme.PanelBackgroundTransparency=iOS26.Material.PanelTransparency
-iOS26Theme.ElementBackground=iOS26.Theme.Glass
-iOS26Theme.ElementBackgroundTransparency=iOS26.Material.Transparency
+iOS26Theme.PanelBackgroundTransparency=0.58
+iOS26Theme.ElementBackground=Color3.fromRGB(225,237,252)
+iOS26Theme.ElementBackgroundTransparency=0.72
 iOS26Theme.Button=iOS26.Theme.Accent
 iOS26Theme.Primary=iOS26.Theme.Accent
 iOS26Theme.Toggle=iOS26.Theme.Accent
@@ -16244,9 +16331,10 @@ Icon="check",
 Variant="Primary",
 Callback=function()
 self:Notify({
-Title="Primary Button",
-Content="Primary button clicked.",
-Duration=2,
+Title="操作成功",
+Content="Primary Button 已执行完成",
+Icon="check",
+Duration=2.6,
 })
 end,
 })
@@ -16258,9 +16346,10 @@ Icon="layers-2",
 Variant="Secondary",
 Callback=function()
 self:Notify({
-Title="Secondary Button",
-Content="Secondary button clicked.",
-Duration=2,
+Title="操作完成",
+Content="Secondary Button 已执行完成",
+Icon="sparkles",
+Duration=2.6,
 })
 end,
 })
@@ -16272,9 +16361,10 @@ Icon="trash-2",
 Variant="Destructive",
 Callback=function()
 self:Notify({
-Title="Danger Button",
-Content="Danger button clicked.",
-Duration=2,
+Title="操作提示",
+Content="Danger Button 已触发",
+Icon="trash-2",
+Duration=2.6,
 })
 end,
 })
@@ -16290,6 +16380,21 @@ Desc="iOS-style switch with a soft state transition.",
 Icon="sparkles",
 Value=false,
 Callback=function(value)
+if value then
+self:Notify({
+Title="已开启",
+Content="Auto Mode 已成功开启",
+Icon="check",
+Duration=2.6,
+})
+else
+self:Notify({
+Title="已关闭",
+Content="Auto Mode 已关闭",
+Icon="x",
+Duration=2.2,
+})
+end
 if options.OnAutoModeChanged then
 options.OnAutoModeChanged(value)
 end
