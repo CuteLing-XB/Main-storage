@@ -6583,9 +6583,6 @@ BackgroundTransparency=1,
 Parent=ai,
 })
 
--- 液态玻璃适配注入点 (Toggle)
-local hasGlassModule, glassModule = pcall(require, script and script.Parent and script.Parent:FindFirstChild("LiquidGlass") or nil)
-
 local aq=ab.NewRoundFrame(an,"Squircle",{
 ImageTransparency=0.85,
 ThemeTag={
@@ -6711,15 +6708,27 @@ if aw then
 ad(aq.Frame,0.35,{
 Position=UDim2.new(0,au-at-2,0.5,0),
 },Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()
--- ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.15)
+ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.15)
 
--- ad(aq.Frame.Bar.Highlight.Glass, 0.15, {ImageTransparency=0}, Enum.EasingStyle.Quint, Enum.EasingDirection.Out):Play()
+ad(
+aq.Frame.Bar.Highlight.Glass,
+0.15,
+{ImageTransparency=0},
+Enum.EasingStyle.Quint,
+Enum.EasingDirection.Out
+):Play()
 else
 ad(aq.Frame,0.35,{
 Position=UDim2.new(0,2,0.5,0),
 },Enum.EasingStyle.Back,Enum.EasingDirection.Out):Play()
--- ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.15)
--- ad(aq.Frame.Bar.Highlight.Glass, 0.15, {ImageTransparency=0.85}, Enum.EasingStyle.Quint, Enum.EasingDirection.Out):Play()
+ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.15)
+ad(
+aq.Frame.Bar.Highlight.Glass,
+0.15,
+{ImageTransparency=0.85},
+Enum.EasingStyle.Quint,
+Enum.EasingDirection.Out
+):Play()
 end
 else
 if aw then
@@ -6733,8 +6742,14 @@ if aw then
 ad(aq.Layer,0.1,{
 ImageTransparency=0,
 }):Play()
--- ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.1)
--- ad(aq.Frame.Bar.Highlight.Glass, 0.1, {ImageTransparency=0}, Enum.EasingStyle.Quint, Enum.EasingDirection.Out):Play()
+ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Toggle"},0.1)
+ad(
+aq.Frame.Bar.Highlight.Glass,
+0.1,
+{ImageTransparency=0},
+Enum.EasingStyle.Quint,
+Enum.EasingDirection.Out
+):Play()
 
 if ao then
 ad(ao,0.1,{
@@ -6742,16 +6757,23 @@ ImageTransparency=0,
 }):Play()
 end
 
--- local az,aA,aB=am:GetGlassFrame(1)
--- aq.Frame.Bar.Highlight.Glass.Image=az
--- aq.Frame.Bar.Highlight.Glass.ImageRectSize=aA
--- aq.Frame.Bar.Highlight.Glass.ImageRectOffset=aB
+local az,aA,aB=am:GetGlassFrame(1)
+
+aq.Frame.Bar.Highlight.Glass.Image=az
+aq.Frame.Bar.Highlight.Glass.ImageRectSize=aA
+aq.Frame.Bar.Highlight.Glass.ImageRectOffset=aB
 else
 ad(aq.Layer,0.1,{
 ImageTransparency=1,
 }):Play()
--- ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.1)
--- ad(aq.Frame.Bar.Highlight.Glass, 0.1, {ImageTransparency=0.85}, Enum.EasingStyle.Quint, Enum.EasingDirection.Out):Play()
+ab.SetThemeTag(aq.Frame.Bar.Highlight.Glass,{ImageColor3="Text"},0.1)
+ad(
+aq.Frame.Bar.Highlight.Glass,
+0.1,
+{ImageTransparency=0.85},
+Enum.EasingStyle.Quint,
+Enum.EasingDirection.Out
+):Play()
 
 if ao then
 ad(ao,0.1,{
@@ -6759,10 +6781,11 @@ ImageTransparency=1,
 }):Play()
 end
 
--- local az,aA,aB=am:GetGlassFrame(0)
--- aq.Frame.Bar.Highlight.Glass.Image=az
--- aq.Frame.Bar.Highlight.Glass.ImageRectSize=aA
--- aq.Frame.Bar.Highlight.Glass.ImageRectOffset=aB
+local az,aA,aB=am:GetGlassFrame(0)
+
+aq.Frame.Bar.Highlight.Glass.Image=az
+aq.Frame.Bar.Highlight.Glass.ImageRectSize=aA
+aq.Frame.Bar.Highlight.Glass.ImageRectOffset=aB
 end
 
 ax=ax~=false
@@ -6829,10 +6852,10 @@ local h=math.max(2,math.min(aA+g,au-at-2))
 
 local i=math.clamp((h-2)/(au-at-4),0,1)
 
--- local l,m,p=am:GetGlassFrame(i)
--- aq.Frame.Bar.Highlight.Glass.Image=l
--- aq.Frame.Bar.Highlight.Glass.ImageRectSize=m
--- aq.Frame.Bar.Highlight.Glass.ImageRectOffset=p
+local l,m,p=am:GetGlassFrame(i)
+aq.Frame.Bar.Highlight.Glass.Image=l
+aq.Frame.Bar.Highlight.Glass.ImageRectSize=m
+aq.Frame.Bar.Highlight.Glass.ImageRectOffset=p
 
 ad(aq.Frame,0.12,{
 Position=UDim2.new(0,h,0.5,0),
@@ -7266,9 +7289,6 @@ ElementTable=al,
 ParentConfig=ak,
 Tags=ak.Tags,
 }
-
--- 液态玻璃适配注入点 (Slider)
-local hasGlassModule, glassModule = pcall(require, script and script.Parent and script.Parent:FindFirstChild("LiquidGlass") or nil)
 
 al.UIElements.SliderIcon=ae.NewRoundFrame(99,"Squircle",{
 ImageTransparency=0.95,
