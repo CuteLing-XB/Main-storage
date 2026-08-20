@@ -1022,7 +1022,7 @@ r.Tween(object,z or 0.2,{[realProperty]=value},A or Enum.EasingStyle.Quint,B or 
 elseif v and readable then
 r.Tween(object,0.08,{[realProperty]=value}):Play()
 else
-safeSetProperty(object,property,value)
+r.SafeSetProperty(object,property,value)
 end
 -- Keep border/glass children in sync when a visual Image* token is mapped.
 if isContainer and property=="ImageColor3" then
@@ -1050,7 +1050,7 @@ local J=C.Object:FindFirstChild"LibraryGradient"
 if J then J:Destroy() end
 applyValue(C.Object,F,H)
 elseif typeof(H)=="table"and H.Color and H.Transparency then
-safeSetProperty(C.Object,F,Color3.new(1,1,1))
+r.SafeSetProperty(C.Object,F,Color3.new(1,1,1))
 local J=C.Object:FindFirstChild"LibraryGradient"
 if not J then
 J=Instance.new"UIGradient"
@@ -1061,7 +1061,7 @@ J.Color=H.Color
 J.Transparency=H.Transparency
 for L,M in pairs(H)do
 if L~="Color"and L~="Transparency"then
-safeSetProperty(J,L,M)
+r.SafeSetProperty(J,L,M)
 end
 end
 elseif typeof(H)=="number"then
