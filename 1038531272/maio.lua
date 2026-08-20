@@ -14,6 +14,12 @@
     License: MIT
 ]]
 
+if _G.__iOS26LiquidGlassVersion=="4.0" and _G.WindUI then
+return _G.WindUI
+end
+
+_G.__iOS26LiquidGlassVersion="4.0"
+
 type ConfigType__DARKLUA_TYPE_a={
 Object:Instance,
 Camera:Instance?,
@@ -15720,6 +15726,10 @@ end
 
 -- iOS26 Liquid Glass is embedded here so main.lua is self-contained.
 local iOS26 = {
+Version="4.0",
+Quality="Balanced",
+Appearance="Light",
+MaxEffectFPS=30,
 Theme={
 Background=Color3.fromRGB(72,82,104),
 Glass=Color3.fromRGB(240,247,255),
@@ -15748,6 +15758,8 @@ Press=0.08,
 Release=0.18,
 Style=Enum.EasingStyle.Quint,
 Direction=Enum.EasingDirection.Out,
+SpringStyle=Enum.EasingStyle.Back,
+SpringDirection=Enum.EasingDirection.Out,
 },
 }
 
@@ -15848,7 +15860,8 @@ iOS26.Tween=function(object,property,value,time,style,direction)
 return iOS26Tween(object,{[property]=value},time,style,direction)
 end
 
-iOS26.Press=function(object,surface)
+iOS26.Press=function(object,surface,position)
+
 if not object then
 return
 end
@@ -15860,6 +15873,9 @@ scale.Name="LiquidScale"
 scale.Scale=1
 scale.Parent=object
 end
+iOS26.Ripple(target,position)
+iOS26.ParticleBurst(target,position)
+iOS26.Haptic(0.16)
 local glow=iOS26GetOrCreate(target,"Frame","iOS26PressGlow")
 glow.Size=UDim2.new(1,0,1,0)
 glow.Position=UDim2.new(0,0,0,0)
@@ -15916,6 +15932,168 @@ options.ShadowTransparency=options.ShadowTransparency or 0.68
 return iOS26.Apply(instance,options)
 end
 
+function iOS26.Safe(callback,...)
+if type(callback)~="function" then
+return false,nil
+end
+local args={...}
+local ok,result=pcall(function()
+return callback(table.unpack(args))
+end)
+if not ok then
+warn("[iOS26] Callback error: "..tostring(result))
+end
+return ok,result
+end
+
+function iOS26.Haptic(strength)
+local ok,haptic=pcall(game.GetService,game,"HapticService")
+if not ok or not haptic then
+return false
+end
+local motorOK,supported=pcall(function()
+return haptic:IsMotorSupported(Enum.UserInputType.Touch,Enum.VibrationMotor.Small)
+end)
+if not motorOK or not supported then
+return false
+end
+pcall(function()
+haptic:SetMotor(Enum.UserInputType.Touch,Enum.VibrationMotor.Small,strength or 0.18)
+task.delay(0.045,function()
+pcall(function()
+haptic:SetMotor(Enum.UserInputType.Touch,Enum.VibrationMotor.Small,0)
+end)
+end)
+end)
+return true
+end
+
+function iOS26.Ripple(surface,position)
+if not surface or not surface.Parent then
+return
+end
+local ripple=Instance.new("Frame")
+ripple.Name="iOS26Ripple"
+ripple.BackgroundColor3=Color3.fromRGB(255,255,255)
+ripple.BackgroundTransparency=0.72
+ripple.BorderSizePixel=0
+ripple.AnchorPoint=Vector2.new(0.5,0.5)
+local localX,localY=surface.AbsoluteSize.X/2,surface.AbsoluteSize.Y/2
+if position then
+localX=math.clamp(position.X-surface.AbsolutePosition.X,0,surface.AbsoluteSize.X)
+localY=math.clamp(position.Y-surface.AbsolutePosition.Y,0,surface.AbsoluteSize.Y)
+end
+ripple.Position=UDim2.fromOffset(localX,localY)
+ripple.Size=UDim2.fromOffset(2,2)
+ripple.ZIndex=(surface.ZIndex or 1)+1
+ripple.Parent=surface
+local corner=Instance.new("UICorner")
+corner.CornerRadius=UDim.new(1,0)
+corner.Parent=ripple
+local gradient=Instance.new("UIGradient")
+gradient.Color=ColorSequence.new(Color3.fromRGB(255,255,255),Color3.fromRGB(175,215,255))
+gradient.Transparency=NumberSequence.new(0.2)
+gradient.Parent=ripple
+local radius=math.max(surface.AbsoluteSize.X,surface.AbsoluteSize.Y)*1.35
+iOS26Tween(ripple,{Size=UDim2.fromOffset(radius,radius),BackgroundTransparency=1},0.42,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+task.delay(0.46,function()
+if ripple and ripple.Parent then ripple:Destroy() end
+end)
+end
+
+function iOS26.ParticleBurst(surface,position)
+if not surface or not surface.Parent then return end
+local center=position or(surface.AbsolutePosition+surface.AbsoluteSize/2)
+for index=1,6 do
+local dot=Instance.new("Frame")
+local angle=(math.pi*2/6)*index
+local distance=math.random(16,28)
+dot.Name="iOS26Particle"
+dot.Size=UDim2.fromOffset(3,3)
+dot.AnchorPoint=Vector2.new(0.5,0.5)
+dot.Position=UDim2.fromOffset(center.X-surface.AbsolutePosition.X,center.Y-surface.AbsolutePosition.Y)
+dot.BackgroundColor3=index%2==0 and Color3.fromRGB(255,255,255) or Color3.fromRGB(150,205,255)
+dot.BackgroundTransparency=0.12
+dot.BorderSizePixel=0
+dot.ZIndex=(surface.ZIndex or 1)+3
+dot.Parent=surface
+local corner=Instance.new("UICorner")
+corner.CornerRadius=UDim.new(1,0)
+corner.Parent=dot
+iOS26Tween(dot,{Position=UDim2.fromOffset(center.X-surface.AbsolutePosition.X+math.cos(angle)*distance,center.Y-surface.AbsolutePosition.Y+math.sin(angle)*distance),BackgroundTransparency=1},0.36,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+task.delay(0.4,function()
+if dot and dot.Parent then dot:Destroy() end
+end)
+end
+end
+
+function iOS26.ShowLoading(parent,title)
+if not parent then return nil end
+local holder=Instance.new("Frame")
+holder.Name="iOS26Loading"
+holder.Size=UDim2.new(1,0,1,0)
+holder.BackgroundColor3=Color3.fromRGB(220,235,255)
+holder.BackgroundTransparency=0.18
+holder.ZIndex=100
+holder.Parent=parent
+iOS26.Apply(holder,{Transparency=0.18,CornerRadius=24,Shadow=true})
+local label=Instance.new("TextLabel")
+label.Size=UDim2.new(1,0,0,28)
+label.Position=UDim2.new(0,0,0.5,-14)
+label.BackgroundTransparency=1
+label.Text=title or "Loading"
+label.TextColor3=Color3.fromRGB(42,62,92)
+label.TextSize=16
+label.Font=Enum.Font.GothamMedium
+label.ZIndex=102
+label.Parent=holder
+local bar=Instance.new("Frame")
+bar.Size=UDim2.new(0.42,0,0,3)
+bar.Position=UDim2.new(0.29,0,0.5,22)
+bar.BackgroundColor3=iOS26.Theme.Accent
+bar.BorderSizePixel=0
+bar.ZIndex=102
+bar.Parent=holder
+local corner=Instance.new("UICorner")
+corner.CornerRadius=UDim.new(1,0)
+corner.Parent=bar
+local running=true
+task.spawn(function()
+local start=os.clock()
+while running and holder.Parent do
+local progress=((os.clock()-start)%1.3)/1.3
+bar.Position=UDim2.new(0.29+progress*0.42,0,0.5,22)
+task.wait(1/math.max(iOS26.MaxEffectFPS,15))
+end
+end)
+return{Close=function()
+running=false
+if holder and holder.Parent then
+iOS26Tween(holder,{BackgroundTransparency=1},0.22)
+task.delay(0.24,function()
+if holder and holder.Parent then holder:Destroy() end
+end)
+end
+end,Instance=holder}
+end
+
+function iOS26.SetAutoAppearance(enabled)
+local lighting=game:GetService("Lighting")
+iOS26.AutoAppearance=enabled==true
+if iOS26.AutoAppearance and not iOS26.__AppearanceConnection then
+local function sync()
+local hour=lighting.ClockTime
+ iOS26.SetAppearance((hour>=18 or hour<7) and"Dark"or"Light")
+end
+sync()
+iOS26.__AppearanceConnection=lighting:GetPropertyChangedSignal("ClockTime"):Connect(sync)
+elseif not iOS26.AutoAppearance and iOS26.__AppearanceConnection then
+iOS26.__AppearanceConnection:Disconnect()
+iOS26.__AppearanceConnection=nil
+end
+return iOS26.AutoAppearance
+end
+
 function iOS26.Hover(object,active)
 if not object then
 return
@@ -15944,9 +16122,31 @@ end)
 button.MouseLeave:Connect(function()
 iOS26.Hover(button,false)
 end)
+local held=false
+local longPressToken=0
 button.InputBegan:Connect(function(input)
 if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
-iOS26.Press(button,visual)
+held=true
+longPressToken=longPressToken+1
+local token=longPressToken
+iOS26.Press(button,visual,input.Position)
+task.delay(0.38,function()
+if held and token==longPressToken and button.Parent then
+local scale=iOS26GetOrCreate(button,"UIScale","LiquidScale")
+iOS26Tween(scale,{Scale=0.94},0.16,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
+iOS26.Haptic(0.24)
+end
+end)
+end
+end)
+button.InputEnded:Connect(function(input)
+if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+held=false
+longPressToken=longPressToken+1
+local scale=button:FindFirstChild("LiquidScale")
+if scale then
+iOS26Tween(scale,{Scale=1},0.2,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
+end
 end
 end)
 end
@@ -16093,8 +16293,22 @@ if root then
 iOS26DecorateTree(root,kind)
 if kind=="Toggle" then
  iOS26.AttachToggle(root,element and element.Value)
+ if element and type(element)=="table" then
+  iOS26WrapMethod(element,"Set",function(self,result)
+   iOS26.Haptic(0.12)
+   iOS26.AttachToggle(root,self.Value)
+   return result
+  end)
+ end
 elseif kind=="Slider" then
  iOS26.AttachSlider(root)
+ if element and type(element)=="table" then
+  iOS26WrapMethod(element,"Set",function(self,result)
+   iOS26.Haptic(0.08)
+   iOS26.AttachSlider(root)
+   return result
+  end)
+ end
 end
 end
 if element and type(element)=="table" then
@@ -16134,6 +16348,150 @@ end)
 return tab
 end
 
+local function iOS26SetBlur(size)
+local ok,lighting=pcall(game.GetService,game,"Lighting")
+if not ok or not lighting then
+return nil
+end
+local blur=lighting:FindFirstChild("iOS26DynamicBlur")
+if not blur then
+blur=Instance.new("BlurEffect")
+blur.Name="iOS26DynamicBlur"
+blur.Size=0
+blur.Parent=lighting
+end
+local target=math.clamp(tonumber(size)or 0,0,24)
+iOS26Tween(blur,{Size=target},0.22,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+return blur
+end
+
+iOS26.SetBlur=iOS26SetBlur
+function iOS26.SetQuality(level)
+local value=tostring(level or "Balanced")
+if value=="Low" then
+ iOS26.Quality="Low"
+ iOS26.MaxEffectFPS=15
+elseif value=="High" then
+ iOS26.Quality="High"
+ iOS26.MaxEffectFPS=45
+else
+ iOS26.Quality="Balanced"
+ iOS26.MaxEffectFPS=30
+end
+return iOS26.Quality
+end
+
+local function iOS26BindWindowMotion(window,main)
+if not window or not main or window.__iOS26MotionBound then
+return
+end
+window.__iOS26MotionBound=true
+local scale=iOS26GetOrCreate(main,"UIScale","iOS26WindowScale")
+scale.Scale=0.94
+iOS26SetBlur(5)
+task.defer(function()
+if scale.Parent then
+iOS26Tween(scale,{Scale=1},0.48,iOS26.Animation.SpringStyle,iOS26.Animation.SpringDirection)
+end
+end)
+local reflection=main:FindFirstChild("iOS26Highlight")
+local topbar=main:FindFirstChild("Topbar",true) or main:FindFirstChild("Drag",true)
+local input=game:GetService("UserInputService")
+local dragging=false
+local originX=0
+local runService=game:GetService("RunService")
+local motionConnections={}
+local lastReflection=0
+local idleReflection=runService.RenderStepped:Connect(function()
+if not main.Parent then
+idleReflection:Disconnect()
+return
+end
+local now=os.clock()
+if now-lastReflection<(1/math.max(iOS26.MaxEffectFPS,1)) then return end
+lastReflection=now
+if not dragging and reflection then
+local phase=(now%3.6)/3.6
+reflection.Offset=Vector2.new(-0.16+phase*0.32,0)
+local edge=main:FindFirstChild("iOS26Border")
+if edge then
+edge.Transparency=0.48+math.sin(now*1.3)*0.08
+end
+end
+end)
+table.insert(motionConnections,idleReflection)
+local function finishDrag()
+if not dragging then return end
+dragging=false
+iOS26SetBlur(5)
+iOS26Tween(main,{Rotation=0},0.32,iOS26.Animation.SpringStyle,iOS26.Animation.SpringDirection)
+if reflection then
+iOS26Tween(reflection,{Offset=Vector2.new(-0.12,0)},0.32,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+end
+end
+if topbar and topbar:IsA("GuiObject") then
+local topbarConnection=topbar.InputBegan:Connect(function(event)
+if event.UserInputType==Enum.UserInputType.MouseButton1 or event.UserInputType==Enum.UserInputType.Touch then
+dragging=true
+originX=event.Position.X
+iOS26SetBlur(10)
+end
+end)
+table.insert(motionConnections,topbarConnection)
+end
+local inputChangedConnection=input.InputChanged:Connect(function(event)
+if not dragging then return end
+if event.UserInputType~=Enum.UserInputType.MouseMovement and event.UserInputType~=Enum.UserInputType.Touch then return end
+local delta=event.Position.X-originX
+main.Rotation=math.clamp(delta*0.018,-2.4,2.4)
+iOS26SetBlur(7+math.min(math.abs(delta)*0.018,7))
+if reflection then
+reflection.Offset=Vector2.new(math.clamp(delta/260,-0.55,0.55),0)
+end
+end)
+table.insert(motionConnections,inputChangedConnection)
+local inputEndedConnection=input.InputEnded:Connect(function(event)
+if event.UserInputType==Enum.UserInputType.MouseButton1 or event.UserInputType==Enum.UserInputType.Touch then
+finishDrag()
+end
+end)
+table.insert(motionConnections,inputEndedConnection)
+window.__iOS26MotionConnections=motionConnections
+local originalClose=window.Close
+if type(originalClose)=="function" then
+window.__iOS26OriginalClose=originalClose
+window.Close=function(self,...)
+iOS26SetBlur(0)
+for _,connection in ipairs(motionConnections) do
+pcall(function() connection:Disconnect() end)
+end
+iOS26Tween(scale,{Scale=0.9},0.2,Enum.EasingStyle.Quint,Enum.EasingDirection.In)
+iOS26Tween(main,{Rotation=-1.2},0.2,Enum.EasingStyle.Quint,Enum.EasingDirection.In)
+task.wait(0.16)
+return originalClose(self,...)
+end
+end
+end
+
+local function iOS26AnimateTab(tab,forward)
+if not tab or not tab.UIElements then return end
+local canvas=tab.UIElements.ContainerFrameCanvas
+if canvas and canvas:IsA("GuiObject") then
+canvas.Visible=true
+canvas.Position=UDim2.new(forward and 0.035 or -0.035,0,0,0)
+iOS26Tween(canvas,{Position=UDim2.new(0,0,0,0)},0.28,Enum.EasingStyle.Quint,Enum.EasingDirection.Out)
+end
+local icon=tab.UIElements.Icon
+if icon then
+local image=icon:FindFirstChild("ImageLabel") or icon
+if image and image:IsA("GuiObject") then
+local iconScale=iOS26GetOrCreate(image,"UIScale","iOS26TabIconScale")
+iconScale.Scale=0.78
+iOS26Tween(iconScale,{Scale=1},0.34,iOS26.Animation.SpringStyle,iOS26.Animation.SpringDirection)
+end
+end
+end
+
 local function iOS26DecorateWindow(window)
 if not window or window.__iOS26WindowPatched then
 return window
@@ -16142,10 +16500,29 @@ window.__iOS26WindowPatched=true
 local main=window.UIElements and window.UIElements.Main
 if main then
 iOS26DecorateTree(main,"Window")
+iOS26BindWindowMotion(window,main)
 end
-iOS26WrapMethod(window,"Tab",function(self,result)
-return iOS26DecorateTab(result)
+ iOS26WrapMethod(window,"Tab",function(self,result)
+local decorated=iOS26DecorateTab(result)
+iOS26AnimateTab(decorated,true)
+return decorated
 end)
+iOS26WrapMethod(window,"SelectTab",function(self,result,index)
+local tabs=self.TabModule and self.TabModule.Tabs
+if tabs and tabs[index] then
+iOS26AnimateTab(tabs[index],true)
+end
+return result
+end)
+if window.TabModule then
+iOS26WrapMethod(window.TabModule,"SelectTab",function(self,result,index)
+local tabs=self.Tabs
+if tabs and tabs[index] then
+iOS26AnimateTab(tabs[index],true)
+end
+return result
+end)
+end
 iOS26WrapMethod(window,"Section",function(self,result)
 return iOS26DecorateElement(result,"Section")
 end)
@@ -16178,7 +16555,17 @@ iOS26Theme.ProgressBar=iOS26.Theme.Accent
 iOS26Theme.Text=iOS26.Theme.Text
 iOS26Theme.Icon=iOS26.Theme.SecondaryText
 iOS26Theme.Placeholder=iOS26.Theme.Placeholder
-iOS26Theme.Dialog=Color3.fromRGB(30,30,34)
+iOS26Theme.Dialog=Color3.fromRGB(235,243,255)
+iOS26Theme.Notification=Color3.fromRGB(225,239,255)
+iOS26Theme.Notification2=Color3.fromRGB(255,255,255)
+iOS26Theme.Notification2Transparency=0.72
+iOS26Theme.NotificationTitle=iOS26.Theme.Text
+iOS26Theme.NotificationContent=iOS26.Theme.SecondaryText
+iOS26Theme.NotificationDuration=iOS26.Theme.Accent
+iOS26Theme.NotificationDurationTransparency=0.38
+iOS26Theme.NotificationBorder=Color3.fromRGB(255,255,255)
+iOS26Theme.NotificationBorderTransparency=0.42
+iOS26Theme.EdgeGlow=Color3.fromRGB(190,220,255)
 aa.Themes.iOS26=iOS26Theme
 as.Themes=aa.Themes
 aa:SetTheme("iOS26")
@@ -16186,9 +16573,91 @@ aa:SetTheme("iOS26")
 aa.iOS26=iOS26
 aa.LiquidGlass=iOS26
 aa.iOS26Theme=iOS26Theme
+
+iOS26.SettingsFile="iOS26_LiquidGlass_Settings.json"
+function iOS26.LoadSettings(name)
+local file=name or iOS26.SettingsFile
+if type(isfile)=="function" and type(readfile)=="function" and isfile(file) then
+local ok,data=pcall(function()
+return game:GetService("HttpService"):JSONDecode(readfile(file))
+end)
+if ok and type(data)=="table" then return data end
+end
+return{}
+end
+function iOS26.SaveSettings(data,name)
+local file=name or iOS26.SettingsFile
+if type(writefile)~="function" then return false,"writefile unavailable" end
+local ok,result=pcall(function()
+writefile(file,game:GetService("HttpService"):JSONEncode(data or{}))
+end)
+if not ok then
+warn("[iOS26] Settings save failed: "..tostring(result))
+return false,result
+end
+return true
+end
+function iOS26.SetAppearance(mode)
+local appearance=(mode=="Dark" or mode=="dark") and"Dark"or"Light"
+iOS26.Appearance=appearance
+if appearance=="Dark" then
+iOS26.Theme.Background=Color3.fromRGB(42,48,64)
+iOS26.Theme.Glass=Color3.fromRGB(214,226,246)
+iOS26.Theme.Text=Color3.fromRGB(250,252,255)
+iOS26.Theme.SecondaryText=Color3.fromRGB(188,201,221)
+else
+iOS26.Theme.Background=Color3.fromRGB(72,82,104)
+iOS26.Theme.Glass=Color3.fromRGB(240,247,255)
+iOS26.Theme.Text=Color3.fromRGB(250,252,255)
+iOS26.Theme.SecondaryText=Color3.fromRGB(210,220,235)
+end
+iOS26Theme.Background=iOS26.Theme.Background
+iOS26Theme.PanelBackground=iOS26.Theme.Glass
+iOS26Theme.Text=iOS26.Theme.Text
+iOS26Theme.Icon=iOS26.Theme.SecondaryText
+pcall(function() aa:SetTheme("iOS26") end)
+return appearance
+end
+function iOS26.ApplyResponsive(main)
+if not main then return end
+local camera=workspace.CurrentCamera
+if not camera then return end
+local responsive=iOS26GetOrCreate(main,"UIScale","iOS26ResponsiveScale")
+local function update()
+local width=camera.ViewportSize.X
+responsive.Scale=math.clamp(width/820,0.78,1.18)
+end
+update()
+if not main:GetAttribute("iOS26ResponsiveBound") then
+main:SetAttribute("iOS26ResponsiveBound",true)
+camera:GetPropertyChangedSignal("ViewportSize"):Connect(update)
+end
+end
 function aa.ApplyiOS26(self,instance,options)
 return iOS26.Apply(instance,options)
 end
+function aa.LoadiOS26Settings(self,name)
+return iOS26.LoadSettings(name)
+end
+function aa.SaveiOS26Settings(self,data,name)
+return iOS26.SaveSettings(data,name)
+end
+function aa.SetiOS26Appearance(self,mode)
+return iOS26.SetAppearance(mode)
+end
+function aa.SetiOS26Quality(self,level)
+return iOS26.SetQuality(level)
+end
+function aa.ShowiOS26Loading(self,parent,title)
+return iOS26.ShowLoading(parent,title)
+end
+function aa.SetiOS26AutoAppearance(self,enabled)
+return iOS26.SetAutoAppearance(enabled)
+end
+function aa.SafeiOS26(self,callback,...)
+return iOS26.Safe(callback,...)
+end
+
 function aa.CreateLiquidToggle(self,parent,config)
 config=config or{}
 local width=config.Width or 52
@@ -16299,6 +16768,15 @@ end
 -- The library remains unchanged unless the caller invokes WindUI:CreateiOS26Demo().
 function aa.CreateiOS26Demo(self,options)
 options=options or{}
+local saved=self:LoadiOS26Settings(options.SettingsFile)
+local function saveSetting(key,value)
+ saved[key]=value
+ self:SaveiOS26Settings(saved,options.SettingsFile)
+end
+self:SetiOS26Appearance(options.Appearance or saved.Appearance or "Light")
+self:SetiOS26Quality(options.Quality or saved.Quality or "Balanced")
+saveSetting("Appearance",iOS26.Appearance)
+saveSetting("Quality",iOS26.Quality)
 local window=self:CreateWindow({
 Title=options.Title or "iOS26 Liquid Glass",
 Author=options.Author or "Component Showcase",
@@ -16378,8 +16856,9 @@ tab:Toggle({
 Title="Auto Mode",
 Desc="iOS-style switch with a soft state transition.",
 Icon="sparkles",
-Value=false,
+Value=saved.AutoMode==true,
 Callback=function(value)
+saveSetting("AutoMode",value)
 if value then
 self:Notify({
 Title="已开启",
@@ -16405,8 +16884,9 @@ tab:Toggle({
 Title="Notifications",
 Desc="Keep lightweight feedback enabled.",
 Icon="bell",
-Value=true,
+Value=saved.Notifications~=false,
 Callback=function(value)
+saveSetting("Notifications",value)
 if options.OnNotificationsChanged then
 options.OnNotificationsChanged(value)
 end
@@ -16422,10 +16902,11 @@ tab:Slider({
 Title="Opacity",
 Desc="Continuous value from 0 to 100.",
 Icon="sun-medium",
-Value={Min=0,Max=100,Default=72},
+Value={Min=0,Max=100,Default=tonumber(saved.Opacity) or 72},
 Step=1,
 IsTextbox=true,
 Callback=function(value)
+saveSetting("Opacity",value)
 if options.OnOpacityChanged then
 options.OnOpacityChanged(value)
 end
@@ -16436,10 +16917,11 @@ tab:Slider({
 Title="Temperature",
 Desc="Decimal slider with two-step increments.",
 Icon="thermometer",
-Value={Min=-10,Max=40,Default=22},
+Value={Min=-10,Max=40,Default=tonumber(saved.Temperature) or 22},
 Step=0.5,
 IsTextbox=true,
 Callback=function(value)
+saveSetting("Temperature",value)
 if options.OnTemperatureChanged then
 options.OnTemperatureChanged(value)
 end
@@ -16450,11 +16932,12 @@ tab:Slider({
 Title="Intensity",
 Desc="Slider with endpoint icons and tooltip feedback.",
 Icons={From="volume-1",To="volume-2"},
-Value={Min=0,Max=1,Default=0.65},
+Value={Min=0,Max=1,Default=tonumber(saved.Intensity) or 0.65},
 Step=0.01,
 IsTooltip=true,
 IsTextbox=true,
 Callback=function(value)
+saveSetting("Intensity",value)
 if options.OnIntensityChanged then
 options.OnIntensityChanged(value)
 end
@@ -16467,11 +16950,19 @@ end
 local iOS26CreateWindow=aa.CreateWindow
 aa.CreateWindow=function(self,config)
 config=config or{}
+local stored=iOS26.LoadSettings()
+iOS26.SetAppearance(config.Appearance or stored.Appearance or iOS26.Appearance)
+iOS26.SetQuality(config.Quality or stored.Quality or iOS26.Quality)
 if config.Acrylic==nil then
 config.Acrylic=true
 end
 local window=iOS26CreateWindow(self,config)
-return iOS26DecorateWindow(window)
+local decorated=iOS26DecorateWindow(window)
+local main=decorated and decorated.UIElements and decorated.UIElements.Main
+if main then
+ iOS26.ApplyResponsive(main)
+end
+return decorated
 end
 
 _G.WindUI=aa
