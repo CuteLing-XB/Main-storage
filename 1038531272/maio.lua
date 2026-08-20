@@ -15746,30 +15746,38 @@ local function decorateNotification(root)
   end
  end
 end
-local function findNotificationRoot(value)
+local function isNotificationCard(object)
+ if not object or not object:IsA("GuiObject") then return false end
+ return object:FindFirstChild("DurationFrame",true)~=nil
+end
+local function findNotificationRoot(value,before)
  local direct=rootOf(value)
- if direct then return direct end
- if type(value)=="table" then
-  for _,key in ipairs({"Main","Frame","Container","Holder","Notification","UIElements"}) do
-   local candidate=value[key]
-   local found=rootOf(candidate)
-   if found then return found end
-  end
- end
+ if direct and isNotificationCard(direct) then return direct end
  local gui=aa.NotificationGui
- if gui then
-  local holder=gui:FindFirstChild("Holder",true) or gui
-  local children=holder:GetChildren()
-  for index=#children,1,-1 do
-   if children[index]:IsA("GuiObject") then return children[index] end
+ if not gui then return nil end
+ local candidates={}
+ for _,object in ipairs(gui:GetDescendants()) do
+  if object:IsA("GuiObject") and (not before or not before[object]) and isNotificationCard(object) then
+   table.insert(candidates,object)
   end
  end
+ if #candidates>0 then
+  -- Prefer the outer newly-created Frame, never the ScreenGui or Holder.
+  table.sort(candidates,function(a,b) return #a:GetDescendants()>#b:GetDescendants() end)
+  return candidates[1]
+ end
+ return nil
 end
 local originalNotify=aa.Notify
 aa.Notify=function(self,config)
+ local before={}
+ local gui=aa.NotificationGui
+ if gui then
+  for _,object in ipairs(gui:GetDescendants()) do before[object]=true end
+ end
  local result=originalNotify(self,config)
  task.defer(function()
-  local root=findNotificationRoot(result)
+  local root=findNotificationRoot(result,before)
   if root then decorateNotification(root) end
  end)
  return result
