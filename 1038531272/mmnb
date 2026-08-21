@@ -529,12 +529,11 @@ local GeneralState = {
     SpeedValue = 32,
     InfiniteJumpEnabled = false,
     JumpPowerValue = 50,
+    DefaultWalkSpeed = 16,
+    DefaultJumpPower = 50,
     CompatibilityEnabled = false,
     JumpConnection = nil,
     CharacterConnection = nil,
-    OriginalWalkSpeed = nil,
-    OriginalJumpPower = nil,
-    OriginalUseJumpPower = nil,
 }
 
 local function getLocalHumanoid()
@@ -548,28 +547,18 @@ local function applyGeneralMovement()
         return
     end
 
-    if GeneralState.OriginalWalkSpeed == nil then
-        GeneralState.OriginalWalkSpeed = humanoid.WalkSpeed
-    end
-    if GeneralState.OriginalJumpPower == nil then
-        GeneralState.OriginalJumpPower = humanoid.JumpPower
-    end
-    if GeneralState.OriginalUseJumpPower == nil then
-        GeneralState.OriginalUseJumpPower = humanoid.UseJumpPower
-    end
-
     if GeneralState.SpeedEnabled then
         humanoid.WalkSpeed = GeneralState.SpeedValue
-    elseif GeneralState.OriginalWalkSpeed ~= nil then
-        humanoid.WalkSpeed = GeneralState.OriginalWalkSpeed
+    else
+        humanoid.WalkSpeed = GeneralState.DefaultWalkSpeed
     end
 
     if GeneralState.InfiniteJumpEnabled then
         humanoid.UseJumpPower = true
         humanoid.JumpPower = GeneralState.JumpPowerValue
     else
-        humanoid.JumpPower = GeneralState.OriginalJumpPower
-        humanoid.UseJumpPower = GeneralState.OriginalUseJumpPower
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = GeneralState.DefaultJumpPower
     end
 end
 
@@ -626,16 +615,6 @@ GeneralTab:Toggle({
     end,
 })
 
-GeneralTab:Button({
-    Title = "关闭速度增强",
-    Desc = "恢复开启前的 WalkSpeed",
-    Icon = "solar:restart-bold-duotone",
-    Callback = function()
-        GeneralState.SpeedEnabled = false
-        applyGeneralMovement()
-    end,
-})
-
 GeneralTab:Slider({
     Title = "移动速度",
     Desc = "调整 WalkSpeed 数值",
@@ -658,15 +637,6 @@ GeneralTab:Toggle({
     Icon = "solar:arrow-up-bold-duotone",
     Value = false,
     Callback = setInfiniteJumpEnabled,
-})
-
-GeneralTab:Button({
-    Title = "关闭无限跳跃",
-    Desc = "断开 JumpRequest 并恢复原跳跃设置",
-    Icon = "solar:restart-bold-duotone",
-    Callback = function()
-        setInfiniteJumpEnabled(false)
-    end,
 })
 
 GeneralTab:Slider({
@@ -929,9 +899,6 @@ GeneralTab:Slider({
 })
 
 LocalPlayer.CharacterAdded:Connect(function()
-    GeneralState.OriginalWalkSpeed = nil
-    GeneralState.OriginalJumpPower = nil
-    GeneralState.OriginalUseJumpPower = nil
     task.wait(0.25)
     if ShiftLockState.Enabled then
         enableShiftLock()
