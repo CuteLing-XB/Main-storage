@@ -16,8 +16,6 @@ local SAVE_FILE_NAME = "MyScriptKey.txt"
 -- 🔑 【本地管理员卡密白名单】
 -- =========================================================
 local LOCAL_ADMIN_KEYS = {
-    ["LNMKG-917813"] = true,
-    ["XQWTU-78918888"] = true,
     ["XLKEY-TSS866NB"] = true,
 }
 
