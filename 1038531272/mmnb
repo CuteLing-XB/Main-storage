@@ -32,7 +32,7 @@ local function clearSavedKey()
         return
     end
 
-    -- 兼容清理 WindUI 默认保存文件及自定义 HWID 文件
+    -- 兼容清理 WindUI 默认保存文件及自定义 HWID 文件，防止错误卡密死循环
     local filesToClear = {
         KEY_FOLDER .. "/" .. getHWID() .. ".key",
         KEY_FOLDER .. "/key.txt",
@@ -49,7 +49,7 @@ local function clearSavedKey()
 end
 
 local function safeHttpRequest(requestData, retries)
-    retries = retries or 2
+    retries = retries or 3 -- 默认重试 3 次，防止 Render 休眠导致首次请求超时
     local httpRequest = (syn and syn.request)
         or (http and http.request)
         or http_request
@@ -60,7 +60,6 @@ local function safeHttpRequest(requestData, retries)
         return false, "当前执行器不支持 HTTP 请求"
     end
 
-    -- 增加重试机制应对 Render 免费服务器冷启动
     for i = 1, retries do
         local success, result = pcall(function()
             return httpRequest(requestData)
@@ -78,9 +77,10 @@ local function safeHttpRequest(requestData, retries)
     return false, "无法连接卡密服务器，请稍后再试"
 end
 
--- 修复参数解析：兼容 Service:Verify(key) 和 Verify(key) 两种调用方式
+-- 修复参数解析：兼容 WindUI 自动读取时的 Service:Verify(key) 和手动输入的 Verify(key)
 local function verifyCloudKey(arg1, arg2)
     local enteredKey = ""
+    -- 如果 arg1 是 table(也就是 self)，那么卡密在 arg2；否则在 arg1
     if type(arg1) == "string" then
         enteredKey = arg1
     elseif type(arg2) == "string" then
@@ -148,8 +148,9 @@ WindUI.Services.xiaolincloud = {
     end,
 }
 
+-- 替换为您要求的图标
 local LUSTRE_ICON_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/XLM.png"
-local LUSTRE_ICON_FILE = "LiquidGlass_XLM.png"
+local LUSTRE_ICON_FILE = "XL_Hub_Icon.png"
 
 local function loadLustreIcon()
     local assetLoader = getcustomasset or getsynasset
@@ -311,7 +312,6 @@ local ServerScripts = {
         Icon = "solar:book-bold-duotone",
         Scripts = {
             {Name = "学乱 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"},
-
             {Name = "学乱 3", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"},
         },
     },
@@ -529,11 +529,12 @@ local GeneralState = {
     SpeedValue = 32,
     InfiniteJumpEnabled = false,
     JumpPowerValue = 50,
-    DefaultWalkSpeed = 16,
-    DefaultJumpPower = 50,
     CompatibilityEnabled = false,
     JumpConnection = nil,
     CharacterConnection = nil,
+    OriginalWalkSpeed = nil,
+    OriginalJumpPower = nil,
+    OriginalUseJumpPower = nil,
 }
 
 local function getLocalHumanoid()
@@ -547,18 +548,28 @@ local function applyGeneralMovement()
         return
     end
 
+    if GeneralState.OriginalWalkSpeed == nil then
+        GeneralState.OriginalWalkSpeed = humanoid.WalkSpeed
+    end
+    if GeneralState.OriginalJumpPower == nil then
+        GeneralState.OriginalJumpPower = humanoid.JumpPower
+    end
+    if GeneralState.OriginalUseJumpPower == nil then
+        GeneralState.OriginalUseJumpPower = humanoid.UseJumpPower
+    end
+
     if GeneralState.SpeedEnabled then
         humanoid.WalkSpeed = GeneralState.SpeedValue
-    else
-        humanoid.WalkSpeed = GeneralState.DefaultWalkSpeed
+    elseif GeneralState.OriginalWalkSpeed ~= nil then
+        humanoid.WalkSpeed = GeneralState.OriginalWalkSpeed
     end
 
     if GeneralState.InfiniteJumpEnabled then
         humanoid.UseJumpPower = true
         humanoid.JumpPower = GeneralState.JumpPowerValue
     else
-        humanoid.UseJumpPower = true
-        humanoid.JumpPower = GeneralState.DefaultJumpPower
+        humanoid.JumpPower = GeneralState.OriginalJumpPower
+        humanoid.UseJumpPower = GeneralState.OriginalUseJumpPower
     end
 end
 
@@ -615,6 +626,16 @@ GeneralTab:Toggle({
     end,
 })
 
+GeneralTab:Button({
+    Title = "关闭速度增强",
+    Desc = "恢复开启前的 WalkSpeed",
+    Icon = "solar:restart-bold-duotone",
+    Callback = function()
+        GeneralState.SpeedEnabled = false
+        applyGeneralMovement()
+    end,
+})
+
 GeneralTab:Slider({
     Title = "移动速度",
     Desc = "调整 WalkSpeed 数值",
@@ -637,6 +658,15 @@ GeneralTab:Toggle({
     Icon = "solar:arrow-up-bold-duotone",
     Value = false,
     Callback = setInfiniteJumpEnabled,
+})
+
+GeneralTab:Button({
+    Title = "关闭无限跳跃",
+    Desc = "断开 JumpRequest 并恢复原跳跃设置",
+    Icon = "solar:restart-bold-duotone",
+    Callback = function()
+        setInfiniteJumpEnabled(false)
+    end,
 })
 
 GeneralTab:Slider({
@@ -664,766 +694,252 @@ GeneralTab:Toggle({
 })
 
 --==================================================
--- 恢复原脚本的独立移位锁 UI 与独立飞行 UI。
--- 这两项不嵌入 WindUI，界面可以单独拖动、隐藏和关闭。
+-- 移位锁与飞行功能
+-- 直接使用 WindUI 控件，不创建附件中的旧版独立 ScreenGui。
 --==================================================
 
-local ContextActionService = game:GetService("ContextActionService")
+local ShiftLockState = {
+    Enabled = false,
+    Connection = nil,
+}
 
-local function getUiParent()
-    local ok, hui = pcall(function()
-        return gethui and gethui()
-    end)
-    if ok and hui then
-        return hui
+local FlightState = {
+    Enabled = false,
+    Speed = 50,
+    Connection = nil,
+    Attachment = nil,
+    LinearVelocity = nil,
+    AlignOrientation = nil,
+}
+
+local function getCharacterParts()
+    local character = LocalPlayer.Character
+    if not character then
+        return nil, nil, nil
     end
-    return LocalPlayer:WaitForChild("PlayerGui")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart")
+    return character, humanoid, root
 end
 
--- 独立移位锁悬浮按钮：保留用户提供的完整原始逻辑和两个 LocalScript 逻辑。
-local function createStandaloneShiftLock()
-    local parent = getUiParent()
-    local existing = parent:FindFirstChild("Shiftlock (StarterGui)")
-    if existing then existing:Destroy() end
+local function disableShiftLock()
+    ShiftLockState.Enabled = false
+    if ShiftLockState.Connection then
+        ShiftLockState.Connection:Disconnect()
+        ShiftLockState.Connection = nil
+    end
 
-    local ShiftlockStarterGui = Instance.new("ScreenGui")
-    local ImageButton = Instance.new("ImageButton")
+    local _, humanoid = getCharacterParts()
+    if humanoid then
+        humanoid.AutoRotate = true
+        humanoid.CameraOffset = Vector3.zero
+    end
+end
 
-    -- Properties:
-    ShiftlockStarterGui.Name = "Shiftlock (StarterGui)"
-    ShiftlockStarterGui.Parent = parent
-    ShiftlockStarterGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    ShiftlockStarterGui.ResetOnSpawn = false
+local function enableShiftLock()
+    disableShiftLock()
+    ShiftLockState.Enabled = true
 
-    ImageButton.Parent = ShiftlockStarterGui
-    ImageButton.Active = true
-    ImageButton.Draggable = true
-    ImageButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    ImageButton.BackgroundTransparency = 1.000
-    ImageButton.Position = UDim2.new(0.921914339, 0, 0.552375436, 0)
-    ImageButton.Size = UDim2.new(0.0636147112, 0, 0.0661305636, 0)
-    ImageButton.SizeConstraint = Enum.SizeConstraint.RelativeXX
-    ImageButton.Image = "http://www.roblox.com/asset/?id=182223762"
-
-    -- Original ImageButton.ShiftGUI logic.
-    local function TLQOYN_fake_script()
-        local script = Instance.new('LocalScript', ImageButton)
-
-        local MobileCameraFramework = {}
-        local players = game:GetService("Players")
-        local runservice = game:GetService("RunService")
-        local CAS = game:GetService("ContextActionService")
-        local player = players.LocalPlayer
-        local character = player.Character or player.CharacterAdded:Wait()
-        local root = character:WaitForChild("HumanoidRootPart")
-        local humanoid = character.Humanoid
+    ShiftLockState.Connection = RunService.RenderStepped:Connect(function()
+        local _, humanoid, root = getCharacterParts()
         local camera = workspace.CurrentCamera
-        local button = script.Parent
-
-        -- Visiblity
-        local uis = game:GetService("UserInputService")
-        local ismobile = uis.TouchEnabled
-        button.Visible = ismobile
-
-        local states = {
-            OFF = "rbxasset://textures/ui/mouseLock_off@2x.png",
-            ON = "rbxasset://textures/ui/mouseLock_on@2x.png"
-        }
-        local MAX_LENGTH = 900000
-        local active = false
-        local ENABLED_OFFSET = CFrame.new(1.7, 0, 0)
-        local DISABLED_OFFSET = CFrame.new(-1.7, 0, 0)
-        local rootPos = Vector3.new(0, 0, 0)
-
-        local function UpdatePos()
-            if player.Character and player.Character:FindFirstChildOfClass("Humanoid") and player.Character:FindFirstChildOfClass("Humanoid").RootPart then
-                rootPos = player.Character:FindFirstChildOfClass("Humanoid").RootPart.Position
-            end
+        if not humanoid or not root or not camera then
+            return
         end
 
-        local function UpdateImage(STATE)
-            button.Image = states[STATE]
+        local look = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        if look.Magnitude > 0 then
+            humanoid.AutoRotate = false
+            humanoid.CameraOffset = Vector3.new(1.7, 0, 0)
+            root.CFrame = CFrame.lookAt(root.Position, root.Position + look.Unit)
         end
+    end)
+end
 
-        local function UpdateAutoRotate(BOOL)
-            if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
-                player.Character:FindFirstChildOfClass("Humanoid").AutoRotate = BOOL
-            end
-        end
-
-        local function GetUpdatedCameraCFrame()
-            if game:GetService("Workspace").CurrentCamera then
-                return CFrame.new(rootPos, Vector3.new(
-                    game:GetService("Workspace").CurrentCamera.CFrame.LookVector.X * MAX_LENGTH,
-                    rootPos.Y,
-                    game:GetService("Workspace").CurrentCamera.CFrame.LookVector.Z * MAX_LENGTH
-                ))
-            end
-        end
-
-        local function EnableShiftlock()
-            UpdatePos()
-            UpdateAutoRotate(false)
-            UpdateImage("ON")
-            if player.Character and player.Character:FindFirstChildOfClass("Humanoid") and player.Character:FindFirstChildOfClass("Humanoid").RootPart then
-                player.Character:FindFirstChildOfClass("Humanoid").RootPart.CFrame = GetUpdatedCameraCFrame()
-            end
-            if game:GetService("Workspace").CurrentCamera then
-                game:GetService("Workspace").CurrentCamera.CFrame = camera.CFrame * ENABLED_OFFSET
-            end
-        end
-
-        local function DisableShiftlock()
-            UpdatePos()
-            UpdateAutoRotate(true)
-            UpdateImage("OFF")
-            if game:GetService("Workspace").CurrentCamera then
-                game:GetService("Workspace").CurrentCamera.CFrame = camera.CFrame * DISABLED_OFFSET
-            end
-            pcall(function()
-                active:Disconnect()
-                active = nil
-            end)
-        end
-
-        UpdateImage("OFF")
-        active = false
-
-        function ShiftLock()
-            if not active then
-                active = runservice.RenderStepped:Connect(function()
-                    EnableShiftlock()
-                end)
-            else
-                DisableShiftlock()
-            end
-        end
-
-        -- 保留原始绑定调用；某些执行器不接受字符串输入类型时，防止它阻断下面的按钮点击连接。
-        pcall(function()
-            local ShiftLockButton = CAS:BindAction("ShiftLOCK", ShiftLock, false, "On")
-            CAS:SetPosition("ShiftLOCK", UDim2.new(0.8, 0, 0.8, 0))
-        end)
-
-        -- 使用 GuiButton.Activated 兼容鼠标和触摸；切换体保留原始完整逻辑。
-        button.Activated:Connect(function()
-            if not active then
-                active = runservice.RenderStepped:Connect(function()
-                    EnableShiftlock()
-                end)
-            else
-                DisableShiftlock()
-            end
-        end)
-
-        return MobileCameraFramework
-    end
-    coroutine.wrap(TLQOYN_fake_script)()
-
-    -- Original ShiftlockStarterGui.LocalScript logic.
-    local function OMQRQRC_fake_script()
-        local script = Instance.new('LocalScript', ShiftlockStarterGui)
-
-        local Players = game:GetService("Players")
-        local UserInputService = game:GetService("UserInputService")
-        local Settings = UserSettings()
-        local GameSettings = Settings.GameSettings
-        local ShiftLockController = {}
-        while not Players.LocalPlayer do
-            wait()
-        end
-        local LocalPlayer = Players.LocalPlayer
-        local Mouse = LocalPlayer:GetMouse()
-        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-        local ScreenGui, ShiftLockIcon, InputCn
-        local IsShiftLockMode = true
-        local IsShiftLocked = true
-        local IsActionBound = false
-        local IsInFirstPerson = false
-        ShiftLockController.OnShiftLockToggled = Instance.new("BindableEvent")
-
-        local function isShiftLockMode()
-            return LocalPlayer.DevEnableMouseLock
-                and GameSettings.ControlMode == Enum.ControlMode.MouseLockSwitch
-                and LocalPlayer.DevComputerMovementMode ~= Enum.DevComputerMovementMode.ClickToMove
-                and GameSettings.ComputerMovementMode ~= Enum.ComputerMovementMode.ClickToMove
-                and LocalPlayer.DevComputerMovementMode ~= Enum.DevComputerMovementMode.Scriptable
-        end
-
-        if not UserInputService.TouchEnabled then
-            IsShiftLockMode = isShiftLockMode()
-        end
-
-        local function onShiftLockToggled()
-            IsShiftLocked = not IsShiftLocked
-            ShiftLockController.OnShiftLockToggled:Fire()
-        end
-
-        local initialize = function()
-            print("enabled")
-        end
-
-        function ShiftLockController:IsShiftLocked()
-            return IsShiftLockMode and IsShiftLocked
-        end
-
-        function ShiftLockController:SetIsInFirstPerson(isInFirstPerson)
-            IsInFirstPerson = isInFirstPerson
-        end
-
-        local function mouseLockSwitchFunc(actionName, inputState, inputObject)
-            if IsShiftLockMode then
-                onShiftLockToggled()
-            end
-        end
-
-        local function disableShiftLock()
-            if ScreenGui then
-                ScreenGui.Parent = nil
-            end
-            IsShiftLockMode = false
-            Mouse.Icon = ""
-            if InputCn then
-                InputCn:disconnect()
-                InputCn = nil
-            end
-            IsActionBound = false
-            ShiftLockController.OnShiftLockToggled:Fire()
-        end
-
-        local onShiftInputBegan = function(inputObject, isProcessed)
-            if isProcessed then
-                return
-            end
-            if inputObject.UserInputType ~= Enum.UserInputType.Keyboard or inputObject.KeyCode == Enum.KeyCode.LeftShift or inputObject.KeyCode == Enum.KeyCode.RightShift then
-            end
-        end
-
-        local function enableShiftLock()
-            IsShiftLockMode = isShiftLockMode()
-            if IsShiftLockMode then
-                if ScreenGui then
-                    ScreenGui.Parent = PlayerGui
-                end
-                if IsShiftLocked then
-                    ShiftLockController.OnShiftLockToggled:Fire()
-                end
-                if not IsActionBound then
-                    InputCn = UserInputService.InputBegan:connect(onShiftInputBegan)
-                    IsActionBound = true
-                end
-            end
-        end
-
-        GameSettings.Changed:connect(function(property)
-            if property == "ControlMode" then
-                if GameSettings.ControlMode == Enum.ControlMode.MouseLockSwitch then
-                    enableShiftLock()
-                else
-                    disableShiftLock()
-                end
-            elseif property == "ComputerMovementMode" then
-                if GameSettings.ComputerMovementMode == Enum.ComputerMovementMode.ClickToMove then
-                    disableShiftLock()
-                else
-                    enableShiftLock()
-                end
-            end
-        end)
-
-        LocalPlayer.Changed:connect(function(property)
-            if property == "DevEnableMouseLock" then
-                if LocalPlayer.DevEnableMouseLock then
-                    enableShiftLock()
-                else
-                    disableShiftLock()
-                end
-            elseif property == "DevComputerMovementMode" then
-                if LocalPlayer.DevComputerMovementMode == Enum.DevComputerMovementMode.ClickToMove or LocalPlayer.DevComputerMovementMode == Enum.DevComputerMovementMode.Scriptable then
-                    disableShiftLock()
-                else
-                    enableShiftLock()
-                end
-            end
-        end)
-
-        LocalPlayer.CharacterAdded:connect(function(character)
-            if not UserInputService.TouchEnabled then
-                initialize()
-            end
-        end)
-
-        if not UserInputService.TouchEnabled then
-            initialize()
-            if isShiftLockMode() then
-                InputCn = UserInputService.InputBegan:connect(onShiftInputBegan)
-                IsActionBound = true
-            end
-        end
+local function setShiftLockEnabled(enabled)
+    if enabled then
         enableShiftLock()
-        return ShiftLockController
+    else
+        disableShiftLock()
     end
-    coroutine.wrap(OMQRQRC_fake_script)()
-
-    return ShiftlockStarterGui
 end
 
--- 独立飞行窗口：保留用户提供的完整原始飞行逻辑、R6/R15 分支和全部按钮事件。
-local function createStandaloneFlight()
-    local existingGUI = LocalPlayer.PlayerGui:FindFirstChild("main")
-    if existingGUI then existingGUI:Destroy() end
-
-    local main = Instance.new("ScreenGui")
-    local Frame = Instance.new("Frame")
-    local up = Instance.new("TextButton")
-    local down = Instance.new("TextButton")
-    local onof = Instance.new("TextButton")
-    local TextLabel = Instance.new("TextLabel")
-    local plus = Instance.new("TextButton")
-    local speed = Instance.new("TextLabel")
-    local mine = Instance.new("TextButton")
-    local closebutton = Instance.new("TextButton")
-    local mini = Instance.new("TextButton")
-    local mini2 = Instance.new("TextButton")
-
-    main.Name = "main"
-    main.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    main.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    main.ResetOnSpawn = false
-
-    Frame.Parent = main
-    Frame.BackgroundColor3 = Color3.fromRGB(163, 255, 137)
-    Frame.BorderColor3 = Color3.fromRGB(103, 221, 213)
-    Frame.Position = UDim2.new(0.100320168, 0, 0.379746825, 0)
-    Frame.Size = UDim2.new(0, 190, 0, 57)
-
-    up.Name = "up"
-    up.Parent = Frame
-    up.BackgroundColor3 = Color3.fromRGB(79, 255, 152)
-    up.Size = UDim2.new(0, 44, 0, 28)
-    up.Font = Enum.Font.SourceSans
-    up.Text = "上"
-    up.TextColor3 = Color3.fromRGB(0, 0, 0)
-    up.TextSize = 14.000
-
-    down.Name = "down"
-    down.Parent = Frame
-    down.BackgroundColor3 = Color3.fromRGB(215, 255, 121)
-    down.Position = UDim2.new(0, 0, 0.491228074, 0)
-    down.Size = UDim2.new(0, 44, 0, 28)
-    down.Font = Enum.Font.SourceSans
-    down.Text = "下"
-    down.TextColor3 = Color3.fromRGB(0, 0, 0)
-    down.TextSize = 14.000
-
-    onof.Name = "onof"
-    onof.Parent = Frame
-    onof.BackgroundColor3 = Color3.fromRGB(255, 249, 74)
-    onof.Position = UDim2.new(0.702823281, 0, 0.491228074, 0)
-    onof.Size = UDim2.new(0, 56, 0, 28)
-    onof.Font = Enum.Font.SourceSans
-    onof.Text = "飞行"
-    onof.TextColor3 = Color3.fromRGB(0, 0, 0)
-    onof.TextSize = 14.000
-
-    TextLabel.Parent = Frame
-    TextLabel.BackgroundColor3 = Color3.fromRGB(242, 60, 255)
-    TextLabel.Position = UDim2.new(0.469327301, 0, 0, 0)
-    TextLabel.Size = UDim2.new(0, 100, 0, 28)
-    TextLabel.Font = Enum.Font.SourceSans
-    TextLabel.Text = "飞行脚本"
-    TextLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
-    TextLabel.TextScaled = true
-    TextLabel.TextSize = 14.000
-    TextLabel.TextWrapped = true
-
-    plus.Name = "plus"
-    plus.Parent = Frame
-    plus.BackgroundColor3 = Color3.fromRGB(133, 145, 255)
-    plus.Position = UDim2.new(0.231578946, 0, 0, 0)
-    plus.Size = UDim2.new(0, 45, 0, 28)
-    plus.Font = Enum.Font.SourceSans
-    plus.Text = "+"
-    plus.TextColor3 = Color3.fromRGB(0, 0, 0)
-    plus.TextScaled = true
-    plus.TextSize = 14.000
-    plus.TextWrapped = true
-
-    speed.Name = "speed"
-    speed.Parent = Frame
-    speed.BackgroundColor3 = Color3.fromRGB(255, 85, 0)
-    speed.Position = UDim2.new(0.468421042, 0, 0.491228074, 0)
-    speed.Size = UDim2.new(0, 44, 0, 28)
-    speed.Font = Enum.Font.SourceSans
-    speed.Text = "1"
-    speed.TextColor3 = Color3.fromRGB(0, 0, 0)
-    speed.TextScaled = true
-    speed.TextSize = 14.000
-    speed.TextWrapped = true
-
-    mine.Name = "mine"
-    mine.Parent = Frame
-    mine.BackgroundColor3 = Color3.fromRGB(123, 255, 247)
-    mine.Position = UDim2.new(0.231578946, 0, 0.491228074, 0)
-    mine.Size = UDim2.new(0, 45, 0, 29)
-    mine.Font = Enum.Font.SourceSans
-    mine.Text = "-"
-    mine.TextColor3 = Color3.fromRGB(0, 0, 0)
-    mine.TextScaled = true
-    mine.TextSize = 14.000
-    mine.TextWrapped = true
-
-    closebutton.Name = "Close"
-    closebutton.Parent = main.Frame
-    closebutton.BackgroundColor3 = Color3.fromRGB(225, 25, 0)
-    closebutton.Font = "SourceSans"
-    closebutton.Size = UDim2.new(0, 45, 0, 28)
-    closebutton.Text = "关闭"
-    closebutton.TextSize = 30
-    closebutton.Position = UDim2.new(0, 0, -1, 27)
-
-    mini.Name = "minimize"
-    mini.Parent = main.Frame
-    mini.BackgroundColor3 = Color3.fromRGB(192, 150, 230)
-    mini.Font = "SourceSans"
-    mini.Size = UDim2.new(0, 45, 0, 28)
-    mini.Text = "隐藏"
-    mini.TextSize = 40
-    mini.Position = UDim2.new(0, 44, -1, 27)
-
-    mini2.Name = "minimize2"
-    mini2.Parent = main.Frame
-    mini2.BackgroundColor3 = Color3.fromRGB(192, 150, 230)
-    mini2.Font = "SourceSans"
-    mini2.Size = UDim2.new(0, 45, 0, 28)
-    mini2.Text = "+"
-    mini2.TextSize = 40
-    mini2.Position = UDim2.new(0, 44, -1, 57)
-    mini2.Visible = false
-
-    local speeds = 1
-    local speaker = game:GetService("Players").LocalPlayer
-    local chr = game.Players.LocalPlayer.Character
-    local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
-    local nowe = false
-    local tpwalking = false
-
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "Fly GUI V3";
-            Text = "By me_ozone and Quandale The Dinglish XII#3550";
-            Icon = "rbxthumb://type=Asset&id=5107182114&w=150&h=150"
-        })
-    end)
-    local Duration = 5
-
-    Frame.Active = true
-    Frame.Draggable = true
-
-    onof.MouseButton1Down:Connect(function()
-        if nowe == true then
-            nowe = false
-
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Flying, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.StrafingNoPhysics, true)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
-            speaker.Character.Humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
-        else
-            nowe = true
-
-            for i = 1, speeds do
-                spawn(function()
-                    local hb = game:GetService("RunService").Heartbeat
-                    tpwalking = true
-                    local chr = game.Players.LocalPlayer.Character
-                    local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
-                    while tpwalking and hb:Wait() and chr and hum and hum.Parent do
-                        if hum.MoveDirection.Magnitude > 0 then
-                            chr:TranslateBy(hum.MoveDirection)
-                        end
-                    end
-                end)
-            end
-
-            game.Players.LocalPlayer.Character.Animate.Disabled = true
-            local Char = game.Players.LocalPlayer.Character
-            local Hum = Char:FindFirstChildOfClass("Humanoid") or Char:FindFirstChildOfClass("AnimationController")
-
-            for i, v in next, Hum:GetPlayingAnimationTracks() do
-                v:AdjustSpeed(0)
-            end
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Flying, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.StrafingNoPhysics, false)
-            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
-            speaker.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Swimming)
+local function destroyFlightObjects()
+    if FlightState.Connection then
+        FlightState.Connection:Disconnect()
+        FlightState.Connection = nil
+    end
+    for _, objectName in ipairs({"LinearVelocity", "AlignOrientation", "Attachment"}) do
+        local object = FlightState[objectName]
+        if object then
+            object:Destroy()
+            FlightState[objectName] = nil
         end
-
-        if game:GetService("Players").LocalPlayer.Character:FindFirstChildOfClass("Humanoid").RigType == Enum.HumanoidRigType.R6 then
-            local plr = game.Players.LocalPlayer
-            local torso = plr.Character.Torso
-            local flying = true
-            local deb = true
-            local ctrl = {f = 0, b = 0, l = 0, r = 0}
-            local lastctrl = {f = 0, b = 0, l = 0, r = 0}
-            local maxspeed = 50
-            local speed = 0
-
-            local bg = Instance.new("BodyGyro", torso)
-            bg.P = 9e4
-            bg.maxTorque = Vector3.new(9e9, 9e9, 9e9)
-            bg.cframe = torso.CFrame
-            local bv = Instance.new("BodyVelocity", torso)
-            bv.velocity = Vector3.new(0, 0.1, 0)
-            bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
-            if nowe == true then
-                plr.Character.Humanoid.PlatformStand = true
-            end
-
-            while nowe == true or game:GetService("Players").LocalPlayer.Character.Humanoid.Health == 0 do
-                game:GetService("RunService").RenderStepped:Wait()
-
-                if ctrl.l + ctrl.r ~= 0 or ctrl.f + ctrl.b ~= 0 then
-                    speed = speed + .5 + (speed / maxspeed)
-                    if speed > maxspeed then speed = maxspeed end
-                elseif not (ctrl.l + ctrl.r ~= 0 or ctrl.f + ctrl.b ~= 0) and speed ~= 0 then
-                    speed = speed - 1
-                    if speed < 0 then speed = 0 end
-                end
-                if (ctrl.l + ctrl.r) ~= 0 or (ctrl.f + ctrl.b) ~= 0 then
-                    bv.velocity = ((game.Workspace.CurrentCamera.CoordinateFrame.lookVector * (ctrl.f + ctrl.b)) + ((game.Workspace.CurrentCamera.CoordinateFrame * CFrame.new(ctrl.l + ctrl.r, (ctrl.f + ctrl.b) * .2, 0).p) - game.Workspace.CurrentCamera.CoordinateFrame.p)) * speed
-                    lastctrl = {f = ctrl.f, b = ctrl.b, l = ctrl.l, r = ctrl.r}
-                elseif (ctrl.l + ctrl.r) == 0 and (ctrl.f + ctrl.b) == 0 and speed ~= 0 then
-                    bv.velocity = ((game.Workspace.CurrentCamera.CoordinateFrame.lookVector * (lastctrl.f + lastctrl.b)) + ((game.Workspace.CurrentCamera.CoordinateFrame * CFrame.new(lastctrl.l + lastctrl.r, (lastctrl.f + lastctrl.b) * .2, 0).p) - game.Workspace.CurrentCamera.CoordinateFrame.p)) * speed
-                else
-                    bv.velocity = Vector3.new(0, 0, 0)
-                end
-                bg.cframe = game.Workspace.CurrentCamera.CoordinateFrame * CFrame.Angles(-math.rad((ctrl.f + ctrl.b) * 50 * speed / maxspeed), 0, 0)
-            end
-            ctrl = {f = 0, b = 0, l = 0, r = 0}
-            lastctrl = {f = 0, b = 0, l = 0, r = 0}
-            speed = 0
-            bg:Destroy()
-            bv:Destroy()
-            plr.Character.Humanoid.PlatformStand = false
-            game.Players.LocalPlayer.Character.Animate.Disabled = false
-            tpwalking = false
-        else
-            local plr = game.Players.LocalPlayer
-            local UpperTorso = plr.Character.UpperTorso
-            local flying = true
-            local deb = true
-            local ctrl = {f = 0, b = 0, l = 0, r = 0}
-            local lastctrl = {f = 0, b = 0, l = 0, r = 0}
-            local maxspeed = 50
-            local speed = 0
-
-            local bg = Instance.new("BodyGyro", UpperTorso)
-            bg.P = 9e4
-            bg.maxTorque = Vector3.new(9e9, 9e9, 9e9)
-            bg.cframe = UpperTorso.CFrame
-            local bv = Instance.new("BodyVelocity", UpperTorso)
-            bv.velocity = Vector3.new(0, 0.1, 0)
-            bv.maxForce = Vector3.new(9e9, 9e9, 9e9)
-            if nowe == true then
-                plr.Character.Humanoid.PlatformStand = true
-            end
-
-            while nowe == true or game:GetService("Players").LocalPlayer.Character.Humanoid.Health == 0 do
-                wait()
-
-                if ctrl.l + ctrl.r ~= 0 or ctrl.f + ctrl.b ~= 0 then
-                    speed = speed + .5 + (speed / maxspeed)
-                    if speed > maxspeed then speed = maxspeed end
-                elseif not (ctrl.l + ctrl.r ~= 0 or ctrl.f + ctrl.b ~= 0) and speed ~= 0 then
-                    speed = speed - 1
-                    if speed < 0 then speed = 0 end
-                end
-                if (ctrl.l + ctrl.r) ~= 0 or (ctrl.f + ctrl.b) ~= 0 then
-                    bv.velocity = ((game.Workspace.CurrentCamera.CoordinateFrame.lookVector * (ctrl.f + ctrl.b)) + ((game.Workspace.CurrentCamera.CoordinateFrame * CFrame.new(ctrl.l + ctrl.r, (ctrl.f + ctrl.b) * .2, 0).p) - game.Workspace.CurrentCamera.CoordinateFrame.p)) * speed
-                    lastctrl = {f = ctrl.f, b = ctrl.b, l = ctrl.l, r = ctrl.r}
-                elseif (ctrl.l + ctrl.r) == 0 and (ctrl.f + ctrl.b) == 0 and speed ~= 0 then
-                    bv.velocity = ((game.Workspace.CurrentCamera.CoordinateFrame.lookVector * (lastctrl.f + lastctrl.b)) + ((game.Workspace.CurrentCamera.CoordinateFrame * CFrame.new(lastctrl.l + lastctrl.r, (lastctrl.f + lastctrl.b) * .2, 0).p) - game.Workspace.CurrentCamera.CoordinateFrame.p)) * speed
-                else
-                    bv.velocity = Vector3.new(0, 0, 0)
-                end
-                bg.cframe = game.Workspace.CurrentCamera.CoordinateFrame * CFrame.Angles(-math.rad((ctrl.f + ctrl.b) * 50 * speed / maxspeed), 0, 0)
-            end
-            ctrl = {f = 0, b = 0, l = 0, r = 0}
-            lastctrl = {f = 0, b = 0, l = 0, r = 0}
-            speed = 0
-            bg:Destroy()
-            bv:Destroy()
-            plr.Character.Humanoid.PlatformStand = false
-            game.Players.LocalPlayer.Character.Animate.Disabled = false
-            tpwalking = false
-        end
-    end)
-
-    local tis
-    up.MouseButton1Down:Connect(function()
-        tis = up.MouseEnter:Connect(function()
-            while tis do
-                wait()
-                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 1, 0)
-            end
-        end)
-    end)
-    up.MouseLeave:Connect(function()
-        if tis then
-            tis:Disconnect()
-            tis = nil
-        end
-    end)
-
-    local dis
-    down.MouseButton1Down:Connect(function()
-        dis = down.MouseEnter:Connect(function()
-            while dis do
-                wait()
-                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.new(0, -1, 0)
-            end
-        end)
-    end)
-    down.MouseLeave:Connect(function()
-        if dis then
-            dis:Disconnect()
-            dis = nil
-        end
-    end)
-
-    game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function(char)
-        wait(0.7)
-        game.Players.LocalPlayer.Character.Humanoid.PlatformStand = false
-        game.Players.LocalPlayer.Character.Animate.Disabled = false
-    end)
-
-    plus.MouseButton1Down:Connect(function()
-        speeds = speeds + 1
-        speed.Text = speeds
-        if nowe == true then
-            tpwalking = false
-            for i = 1, speeds do
-                spawn(function()
-                    local hb = game:GetService("RunService").Heartbeat
-                    tpwalking = true
-                    local chr = game.Players.LocalPlayer.Character
-                    local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
-                    while tpwalking and hb:Wait() and chr and hum and hum.Parent do
-                        if hum.MoveDirection.Magnitude > 0 then
-                            chr:TranslateBy(hum.MoveDirection)
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    mine.MouseButton1Down:Connect(function()
-        if speeds == 1 then
-            speed.Text = 'cannot be less than 1'
-            wait(1)
-            speed.Text = speeds
-        else
-            speeds = speeds - 1
-            speed.Text = speeds
-            if nowe == true then
-                tpwalking = false
-                for i = 1, speeds do
-                    spawn(function()
-                        local hb = game:GetService("RunService").Heartbeat
-                        tpwalking = true
-                        local chr = game.Players.LocalPlayer.Character
-                        local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
-                        while tpwalking and hb:Wait() and chr and hum and hum.Parent do
-                            if hum.MoveDirection.Magnitude > 0 then
-                                chr:TranslateBy(hum.MoveDirection)
-                            end
-                        end
-                    end)
-                end
-            end
-        end
-    end)
-
-    closebutton.MouseButton1Click:Connect(function()
-        main:Destroy()
-    end)
-
-    mini.MouseButton1Click:Connect(function()
-        up.Visible = false
-        down.Visible = false
-        onof.Visible = false
-        plus.Visible = false
-        speed.Visible = false
-        mine.Visible = false
-        mini.Visible = false
-        mini2.Visible = true
-        main.Frame.BackgroundTransparency = 1
-        closebutton.Position = UDim2.new(0, 0, -1, 57)
-    end)
-
-    mini2.MouseButton1Click:Connect(function()
-        up.Visible = true
-        down.Visible = true
-        onof.Visible = true
-        plus.Visible = true
-        speed.Visible = true
-        mine.Visible = true
-        mini.Visible = true
-        mini2.Visible = false
-        main.Frame.BackgroundTransparency = 0
-        closebutton.Position = UDim2.new(0, 0, -1, 27)
-    end)
-
-    return main
+    end
 end
 
--- 通用页中的按钮只负责执行；点击后才在 WindUI 外部创建独立悬浮 UI。
+local function disableFlight()
+    FlightState.Enabled = false
+    destroyFlightObjects()
+    local _, humanoid = getCharacterParts()
+    if humanoid then
+        humanoid.PlatformStand = false
+        if not ShiftLockState.Enabled then
+            humanoid.AutoRotate = true
+        end
+    end
+end
+
+local function enableFlight()
+    disableFlight()
+    FlightState.Enabled = true
+
+    local _, humanoid, root = getCharacterParts()
+    if not humanoid or not root then
+        FlightState.Enabled = false
+        return
+    end
+
+    local attachment = Instance.new("Attachment")
+    attachment.Name = "WindUIFlightAttachment"
+    attachment.Parent = root
+    FlightState.Attachment = attachment
+
+    local linearVelocity = Instance.new("LinearVelocity")
+    linearVelocity.Name = "WindUIFlightVelocity"
+    linearVelocity.Attachment0 = attachment
+    linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+    linearVelocity.MaxForce = math.huge
+    linearVelocity.VectorVelocity = Vector3.zero
+    linearVelocity.Parent = root
+    FlightState.LinearVelocity = linearVelocity
+
+    local alignOrientation = Instance.new("AlignOrientation")
+    alignOrientation.Name = "WindUIFlightOrientation"
+    alignOrientation.Attachment0 = attachment
+    alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    alignOrientation.MaxTorque = math.huge
+    alignOrientation.Responsiveness = 20
+    alignOrientation.Parent = root
+    FlightState.AlignOrientation = alignOrientation
+
+    humanoid.PlatformStand = true
+    FlightState.Connection = RunService.RenderStepped:Connect(function()
+        if not FlightState.Enabled then
+            return
+        end
+
+        local character, currentHumanoid, currentRoot = getCharacterParts()
+        local camera = workspace.CurrentCamera
+        if not character or not currentHumanoid or not currentRoot or not camera then
+            return
+        end
+
+        local moveDirection = currentHumanoid.MoveDirection
+        local horizontal = Vector3.new(moveDirection.X, 0, moveDirection.Z)
+        if horizontal.Magnitude > 0 then
+            horizontal = horizontal.Unit * FlightState.Speed
+        else
+            horizontal = Vector3.zero
+        end
+
+        local vertical = 0
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) or currentHumanoid.Jump then
+            vertical = FlightState.Speed
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            vertical = -FlightState.Speed
+        end
+
+        if FlightState.LinearVelocity then
+            FlightState.LinearVelocity.VectorVelocity = Vector3.new(horizontal.X, vertical, horizontal.Z)
+        end
+
+        local look = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        if look.Magnitude > 0 and FlightState.AlignOrientation then
+            FlightState.AlignOrientation.CFrame = CFrame.lookAt(Vector3.zero, look.Unit)
+        end
+    end)
+end
+
+local function setFlightEnabled(enabled)
+    if enabled then
+        enableFlight()
+    else
+        disableFlight()
+    end
+end
+
 GeneralTab:Section({
-    Title = "独立功能",
+    Title = "移位锁",
 })
 
 GeneralTab:Button({
     Title = "执行移位锁",
-    Desc = "点击后立即创建外部独立移位锁悬浮按钮",
+    Desc = "点击直接执行本地移位锁函数",
     Icon = "solar:lock-keyhole-minimalistic-bold-duotone",
     Callback = function()
-        createStandaloneShiftLock()
+        setShiftLockEnabled(true)
     end,
 })
 
 GeneralTab:Button({
-    Title = "执行飞行",
-    Desc = "点击后立即创建外部独立飞行窗口",
-    Icon = "solar:plain-2-bold-duotone",
+    Title = "关闭移位锁",
+    Desc = "恢复自动旋转和镜头偏移",
+    Icon = "solar:restart-bold-duotone",
     Callback = function()
-        createStandaloneFlight()
+        setShiftLockEnabled(false)
     end,
 })
+
+GeneralTab:Section({
+    Title = "飞行功能",
+})
+
+GeneralTab:Button({
+    Title = "执行飞行",
+    Desc = "点击直接执行本地飞行函数",
+    Icon = "solar:plain-bold-duotone",
+    Callback = function()
+        setFlightEnabled(true)
+    end,
+})
+
+GeneralTab:Button({
+    Title = "关闭飞行",
+    Desc = "移除飞行连接并恢复角色状态",
+    Icon = "solar:restart-bold-duotone",
+    Callback = function()
+        setFlightEnabled(false)
+    end,
+})
+
+GeneralTab:Slider({
+    Title = "飞行速度",
+    Desc = "调整飞行移动速度",
+    Icon = "solar:running-bold-duotone",
+    Step = 1,
+    Value = {
+        Min = 1,
+        Max = 200,
+        Default = 50,
+    },
+    Callback = function(value)
+        FlightState.Speed = tonumber(value) or 50
+    end,
+})
+
+LocalPlayer.CharacterAdded:Connect(function()
+    GeneralState.OriginalWalkSpeed = nil
+    GeneralState.OriginalJumpPower = nil
+    GeneralState.OriginalUseJumpPower = nil
+    task.wait(0.25)
+    if ShiftLockState.Enabled then
+        enableShiftLock()
+    end
+    if FlightState.Enabled then
+        enableFlight()
+    end
+end)
 
 -- 通用页最下面：外部脚本入口。
 GeneralTab:Section({
@@ -2019,4 +1535,5 @@ SettingTab:Dropdown({
 WindUI:OnThemeChange(function(themeName)
     print("WindUI theme changed:", themeName)
 end)
+
 
