@@ -1,572 +1,1520 @@
+
+
+local WindUI = loadstring(game:HttpGet(
+    "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"
+))()
+
 local HttpService = game:GetService("HttpService")
 local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local API_URL = "https://gh-jkll.onrender.com/api/bind-hwid"
-local KICK_URL = "https://gh-jkll.onrender.com/api/admin-kick"
-local UNBAN_URL = "https://gh-jkll.onrender.com/api/admin-unban"
-local ONLINE_URL = "https://gh-jkll.onrender.com/api/online-users"
-local BANNED_URL = "https://gh-jkll.onrender.com/api/banned-users"
-
 local AUTH_SECRET = "XiaoLin666"
-local SAVE_FILE_NAME = "MyScriptKey.txt"
+local KEY_PAGE_URL = "https://gh-jkll.onrender.com/get-key"
+local KEY_FOLDER = "LiquidGlassHub"
 
--- =========================================================
--- 🔑 【本地管理员卡密白名单】
--- =========================================================
-local LOCAL_ADMIN_KEYS = {
-    ["XLKEY-TSS866NB"] = true,
-}
-
-local function isLocalAdminKey(key)
-    if not key then return false end
-    local clean = key:match("^%s*(.-)%s*$")
-    return LOCAL_ADMIN_KEYS[clean] == true
+local function trim(value)
+    if type(value) ~= "string" then
+        return ""
+    end
+    return value:match("^%s*(.-)%s*$")
 end
 
 local function getHWID()
     local hwid = "UNKNOWN_HWID"
-    pcall(function() hwid = RbxAnalyticsService:GetClientId() end)
+    pcall(function()
+        hwid = RbxAnalyticsService:GetClientId()
+    end)
     return hwid
 end
 
--- 通用网络请求函数
-local function SafeHttpRequest(requestData)
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-    if not httpRequest then return false, "当前执行器不支持 HTTP 请求" end
+local function clearSavedKey()
+    if not (isfile and delfile) then
+        return
+    end
 
-    local success, result = pcall(function() return httpRequest(requestData) end)
+    local keyFile = KEY_FOLDER .. "/" .. getHWID() .. ".key"
+    pcall(function()
+        if isfile(keyFile) then
+            delfile(keyFile)
+        end
+    end)
+end
+
+local function safeHttpRequest(requestData)
+    local httpRequest = (syn and syn.request)
+        or (http and http.request)
+        or http_request
+        or (fluxus and fluxus.request)
+        or request
+
+    if not httpRequest then
+        return false, "当前执行器不支持 HTTP 请求"
+    end
+
+    local success, result = pcall(function()
+        return httpRequest(requestData)
+    end)
+
     if success and result and result.Body then
         return true, result.Body
     end
-    return false, "网络连接超时"
+
+    return false, "无法连接卡密服务器，请稍后再试"
 end
 
--- 验证卡密（登录时仅校验一次）
-local function VerifyKeyWithServer(enteredKey)
-    if not enteredKey or enteredKey == "" then 
-        return false, "请输入有效卡密！" 
-    end
-
-    local cleanKey = enteredKey:match("^%s*(.-)%s*$")
-
-    if isLocalAdminKey(cleanKey) then
-        return true, "管理员身份验证通过！"
+local function verifyCloudKey(enteredKey)
+    local cleanKey = trim(enteredKey)
+    if cleanKey == "" then
+        return false, "请输入有效卡密"
     end
 
     local payload = {
         key = cleanKey,
         hwid = getHWID(),
-        username = LocalPlayer.Name,
-        secret = AUTH_SECRET
+        username = LocalPlayer and LocalPlayer.Name or "Unknown",
+        secret = AUTH_SECRET,
     }
-    
-    local requestData = {
+
+    local success, responseBody = safeHttpRequest({
         Url = API_URL,
         Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = HttpService:JSONEncode(payload)
-    }
-    
-    local success, responseBody = SafeHttpRequest(requestData)
-    if success then
-        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
-        if jsonSuccess and decoded then
-            return decoded.success, decoded.message
+        Headers = {
+            ["Content-Type"] = "application/json",
+            ["Accept"] = "application/json",
+        },
+        Body = HttpService:JSONEncode(payload),
+    })
+
+    if not success then
+        return false, responseBody
+    end
+
+    local jsonSuccess, decoded = pcall(function()
+        return HttpService:JSONDecode(responseBody)
+    end)
+
+    if not jsonSuccess or type(decoded) ~= "table" then
+        return false, "卡密服务器返回了无效数据"
+    end
+
+    local valid = decoded.success == true
+    local message = tostring(decoded.message or (valid and "云端验证通过" or "卡密无效"))
+
+    if not valid and decoded.success == false then
+        clearSavedKey()
+    end
+
+    return valid, message
+end
+
+WindUI.Services.xiaolincloud = {
+    Name = "云端卡密",
+    Icon = "key",
+    Args = {},
+    New = function()
+        return {
+            Verify = verifyCloudKey,
+            Copy = function()
+                local clipboard = setclipboard or toclipboard
+                if clipboard and KEY_PAGE_URL ~= "" then
+                    pcall(clipboard, KEY_PAGE_URL)
+                end
+            end,
+        }
+    end,
+}
+
+local LUSTRE_ICON_URL = "https://lucide.dev/framework-logos/lustre.webp"
+local LUSTRE_ICON_FILE = "LiquidGlass_Lustre.webp"
+
+local function loadLustreIcon()
+    local assetLoader = getcustomasset or getsynasset
+    if assetLoader and writefile and isfile then
+        pcall(function()
+            if not isfile(LUSTRE_ICON_FILE) then
+                writefile(LUSTRE_ICON_FILE, game:HttpGet(LUSTRE_ICON_URL))
+            end
+        end)
+        local ok, asset = pcall(assetLoader, LUSTRE_ICON_FILE)
+        if ok and type(asset) == "string" and asset ~= "" then
+            return asset
         end
     end
-    return false, "无法连接卡密服务器，请稍后再试"
+
+    -- 不支持本地自定义资源的执行器使用稳定的 WindUI 图标作为回退。
+    return "solar:widget-5-bold-duotone"
 end
 
--- 获取在线脚本玩家
-local function GetScriptOnlineUsers()
-    local requestData = { Url = ONLINE_URL, Method = "GET" }
-    local success, responseBody = SafeHttpRequest(requestData)
+local LUSTRE_ICON = loadLustreIcon()
 
-    if success then
-        local jsonOk, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
-        if jsonOk and decoded and decoded.users and #decoded.users > 0 then
-            return decoded.users
-        end
-    end
+WindUI:AddTheme({
+    Name = "LiquidGold",
 
-    return { "当前无在线脚本玩家" }
-end
+    -- 核心主题颜色
+    Accent = Color3.fromHex("#FFD700"),
+    Background = Color3.fromHex("#090909"),
+    BackgroundTransparency = 0,
+    Dialog = Color3.fromHex("#181818"),
+    Outline = Color3.fromHex("#333333"),
+    Text = Color3.fromHex("#FFFFFF"),
+    Placeholder = Color3.fromHex("#AAAAAA"),
+    Button = Color3.fromHex("#3A2F00"),
+    Icon = Color3.fromHex("#FFD700"),
+    Hover = Color3.fromHex("#2A2A2A"),
+    White = Color3.fromHex("#FFFFFF"),
 
--- 获取已拉黑黑名单玩家
-local function GetBannedUsers()
-    local requestData = { Url = BANNED_URL, Method = "GET" }
-    local success, responseBody = SafeHttpRequest(requestData)
+    -- 窗口和亚克力
+    AcrylicMain = Color3.fromHex("#090909"),
+    AcrylicNoise = 0.88,
+    WindowBackground = Color3.fromHex("#090909"),
+    WindowShadow = Color3.fromHex("#000000"),
+    WindowSearchBarBackground = Color3.fromHex("#181818"),
+    SearchBarBorder = Color3.fromHex("#333333"),
+    SearchBarBorderTransparency = 0.35,
+    WindowTopbarButtonIcon = Color3.fromHex("#FFD700"),
+    WindowTopbarTitle = Color3.fromHex("#FFFFFF"),
+    WindowTopbarAuthor = Color3.fromHex("#AAAAAA"),
+    WindowTopbarIcon = Color3.fromHex("#FFD700"),
 
-    if success then
-        local jsonOk, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
-        if jsonOk and decoded and decoded.users and #decoded.users > 0 then
-            return decoded.users
-        end
-    end
+    -- 面板、标签和元素
+    PanelBackground = Color3.fromHex("#181818"),
+    PanelBackgroundTransparency = 0.2,
+    LabelBackground = Color3.fromHex("#181818"),
+    LabelBackgroundTransparency = 0.2,
+    TabBackground = Color3.fromHex("#121212"),
+    TabBackgroundHover = Color3.fromHex("#2A2A2A"),
+    TabBackgroundHoverTransparency = 0.05,
+    TabBackgroundActive = Color3.fromHex("#3A2F00"),
+    TabBackgroundActiveTransparency = 0.05,
+    TabBorder = Color3.fromHex("#665500"),
+    TabBorderTransparency = 0.35,
+    TabTitle = Color3.fromHex("#FFFFFF"),
+    TabIcon = Color3.fromHex("#FFD700"),
+    TabTextTransparency = 0,
+    TabIconTransparency = 0,
+    ElementBackground = Color3.fromHex("#181818"),
+    ElementBackgroundTransparency = 0.2,
+    ElementTitle = Color3.fromHex("#FFFFFF"),
+    ElementDesc = Color3.fromHex("#AAAAAA"),
+    DescTextTransparency = 0,
+    ElementIcon = Color3.fromHex("#FFD700"),
 
-    return { "暂无黑名单玩家" }
-end
+    -- 下拉框、复选框和开关
+    DropdownTabBackground = Color3.fromHex("#2A2A2A"),
+    DropdownTabBorder = Color3.fromHex("#665500"),
+    DropdownBackground = Color3.fromHex("#181818"),
+    Toggle = Color3.fromHex("#FFD700"),
+    ToggleBar = Color3.fromHex("#FFFFFF"),
+    ToggleTransparency = 0,
+    Checkbox = Color3.fromHex("#FFD700"),
+    CheckboxIcon = Color3.fromHex("#FFFFFF"),
+    CheckboxBorder = Color3.fromHex("#665500"),
+    CheckboxBorderTransparency = 0.25,
+    Primary = Color3.fromHex("#FFD700"),
 
--- 管理员远程踢人请求
-local function RequestKickScriptUser(adminKey, targetUsername)
-    if not targetUsername or targetUsername == "" or targetUsername == "当前无在线脚本玩家" then
-        return false, "请选择有效的在线脚本玩家Username！"
-    end
+    -- 滑块
+    Slider = Color3.fromHex("#FFD700"),
+    SliderThumb = Color3.fromHex("#FFFFFF"),
+    SliderIcon = Color3.fromHex("#FFFFFF"),
 
-    local payload = {
-        adminKey = adminKey,
-        targetUser = targetUsername:match("^%s*(.-)%s*$"),
-        secret = AUTH_SECRET
-    }
-    
-    local requestData = {
-        Url = KICK_URL,
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = HttpService:JSONEncode(payload)
-    }
-    
-    local success, responseBody = SafeHttpRequest(requestData)
-    if success then
-        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
-        if jsonSuccess and decoded then
-            return decoded.success, decoded.message
-        end
-    end
-    return false, "请求失败或服务器无响应"
-end
+    -- 对话框
+    DialogBackground = Color3.fromHex("#181818"),
+    DialogBackgroundTransparency = 0.05,
+    DialogTitle = Color3.fromHex("#FFFFFF"),
+    DialogContent = Color3.fromHex("#AAAAAA"),
+    DialogIcon = Color3.fromHex("#FFD700"),
 
--- 管理员远程解封请求
-local function RequestUnbanUser(adminKey, targetUsername)
-    if not targetUsername or targetUsername == "" or targetUsername == "暂无黑名单玩家" then
-        return false, "请选择有效的黑名单玩家Username！"
-    end
+    -- 弹出窗口
+    PopupBackground = Color3.fromHex("#181818"),
+    PopupBackgroundTransparency = 0.05,
+    PopupTitle = Color3.fromHex("#FFFFFF"),
+    PopupContent = Color3.fromHex("#AAAAAA"),
+    PopupIcon = Color3.fromHex("#FFD700"),
 
-    local payload = {
-        adminKey = adminKey,
-        targetUser = targetUsername:match("^%s*(.-)%s*$"),
-        secret = AUTH_SECRET
-    }
-    
-    local requestData = {
-        Url = UNBAN_URL,
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = HttpService:JSONEncode(payload)
-    }
-    
-    local success, responseBody = SafeHttpRequest(requestData)
-    if success then
-        local jsonSuccess, decoded = pcall(function() return HttpService:JSONDecode(responseBody) end)
-        if jsonSuccess and decoded then
-            return decoded.success, decoded.message
-        end
-    end
-    return false, "请求失败或服务器无响应"
-end
+    -- 通知
+    Notification = Color3.fromHex("#181818"),
+    Notification2 = Color3.fromHex("#2A2A2A"),
+    Notification2Transparency = 0.05,
+    NotificationTitle = Color3.fromHex("#FFFFFF"),
+    NotificationTitleTransparency = 0,
+    NotificationContent = Color3.fromHex("#AAAAAA"),
+    NotificationContentTransparency = 0,
+    NotificationDuration = Color3.fromHex("#FFD700"),
+    NotificationDurationTransparency = 0,
 
-local function getSavedKey()
-    if isfile and isfile(SAVE_FILE_NAME) then 
-        local content = readfile(SAVE_FILE_NAME)
-        return content and content:match("^%s*(.-)%s*$")
-    end
-    return nil
-end
+    -- 进度条
+    ProgressBar = Color3.fromHex("#FFD700"),
+    ProgressBarText = Color3.fromHex("#FFFFFF"),
+    ProgressBarTrack = Color3.fromHex("#333333"),
+    ProgressBarTrackTransparency = 0.25,
 
-local function saveKeyLocally(key)
-    if writefile then writefile(SAVE_FILE_NAME, key) end
-end
+    -- Section 折叠区域
+    SectionBoxBackground = Color3.fromHex("#181818"),
+    SectionBoxTransparency = 0.2,
+    SectionBoxBackgroundTransparency = 0.2,
+    SectionBoxBorder = Color3.fromHex("#333333"),
+    SectionBoxBorderTransparency = 0.25,
+    SectionExpandIcon = Color3.fromHex("#FFD700"),
+    SectionExpandIconTransparency = 0,
 
--- 加载 Rayfield UI 库
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+    -- Tooltip
+    Tooltip = Color3.fromHex("#181818"),
+    TooltipText = Color3.fromHex("#FFFFFF"),
+    TooltipSmall = Color3.fromHex("#181818"),
+    TooltipSmallText = Color3.fromHex("#FFFFFF"),
+    TooltipDark = Color3.fromHex("#181818"),
+    TooltipDarkText = Color3.fromHex("#FFFFFF"),
+    TooltipLight = Color3.fromHex("#2A2A2A"),
+    TooltipLightText = Color3.fromHex("#FFFFFF"),
 
-local Window = Rayfield:CreateWindow({
-   Name = "小林 UI 主菜单",
-   LoadingTitle = "Rayfield 脚本加载中",
-   LoadingSubtitle = "by 小林",
-   Theme = "Bloom",
-   ToggleKey = Enum.KeyCode.RightControl, 
-   DisableBuildWarnings = true,           
-   DisableRayfieldPrompts = false,
+    -- Viewport
+    ViewportBackground = Color3.fromHex("#090909"),
+    ViewportBackgroundTransparency = 0,
 })
 
+local ServerScripts = {
+    {
+        Name = "最强战场",
+        Icon = "solar:bolt-bold-duotone",
+        Scripts = {
+            {Name = "执行自动农场", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"},
+            {Name = "TSB 脚本 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"},
+            {Name = "TSB 脚本 2", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"},
+        },
+    },
+    {
+        Name = "学乱",
+        Icon = "solar:book-bold-duotone",
+        Scripts = {
+            {Name = "学乱 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"},
+
+            {Name = "学乱 3", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"},
+        },
+    },
+}
+
 local function SafeExecute(scriptName, url)
-    Rayfield:Notify({Title = "正在加载", Content = "正在获取 " .. scriptName .. "，请稍候...", Duration = 3, Image = "code"})
+    WindUI:Notify({
+        Title = "正在加载",
+        Content = "正在获取 " .. scriptName .. "，请稍候...",
+        Duration = 3,
+    })
+
     task.spawn(function()
-        local success, err = pcall(function() loadstring(game:HttpGet(url))() end)
-        if success then
-            Rayfield:Notify({Title = "执行成功", Content = scriptName .. " 已成功运行！", Duration = 4, Image = "check"})
+        local ok, err = pcall(function()
+            local source = game:HttpGet(url)
+            local chunk = loadstring(source)
+            assert(type(chunk) == "function", "远程内容无法编译")
+            chunk()
+        end)
+
+        if ok then
+            WindUI:Notify({
+                Title = "执行成功",
+                Content = scriptName .. " 已成功运行",
+                Duration = 4,
+            })
         else
-            Rayfield:Notify({Title = "执行失败", Content = scriptName .. " 运行出错: " .. tostring(err), Duration = 6, Image = "alert-triangle"})
-            warn("[" .. scriptName .. "] 执行失败: " .. tostring(err))
+            WindUI:Notify({
+                Title = "执行失败",
+                Content = scriptName .. "：" .. tostring(err),
+                Duration = 6,
+            })
+            warn("[" .. scriptName .. "] " .. tostring(err))
         end
     end)
 end
 
--- 组装所有选项卡
-local function BuildMainTabs(isAdminUser, currentAdminKey)
-    Rayfield:Notify({
-        Title = "欢迎使用",
-        Content = isAdminUser and "已登录管理员账户！黑名单/在线管控已就绪。" or "小林 UI 已成功加载！按 [RightControl] 隐藏/显示界面。",
-        Duration = 5,
-        Image = isAdminUser and "shield-check" or "bell"
-    })
+local Window = WindUI:CreateWindow({
+    Title = "XL Hub",
+    Icon = LUSTRE_ICON,
+    Author = "Modern UI",
+    Theme = "LiquidGold",
+    Folder = KEY_FOLDER,
+    KeySystem = {
+        SaveKey = true,
+        API = {
+            {
+                Type = "xiaolincloud",
+            },
+        },
+    },
+    Transparent = true,
+    Acrylic = true,
+    NewElements = true,
+    Size = UDim2.fromOffset(560, 430),
+    MinSize = Vector2.new(420, 300),
+    MaxSize = Vector2.new(900, 650),
+    Resizable = true,
+    AutoScale = true,
+    SideBarWidth = 180,
+    HideSearchBar = false,
+    ScrollBarEnabled = true,
+    OpenButton = {
+        Title = "XL",
+        Icon = LUSTRE_ICON,
+        CornerRadius = UDim.new(1, 0),
+        StrokeThickness = 4,
+        Enabled = true,
+        Draggable = true,
+        OnlyMobile = true,
+        Scale = 0.85,
+        -- 静态金色边框，不使用跑马灯动画。
+        Color = ColorSequence.new(
+            Color3.fromRGB(255, 215, 0),
+            Color3.fromRGB(255, 215, 0)
+        ),
+    },
+    Topbar = {
+        Height = 40,
+        ButtonsType = "Mac",
+    },
+})
 
-    -- =========================================================
-    -- 🛡️ 管理员后台 (踢人 + 解封)
-    -- =========================================================
-    if isAdminUser then
-        local AdminTab = Window:CreateTab("管理后台", "shield-alert")
-        
-        ---------------------------------------------------------
-        -- 区块 1：踢出在线挂脚本玩家
-        ---------------------------------------------------------
-        AdminTab:CreateSection("🚨 踢出在线挂脚本玩家")
+Window:EditOpenButton({
+    Icon = LUSTRE_ICON,
+    Title = "Liquid Glass",
+})
 
-        local selectedKickUser = ""
-        local onlineUsersList = GetScriptOnlineUsers()
+local VersionTag = Window:Tag({
+    Title = "Beta",
+    Icon = "solar:star-bold-duotone",
+    Color = Color3.fromHex("#FFD700"),
+    Border = true,
+})
 
-        local OnlineDropdown = AdminTab:CreateDropdown({
-           Name = "正在挂脚本的在线玩家列表",
-           Options = onlineUsersList,
-           CurrentOption = {onlineUsersList[1] or ""},
-           MultipleOptions = false,
-           Flag = "OnlineDropdownFlag",
-           Callback = function(Option)
-              local chosen = type(Option) == "table" and Option[1] or Option
-              selectedKickUser = chosen
-           end,
-        })
+--==================================================
+-- 大窗口与缩小悬浮窗共享的动态颜色控制器
+--==================================================
 
-        AdminTab:CreateButton({
-           Name = "🔄 刷新在线脚本玩家",
-           Callback = function()
-              local newList = GetScriptOnlineUsers()
-              if OnlineDropdown and OnlineDropdown.Set then OnlineDropdown:Set(newList) end
-              Rayfield:Notify({Title = "刷新完成", Content = "发现 " .. tostring(#newList) .. " 名挂脚本玩家", Duration = 2})
-           end,
-        })
+local RunService = game:GetService("RunService")
+local BaseTheme = WindUI:GetThemes().LiquidGold or {}
+local DynamicPalettes = {
+    {Name = "DynamicGold", Color = Color3.fromRGB(255, 215, 0)},
+    {Name = "DynamicRose", Color = Color3.fromRGB(255, 120, 165)},
+    {Name = "DynamicRed", Color = Color3.fromRGB(255, 75, 75)},
+    {Name = "DynamicViolet", Color = Color3.fromRGB(175, 125, 255)},
+    {Name = "DynamicBlue", Color = Color3.fromRGB(95, 195, 255)},
+    {Name = "DynamicGoldEnd", Color = Color3.fromRGB(255, 215, 0)},
+}
 
-        AdminTab:CreateButton({
-           Name = "🚨 踢出并拉黑选中的在线玩家",
-           Callback = function()
-              if selectedKickUser == "" or selectedKickUser == "当前无在线脚本玩家" then
-                 Rayfield:Notify({Title = "不可用", Content = "请选择一个有效玩家！", Duration = 3})
-                 return
-              end
-
-              task.spawn(function()
-                 local isOk, msg = RequestKickScriptUser(currentAdminKey or "XLKEY-ADMIN888", selectedKickUser)
-                 if isOk then
-                    Rayfield:Notify({Title = "成功", Content = msg, Duration = 5, Image = "user-x"})
-                    task.wait(1)
-                    local newList = GetScriptOnlineUsers()
-                    if OnlineDropdown and OnlineDropdown.Set then OnlineDropdown:Set(newList) end
-                 else
-                    Rayfield:Notify({Title = "失败", Content = msg, Duration = 4, Image = "x-circle"})
-                 end
-              end)
-           end,
-        })
-
-        ---------------------------------------------------------
-        -- 区块 2：解封黑名单玩家
-        ---------------------------------------------------------
-        AdminTab:CreateSection("🔓 解封黑名单玩家")
-
-        local selectedUnbanUser = ""
-        local bannedUsersList = GetBannedUsers()
-
-        local BannedDropdown = AdminTab:CreateDropdown({
-           Name = "已被拉黑的玩家列表",
-           Options = bannedUsersList,
-           CurrentOption = {bannedUsersList[1] or ""},
-           MultipleOptions = false,
-           Flag = "BannedDropdownFlag",
-           Callback = function(Option)
-              local chosen = type(Option) == "table" and Option[1] or Option
-              selectedUnbanUser = chosen
-           end,
-        })
-
-        AdminTab:CreateButton({
-           Name = "🔄 刷新黑名单列表",
-           Callback = function()
-              local newList = GetBannedUsers()
-              if BannedDropdown and BannedDropdown.Set then BannedDropdown:Set(newList) end
-              Rayfield:Notify({Title = "刷新完成", Content = "黑名单中共有 " .. tostring(#newList) .. " 名玩家", Duration = 2})
-           end,
-        })
-
-        AdminTab:CreateInput({
-           Name = "或手动输入要解封的 Roblox Username",
-           PlaceholderText = "输入完整用户名",
-           RemoveTextOnFocus = false,
-           Callback = function(Text)
-              selectedUnbanUser = Text
-           end,
-        })
-
-        AdminTab:CreateButton({
-           Name = "✅ 确认解封该玩家",
-           Callback = function()
-              if selectedUnbanUser == "" or selectedUnbanUser == "暂无黑名单玩家" then
-                 Rayfield:Notify({Title = "无法解封", Content = "请选择或输入要解封的 Username！", Duration = 3})
-                 return
-              end
-
-              task.spawn(function()
-                 local isOk, msg = RequestUnbanUser(currentAdminKey or "XLKEY-ADMIN888", selectedUnbanUser)
-                 if isOk then
-                    Rayfield:Notify({Title = "解封成功", Content = "玩家 [" .. selectedUnbanUser .. "] 已恢复使用权限！", Duration = 5, Image = "user-check"})
-                    task.wait(1)
-                    local newList = GetBannedUsers()
-                    if BannedDropdown and BannedDropdown.Set then BannedDropdown:Set(newList) end
-                 else
-                    Rayfield:Notify({Title = "解封失败", Content = msg, Duration = 4, Image = "x-circle"})
-                 end
-              end)
-           end,
-        })
+local function copyTheme(themeName, accent)
+    local theme = {}
+    for key, value in pairs(BaseTheme) do
+        theme[key] = value
     end
 
-    ---------------------------------------------------------
-    -- 1. 关于 页面
-    ---------------------------------------------------------
-    local AboutTab = Window:CreateTab("关于", "info")
-    AboutTab:CreateSection("脚本说明")
-    AboutTab:CreateParagraph({
-       Title = "脚本介绍",
-       Content = "这是一个免费的不存在任何付费\n小林感谢所有的用户\n谢谢你们的支持"
-    })
-    AboutTab:CreateParagraph({
-       Title = "按键提示",
-       Content = "快捷键: RightControl (右 Ctrl 键)\n点击即可隐藏或重新呼出菜单界面"
-    })
+    theme.Name = themeName
+    theme.Accent = accent
+    theme.Icon = accent
+    theme.Toggle = accent
+    theme.Checkbox = accent
+    theme.Primary = accent
+    theme.Slider = accent
+    theme.ElementIcon = accent
+    theme.TabIcon = accent
+    theme.SectionExpandIcon = accent
+    theme.DialogIcon = accent
+    theme.PopupIcon = accent
+    theme.NotificationDuration = accent
+    theme.ProgressBar = accent
+    theme.TabBackgroundActive = accent:Lerp(Color3.fromRGB(20, 20, 20), 0.72)
+    theme.TabBorder = accent:Lerp(Color3.fromRGB(20, 20, 20), 0.55)
+    theme.Button = accent:Lerp(Color3.fromRGB(15, 15, 15), 0.78)
+    theme.WindowTopbarButtonIcon = accent
+    theme.WindowTopbarIcon = accent
 
-    ---------------------------------------------------------
-    -- 2. 通用 页面
-    ---------------------------------------------------------
-    local UniversalTab = Window:CreateTab("通用", "globe")
-    UniversalTab:CreateSection("通用 脚本列表")
-    UniversalTab:CreateButton({
-       Name = "多方向吸附",
-       Callback = function()
-          SafeExecute("多方向吸附", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84")
-       end,
-    })
+    return theme
+end
 
-    ---------------------------------------------------------
-    -- 3. 最强战场 页面
-    ---------------------------------------------------------
-    local TSBTab = Window:CreateTab("最强战场", 4370060017)
-    TSBTab:CreateSection("最强战场 脚本列表")
-    
-    TSBTab:CreateButton({
-       Name = "执行自动农场",
-       Callback = function()
-          SafeExecute("TSB 自动农场", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt")
-       end,
-    })
+for _, palette in ipairs(DynamicPalettes) do
+    WindUI:AddTheme(copyTheme(palette.Name, palette.Color))
+end
 
-    TSBTab:CreateButton({
-       Name = "TSB脚本 1",
-       Callback = function()
-          SafeExecute("TSB 脚本 1", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201")
-       end,
-    })
+local function getOpenButtonTitleLabel()
+    local openButtonMain = Window.OpenButtonMain
+    local textButton = openButtonMain and openButtonMain.Button and openButtonMain.Button.TextButton
+    return textButton and textButton:FindFirstChildWhichIsA("TextLabel", true)
+end
 
-    TSBTab:CreateButton({
-       Name = "TSB脚本 2",
-       Callback = function()
-          SafeExecute("TSB 脚本 2", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202")
-       end,
-    })
+local function syncSmallWindowColor(color)
+    pcall(function()
+        -- 官方 EditOpenButton 的 Color 会同步更新悬浮窗边框和发光层。
+        Window:EditOpenButton({
+            Color = ColorSequence.new(color, color),
+        })
 
-    ---------------------------------------------------------
-    -- 4. 学乱 页面
-    ---------------------------------------------------------
-    local SchoolTab = Window:CreateTab("学乱", 4483362458)
-    SchoolTab:CreateSection("学乱 汉化脚本列表")
-    
-    SchoolTab:CreateButton({
-       Name = "学乱1",
-       Callback = function()
-          SafeExecute("学乱 1", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt")
-       end,
-    })
+        local titleLabel = getOpenButtonTitleLabel()
+        if titleLabel then
+            titleLabel.TextColor3 = color
+            titleLabel.TextStrokeColor3 = Color3.fromRGB(10, 10, 10)
+            titleLabel.TextStrokeTransparency = 0.35
+        end
+    end)
+end
 
-    SchoolTab:CreateButton({
-       Name = "学乱2",
-       Callback = function()
-          SafeExecute("学乱 2", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/学乱汉化1.txt")
-       end,
-    })
-
-    SchoolTab:CreateButton({
-       Name = "学乱3",
-       Callback = function()
-          SafeExecute("学乱 3", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua")
-       end,
-    })
-
-    ---------------------------------------------------------
-    -- 5. 设置 页面
-    ---------------------------------------------------------
-    local SettingsTab = Window:CreateTab("设置", "settings")
-    SettingsTab:CreateSection("主题与外观")
-    SettingsTab:CreateDropdown({
-       Name = "选择UI主题配色",
-       Options = {"Bloom", "Default", "AmberGlow", "Amethyst", "DarkBlue", "Green", "Light", "Ocean", "Serenity"},
-       CurrentOption = {"Bloom"},
-       MultipleOptions = false,
-       Flag = "ThemeDropdown",
-       Callback = function(Option)
-          local selectedTheme = type(Option) == "table" and Option[1] or Option
-          if Rayfield and Rayfield.ChangeTheme then
-             Rayfield:ChangeTheme(selectedTheme)
-             Rayfield:Notify({
-                Title = "主题已更换",
-                Content = "外观配色已切换为: " .. tostring(selectedTheme),
-                Duration = 3,
-                Image = "palette"
-             })
-          end
-       end,
-    })
-
-    SettingsTab:CreateSection("系统设置")
-    SettingsTab:CreateKeybind({
-       Name = "UI显示快捷键",
-       CurrentKeybind = "RightControl",
-       HoldToInteract = false,
-       Flag = "UIKeybind",
-       Callback = function(Keybind)
-          local keyEnum = typeof(Keybind) == "EnumItem" and Keybind or Enum.KeyCode[Keybind]
-          if keyEnum then
-             Rayfield.ToggleKey = keyEnum
-             Rayfield:Notify({
-                Title = "快捷键设置成功",
-                Content = "快捷键已更改，随时可重新按键呼出！",
-                Duration = 3,
-                Image = "key"
-             })
-          end
-       end,
-    })
-
-    SettingsTab:CreateButton({
-       Name = "销毁脚本界面",
-       Callback = function()
-          Rayfield:Destroy()
-       end,
-    })
-
-    -- 🛡️ 极轻量远程 Kick 拦截循环（不查卡密、不出错、不卡顿）
-    if not isAdminUser then
-        task.spawn(function()
-            local savedKey = getSavedKey() or "TEMP_KEY"
-            while task.wait(45) do -- 每 45 秒静默检测一次
-                local isOk, msg = VerifyKeyWithServer(savedKey)
-                -- 只有当服务器“百分百确定”返回黑名单拦截时才踢出！
-                if not isOk and msg and (msg:find("黑名单") or msg:find("拦截")) then
-                    pcall(function() Rayfield:Destroy() end)
-                    LocalPlayer:Kick("【安全拦截】您已被管理员强行踢出游戏！原因: " .. tostring(msg))
-                    break
-                end
-                -- 网络超时或连接失败时，静默忽略，绝不误踢！
-            end
-        end)
+local dynamicIndex = 1
+local lastDynamicTheme = "LiquidGold"
+local function syncLargeWindowColor(palette)
+    local applied = WindUI:SetTheme(palette.Name)
+    if applied then
+        lastDynamicTheme = palette.Name
+        syncSmallWindowColor(palette.Color)
     end
 end
 
--- =========================================================
--- 自动登录与入口校验
--- =========================================================
-local savedKey = getSavedKey()
-local autoPassed = false
-local isAdminLogin = false
+-- 默认先使用金色，再以中等速度同步切换大窗口主题与小窗口颜色。
+syncSmallWindowColor(DynamicPalettes[1].Color)
+task.spawn(function()
+    task.wait(1.2)
+    while Window and not Window.Destroyed do
+        local palette = DynamicPalettes[dynamicIndex]
+        syncLargeWindowColor(palette)
+        dynamicIndex = dynamicIndex + 1
+        if dynamicIndex > #DynamicPalettes then
+            dynamicIndex = 1
+        end
+        task.wait(1.2)
+    end
+end)
 
-if savedKey then
-    if isLocalAdminKey(savedKey) then
-        autoPassed = true
-        isAdminLogin = true
+-- 固定标签顺序：首页在最上面，通用紧随其后。
+local HomeTab = Window:Tab({
+    Title = "首页",
+    Icon = "solar:home-2-bold-duotone",
+})
+
+HomeTab:Section({
+    Title = "首页",
+})
+
+HomeTab:Paragraph({
+    Title = "欢迎使用",
+    Desc = "该脚本仍处于测试阶段，会有很多不稳定因素 会收集更多的脚本并加入",
+})
+
+local GeneralTab = Window:Tab({
+    Title = "通用",
+    Icon = "solar:widget-5-bold-duotone",
+})
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local GeneralState = {
+    SpeedEnabled = false,
+    SpeedValue = 32,
+    InfiniteJumpEnabled = false,
+    JumpPowerValue = 50,
+    CompatibilityEnabled = false,
+    JumpConnection = nil,
+    CharacterConnection = nil,
+    OriginalWalkSpeed = nil,
+    OriginalJumpPower = nil,
+    OriginalUseJumpPower = nil,
+}
+
+local function getLocalHumanoid()
+    local character = LocalPlayer and LocalPlayer.Character
+    return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function applyGeneralMovement()
+    local humanoid = getLocalHumanoid()
+    if not humanoid then
+        return
+    end
+
+    if GeneralState.OriginalWalkSpeed == nil then
+        GeneralState.OriginalWalkSpeed = humanoid.WalkSpeed
+    end
+    if GeneralState.OriginalJumpPower == nil then
+        GeneralState.OriginalJumpPower = humanoid.JumpPower
+    end
+    if GeneralState.OriginalUseJumpPower == nil then
+        GeneralState.OriginalUseJumpPower = humanoid.UseJumpPower
+    end
+
+    if GeneralState.SpeedEnabled then
+        humanoid.WalkSpeed = GeneralState.SpeedValue
+    elseif GeneralState.OriginalWalkSpeed ~= nil then
+        humanoid.WalkSpeed = GeneralState.OriginalWalkSpeed
+    end
+
+    if GeneralState.InfiniteJumpEnabled then
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = GeneralState.JumpPowerValue
     else
-        local isOk, msg = VerifyKeyWithServer(savedKey)
-        if isOk then
-            autoPassed = true
+        humanoid.JumpPower = GeneralState.OriginalJumpPower
+        humanoid.UseJumpPower = GeneralState.OriginalUseJumpPower
+    end
+end
+
+local function setInfiniteJumpEnabled(enabled)
+    GeneralState.InfiniteJumpEnabled = enabled
+    if GeneralState.JumpConnection then
+        GeneralState.JumpConnection:Disconnect()
+        GeneralState.JumpConnection = nil
+    end
+
+    if enabled then
+        GeneralState.JumpConnection = UserInputService.JumpRequest:Connect(function()
+            local humanoid = getLocalHumanoid()
+            if humanoid and humanoid.Health > 0 then
+                humanoid.JumpPower = GeneralState.JumpPowerValue
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+    end
+
+    applyGeneralMovement()
+end
+
+local function setCompatibilityProtectionEnabled(enabled)
+    GeneralState.CompatibilityEnabled = enabled
+    if GeneralState.CharacterConnection then
+        GeneralState.CharacterConnection:Disconnect()
+        GeneralState.CharacterConnection = nil
+    end
+
+    if enabled then
+        -- 安全兼容保护：仅在重生后重新应用本地设置，不禁用校验、不拦截远程。
+        GeneralState.CharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
+            character:WaitForChild("Humanoid", 5)
+            task.wait(0.15)
+            applyGeneralMovement()
+        end)
+        applyGeneralMovement()
+    end
+end
+
+GeneralTab:Section({
+    Title = "速度与跳跃",
+})
+
+GeneralTab:Toggle({
+    Title = "速度增强",
+    Desc = "开启后持续应用移动速度",
+    Icon = "solar:bolt-bold-duotone",
+    Value = false,
+    Callback = function(value)
+        GeneralState.SpeedEnabled = value
+        applyGeneralMovement()
+    end,
+})
+
+GeneralTab:Button({
+    Title = "关闭速度增强",
+    Desc = "恢复开启前的 WalkSpeed",
+    Icon = "solar:restart-bold-duotone",
+    Callback = function()
+        GeneralState.SpeedEnabled = false
+        applyGeneralMovement()
+    end,
+})
+
+GeneralTab:Slider({
+    Title = "移动速度",
+    Desc = "调整 WalkSpeed 数值",
+    Icon = "solar:running-bold-duotone",
+    Step = 1,
+    Value = {
+        Min = 16,
+        Max = 500,
+        Default = 32,
+    },
+    Callback = function(value)
+        GeneralState.SpeedValue = tonumber(value) or 32
+        applyGeneralMovement()
+    end,
+})
+
+GeneralTab:Toggle({
+    Title = "无限跳跃",
+    Desc = "允许在空中继续触发跳跃",
+    Icon = "solar:arrow-up-bold-duotone",
+    Value = false,
+    Callback = setInfiniteJumpEnabled,
+})
+
+GeneralTab:Button({
+    Title = "关闭无限跳跃",
+    Desc = "断开 JumpRequest 并恢复原跳跃设置",
+    Icon = "solar:restart-bold-duotone",
+    Callback = function()
+        setInfiniteJumpEnabled(false)
+    end,
+})
+
+GeneralTab:Slider({
+    Title = "跳跃高度",
+    Desc = "调整 JumpPower 数值",
+    Icon = "solar:arrow-up-bold-duotone",
+    Step = 1,
+    Value = {
+        Min = 25,
+        Max = 250,
+        Default = 50,
+    },
+    Callback = function(value)
+        GeneralState.JumpPowerValue = tonumber(value) or 50
+        applyGeneralMovement()
+    end,
+})
+
+GeneralTab:Toggle({
+    Title = "基础兼容保护",
+    Desc = "重生后恢复本地速度和跳跃设置，不修改远程调用",
+    Icon = "solar:shield-check-bold-duotone",
+    Value = false,
+    Callback = setCompatibilityProtectionEnabled,
+})
+
+--==================================================
+-- 移位锁与飞行功能
+-- 直接使用 WindUI 控件，不创建附件中的旧版独立 ScreenGui。
+--==================================================
+
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local ShiftLockState = {
+    Enabled = false,
+    Connection = nil,
+}
+
+local FlightState = {
+    Enabled = false,
+    Speed = 50,
+    Connection = nil,
+    Attachment = nil,
+    LinearVelocity = nil,
+    AlignOrientation = nil,
+}
+
+local function getCharacterParts()
+    local character = LocalPlayer.Character
+    if not character then
+        return nil, nil, nil
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart")
+    return character, humanoid, root
+end
+
+local function disableShiftLock()
+    ShiftLockState.Enabled = false
+    if ShiftLockState.Connection then
+        ShiftLockState.Connection:Disconnect()
+        ShiftLockState.Connection = nil
+    end
+
+    local _, humanoid = getCharacterParts()
+    if humanoid then
+        humanoid.AutoRotate = true
+        humanoid.CameraOffset = Vector3.zero
+    end
+end
+
+local function enableShiftLock()
+    disableShiftLock()
+    ShiftLockState.Enabled = true
+
+    ShiftLockState.Connection = RunService.RenderStepped:Connect(function()
+        local _, humanoid, root = getCharacterParts()
+        local camera = workspace.CurrentCamera
+        if not humanoid or not root or not camera then
+            return
+        end
+
+        local look = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        if look.Magnitude > 0 then
+            humanoid.AutoRotate = false
+            humanoid.CameraOffset = Vector3.new(1.7, 0, 0)
+            root.CFrame = CFrame.lookAt(root.Position, root.Position + look.Unit)
+        end
+    end)
+end
+
+local function setShiftLockEnabled(enabled)
+    if enabled then
+        enableShiftLock()
+    else
+        disableShiftLock()
+    end
+end
+
+local function destroyFlightObjects()
+    if FlightState.Connection then
+        FlightState.Connection:Disconnect()
+        FlightState.Connection = nil
+    end
+    for _, objectName in ipairs({"LinearVelocity", "AlignOrientation", "Attachment"}) do
+        local object = FlightState[objectName]
+        if object then
+            object:Destroy()
+            FlightState[objectName] = nil
         end
     end
 end
 
-if autoPassed then
-    Rayfield:Notify({ Title = "自动登录成功", Content = "密钥通过，加载界面...", Duration = 3 })
-    BuildMainTabs(isAdminLogin, savedKey)
-else
-    local AuthTab = Window:CreateTab("卡密验证", "key")
-    AuthTab:CreateSection("请输入云端卡密以解锁主菜单")
-
-    local userEnteredKey = ""
-
-    AuthTab:CreateInput({
-       Name = "卡密输入框",
-       PlaceholderText = "输入卡密（或管理员专属卡密）",
-       RemoveTextOnFocus = false,
-       Callback = function(Text)
-          userEnteredKey = Text
-       end,
-    })
-
-    AuthTab:CreateButton({
-       Name = "提交云端验证",
-       Callback = function()
-          Rayfield:Notify({ Title = "正在验证", Content = "正在比对卡密，请稍候...", Duration = 3 })
-          
-          task.spawn(function()
-             local cleanKey = userEnteredKey:match("^%s*(.-)%s*$")
-             local isAdmin = isLocalAdminKey(cleanKey)
-
-             local isSuccess, message
-             if isAdmin then
-                 isSuccess = true
-                 message = "管理员登录成功"
-             else
-                 isSuccess, message = VerifyKeyWithServer(cleanKey)
-             end
-
-             if isSuccess then
-                saveKeyLocally(cleanKey)
-                Rayfield:Notify({
-                   Title = "验证成功",
-                   Content = isAdmin and "解锁管理员专属特权后台！" or "登录成功！正在装载界面...",
-                   Duration = 4,
-                })
-                
-                BuildMainTabs(isAdmin, cleanKey)
-                
-                task.defer(function()
-                   pcall(function()
-                      if AuthTab and AuthTab.Destroy then
-                         AuthTab:Destroy()
-                      end
-                   end)
-                end)
-             else
-                Rayfield:Notify({
-                   Title = "验证失败",
-                   Content = message or "卡密错误！",
-                   Duration = 5,
-                })
-             end
-          end)
-       end,
-    })
-
-    AuthTab:CreateParagraph({
-       Title = "获取卡密",
-       Content = "官方加群获取卡密 QQ群: 1038531272"
-    })
+local function disableFlight()
+    FlightState.Enabled = false
+    destroyFlightObjects()
+    local _, humanoid = getCharacterParts()
+    if humanoid then
+        humanoid.PlatformStand = false
+        if not ShiftLockState.Enabled then
+            humanoid.AutoRotate = true
+        end
+    end
 end
 
+local function enableFlight()
+    disableFlight()
+    FlightState.Enabled = true
+
+    local _, humanoid, root = getCharacterParts()
+    if not humanoid or not root then
+        FlightState.Enabled = false
+        return
+    end
+
+    local attachment = Instance.new("Attachment")
+    attachment.Name = "WindUIFlightAttachment"
+    attachment.Parent = root
+    FlightState.Attachment = attachment
+
+    local linearVelocity = Instance.new("LinearVelocity")
+    linearVelocity.Name = "WindUIFlightVelocity"
+    linearVelocity.Attachment0 = attachment
+    linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+    linearVelocity.MaxForce = math.huge
+    linearVelocity.VectorVelocity = Vector3.zero
+    linearVelocity.Parent = root
+    FlightState.LinearVelocity = linearVelocity
+
+    local alignOrientation = Instance.new("AlignOrientation")
+    alignOrientation.Name = "WindUIFlightOrientation"
+    alignOrientation.Attachment0 = attachment
+    alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    alignOrientation.MaxTorque = math.huge
+    alignOrientation.Responsiveness = 20
+    alignOrientation.Parent = root
+    FlightState.AlignOrientation = alignOrientation
+
+    humanoid.PlatformStand = true
+    FlightState.Connection = RunService.RenderStepped:Connect(function()
+        if not FlightState.Enabled then
+            return
+        end
+
+        local character, currentHumanoid, currentRoot = getCharacterParts()
+        local camera = workspace.CurrentCamera
+        if not character or not currentHumanoid or not currentRoot or not camera then
+            return
+        end
+
+        local moveDirection = currentHumanoid.MoveDirection
+        local horizontal = Vector3.new(moveDirection.X, 0, moveDirection.Z)
+        if horizontal.Magnitude > 0 then
+            horizontal = horizontal.Unit * FlightState.Speed
+        else
+            horizontal = Vector3.zero
+        end
+
+        local vertical = 0
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) or currentHumanoid.Jump then
+            vertical = FlightState.Speed
+        elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            vertical = -FlightState.Speed
+        end
+
+        if FlightState.LinearVelocity then
+            FlightState.LinearVelocity.VectorVelocity = Vector3.new(horizontal.X, vertical, horizontal.Z)
+        end
+
+        local look = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        if look.Magnitude > 0 and FlightState.AlignOrientation then
+            FlightState.AlignOrientation.CFrame = CFrame.lookAt(Vector3.zero, look.Unit)
+        end
+    end)
+end
+
+local function setFlightEnabled(enabled)
+    if enabled then
+        enableFlight()
+    else
+        disableFlight()
+    end
+end
+
+GeneralTab:Section({
+    Title = "移位锁",
+})
+
+GeneralTab:Button({
+    Title = "执行移位锁",
+    Desc = "点击直接执行本地移位锁函数",
+    Icon = "solar:lock-keyhole-minimalistic-bold-duotone",
+    Callback = function()
+        setShiftLockEnabled(true)
+    end,
+})
+
+GeneralTab:Button({
+    Title = "关闭移位锁",
+    Desc = "恢复自动旋转和镜头偏移",
+    Icon = "solar:restart-bold-duotone",
+    Callback = function()
+        setShiftLockEnabled(false)
+    end,
+})
+
+GeneralTab:Section({
+    Title = "飞行功能",
+})
+
+GeneralTab:Button({
+    Title = "执行飞行",
+    Desc = "点击直接执行本地飞行函数",
+    Icon = "solar:plain-bold-duotone",
+    Callback = function()
+        setFlightEnabled(true)
+    end,
+})
+
+GeneralTab:Button({
+    Title = "关闭飞行",
+    Desc = "移除飞行连接并恢复角色状态",
+    Icon = "solar:restart-bold-duotone",
+    Callback = function()
+        setFlightEnabled(false)
+    end,
+})
+
+GeneralTab:Slider({
+    Title = "飞行速度",
+    Desc = "调整飞行移动速度",
+    Icon = "solar:running-bold-duotone",
+    Step = 1,
+    Value = {
+        Min = 1,
+        Max = 200,
+        Default = 50,
+    },
+    Callback = function(value)
+        FlightState.Speed = tonumber(value) or 50
+    end,
+})
+
+LocalPlayer.CharacterAdded:Connect(function()
+    GeneralState.OriginalWalkSpeed = nil
+    GeneralState.OriginalJumpPower = nil
+    GeneralState.OriginalUseJumpPower = nil
+    task.wait(0.25)
+    if ShiftLockState.Enabled then
+        enableShiftLock()
+    end
+    if FlightState.Enabled then
+        enableFlight()
+    end
+end)
+
+-- 通用页最下面：外部脚本入口。
+GeneralTab:Section({
+    Title = "外部脚本",
+})
+
+GeneralTab:Button({
+    Title = "多方向吸附",
+    Desc = "点击直接执行外部脚本",
+    Icon = "solar:bolt-bold-duotone",
+    Callback = function()
+        SafeExecute("多方向吸附", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84")
+    end,
+})
+
+--==================================================
+-- 绘制标签：完整迁移绘制功能，并保留每项关闭清理逻辑。
+--==================================================
+
+local DrawingTab = Window:Tab({
+    Title = "绘制",
+    Icon = "solar:eye-bold-duotone",
+})
+
+local FETab = Window:Tab({
+    Title = "FE",
+    Icon = "solar:code-bold-duotone",
+})
+
+local DrawingState = {
+    Boxes = {Enabled = false, Connection = nil, Objects = {}},
+    Chams = {Enabled = false, Connection = nil, Objects = {}, Color = Color3.fromRGB(255, 255, 255)},
+    Names = {Enabled = false, Connection = nil, Objects = {}},
+    Health = {Enabled = false, Connection = nil, Objects = {}},
+    Skeleton = {Enabled = false, Connection = nil, Objects = {}},
+    Tracers = {Enabled = false, Connection = nil, Objects = {}},
+}
+
+local function drawingSupported()
+    return type(Drawing) == "table" and type(Drawing.new) == "function"
+end
+
+local function drawingNotify(title, content)
+    WindUI:Notify({Title = title, Content = content, Duration = 3})
+end
+
+local function removeDrawing(object)
+    if not object then return end
+    pcall(function()
+        if type(object.Remove) == "function" then
+            object:Remove()
+        else
+            object:Destroy()
+        end
+    end)
+end
+
+local function newDrawing(className)
+    if not drawingSupported() then return nil end
+    local ok, object = pcall(function()
+        return Drawing.new(className)
+    end)
+    return ok and object or nil
+end
+
+local function getDrawingCamera()
+    return workspace.CurrentCamera
+end
+
+local function getScreenBounds(character)
+    local camera = getDrawingCamera()
+    if not camera or not character then return nil end
+
+    local minVector = Vector3.new(math.huge, math.huge, math.huge)
+    local maxVector = Vector3.new(-math.huge, -math.huge, -math.huge)
+    local foundPart = false
+
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            foundPart = true
+            local position = part.Position
+            minVector = Vector3.new(
+                math.min(minVector.X, position.X),
+                math.min(minVector.Y, position.Y),
+                math.min(minVector.Z, position.Z)
+            )
+            maxVector = Vector3.new(
+                math.max(maxVector.X, position.X),
+                math.max(maxVector.Y, position.Y),
+                math.max(maxVector.Z, position.Z)
+            )
+        end
+    end
+
+    if not foundPart then return nil end
+
+    local points = {
+        Vector3.new(minVector.X, minVector.Y, minVector.Z),
+        Vector3.new(minVector.X, maxVector.Y, minVector.Z),
+        Vector3.new(maxVector.X, minVector.Y, minVector.Z),
+        Vector3.new(maxVector.X, maxVector.Y, minVector.Z),
+        Vector3.new(minVector.X, minVector.Y, maxVector.Z),
+        Vector3.new(minVector.X, maxVector.Y, maxVector.Z),
+        Vector3.new(maxVector.X, minVector.Y, maxVector.Z),
+        Vector3.new(maxVector.X, maxVector.Y, maxVector.Z),
+    }
+
+    local min2D = Vector2.new(math.huge, math.huge)
+    local max2D = Vector2.new(-math.huge, -math.huge)
+    local visible = false
+
+    for _, point in ipairs(points) do
+        local screen, onScreen = camera:WorldToViewportPoint(point)
+        if onScreen and screen.Z > 0 then
+            visible = true
+            min2D = Vector2.new(math.min(min2D.X, screen.X), math.min(min2D.Y, screen.Y))
+            max2D = Vector2.new(math.max(max2D.X, screen.X), math.max(max2D.Y, screen.Y))
+        end
+    end
+
+    if not visible then return nil end
+    return min2D, max2D
+end
+
+local function clearBoxes()
+    if DrawingState.Boxes.Connection then
+        DrawingState.Boxes.Connection:Disconnect()
+        DrawingState.Boxes.Connection = nil
+    end
+    for _, objects in pairs(DrawingState.Boxes.Objects) do
+        removeDrawing(objects.box)
+        removeDrawing(objects.outline)
+    end
+    DrawingState.Boxes.Objects = {}
+end
+
+local function setBoxesEnabled(enabled)
+    DrawingState.Boxes.Enabled = enabled
+    clearBoxes()
+    if not enabled then
+        drawingNotify("方框透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Boxes.Enabled = false
+        drawingNotify("方框透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    DrawingState.Boxes.Connection = RunService.RenderStepped:Connect(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local min2D, max2D = getScreenBounds(player.Character)
+                local objects = DrawingState.Boxes.Objects[player]
+                if not objects then
+                    objects = {box = newDrawing("Square"), outline = newDrawing("Square")}
+                    if objects.box then
+                        objects.box.Color = Color3.fromRGB(255, 255, 255)
+                        objects.box.Thickness = 1
+                        objects.box.Filled = false
+                    end
+                    if objects.outline then
+                        objects.outline.Color = Color3.fromRGB(0, 0, 0)
+                        objects.outline.Thickness = 3
+                        objects.outline.Filled = false
+                    end
+                    DrawingState.Boxes.Objects[player] = objects
+                end
+
+                if objects.box and objects.outline and min2D and max2D then
+                    local size = max2D - min2D
+                    objects.box.Position = min2D
+                    objects.box.Size = size
+                    objects.box.Visible = true
+                    objects.outline.Position = min2D
+                    objects.outline.Size = size
+                    objects.outline.Visible = true
+                elseif objects.box and objects.outline then
+                    objects.box.Visible = false
+                    objects.outline.Visible = false
+                end
+            end
+        end
+    end)
+    drawingNotify("方框透视", "已开启")
+end
+
+local function clearChams()
+    if DrawingState.Chams.Connection then
+        DrawingState.Chams.Connection:Disconnect()
+        DrawingState.Chams.Connection = nil
+    end
+    for _, highlight in pairs(DrawingState.Chams.Objects) do
+        pcall(function() highlight:Destroy() end)
+    end
+    DrawingState.Chams.Objects = {}
+end
+
+local function setChamsEnabled(enabled)
+    DrawingState.Chams.Enabled = enabled
+    clearChams()
+    if not enabled then
+        drawingNotify("人物透视", "已关闭")
+        return
+    end
+
+    DrawingState.Chams.Connection = RunService.RenderStepped:Connect(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local highlight = DrawingState.Chams.Objects[player]
+                if not highlight or not highlight.Parent then
+                    highlight = Instance.new("Highlight")
+                    highlight.Name = "WindUI_Chams"
+                    highlight.FillTransparency = 0.78
+                    highlight.OutlineTransparency = 0
+                    highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                    highlight.Adornee = player.Character
+                    highlight.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+                    DrawingState.Chams.Objects[player] = highlight
+                end
+                highlight.FillColor = DrawingState.Chams.Color
+            end
+        end
+    end)
+    drawingNotify("人物透视", "已开启")
+end
+
+local function clearNames()
+    if DrawingState.Names.Connection then
+        DrawingState.Names.Connection:Disconnect()
+        DrawingState.Names.Connection = nil
+    end
+    for _, text in pairs(DrawingState.Names.Objects) do
+        removeDrawing(text)
+    end
+    DrawingState.Names.Objects = {}
+end
+
+local function setNamesEnabled(enabled)
+    DrawingState.Names.Enabled = enabled
+    clearNames()
+    if not enabled then
+        drawingNotify("名字透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Names.Enabled = false
+        drawingNotify("名字透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    DrawingState.Names.Connection = RunService.RenderStepped:Connect(function()
+        local camera = getDrawingCamera()
+        if not camera then return end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+                local text = DrawingState.Names.Objects[player]
+                if not text then
+                    text = newDrawing("Text")
+                    if text then
+                        text.Size = 13
+                        text.Center = true
+                        text.Outline = true
+                        text.Font = 2
+                        text.Color = Color3.fromRGB(255, 255, 255)
+                        DrawingState.Names.Objects[player] = text
+                    end
+                end
+                if text then
+                    local position, onScreen = camera:WorldToViewportPoint(player.Character.Head.Position + Vector3.new(0, 1.8, 0))
+                    text.Position = Vector2.new(position.X, position.Y)
+                    text.Text = player.Name
+                    text.Visible = onScreen and position.Z > 0
+                end
+            end
+        end
+    end)
+    drawingNotify("名字透视", "已开启")
+end
+
+local function clearHealth()
+    if DrawingState.Health.Connection then
+        DrawingState.Health.Connection:Disconnect()
+        DrawingState.Health.Connection = nil
+    end
+    for _, objects in pairs(DrawingState.Health.Objects) do
+        removeDrawing(objects.bar)
+        removeDrawing(objects.outline)
+    end
+    DrawingState.Health.Objects = {}
+end
+
+local function setHealthEnabled(enabled)
+    DrawingState.Health.Enabled = enabled
+    clearHealth()
+    if not enabled then
+        drawingNotify("血量条透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Health.Enabled = false
+        drawingNotify("血量条透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    DrawingState.Health.Connection = RunService.RenderStepped:Connect(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            local character = player.Character
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if player ~= LocalPlayer and character and humanoid then
+                local min2D, max2D = getScreenBounds(character)
+                local objects = DrawingState.Health.Objects[player]
+                if not objects then
+                    objects = {bar = newDrawing("Square"), outline = newDrawing("Square")}
+                    if objects.bar then
+                        objects.bar.Color = Color3.fromRGB(0, 255, 0)
+                        objects.bar.Filled = true
+                    end
+                    if objects.outline then
+                        objects.outline.Color = Color3.fromRGB(0, 0, 0)
+                        objects.outline.Filled = true
+                    end
+                    DrawingState.Health.Objects[player] = objects
+                end
+                if objects.bar and objects.outline and min2D and max2D then
+                    local height = max2D.Y - min2D.Y
+                    local ratio = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+                    local barHeight = height * ratio
+                    objects.outline.Size = Vector2.new(4, height + 2)
+                    objects.outline.Position = Vector2.new(min2D.X - 6, min2D.Y - 1)
+                    objects.outline.Visible = true
+                    objects.bar.Size = Vector2.new(2, barHeight)
+                    objects.bar.Position = Vector2.new(min2D.X - 5, max2D.Y - barHeight)
+                    objects.bar.Color = Color3.fromRGB(255 * (1 - ratio), 255 * ratio, 0)
+                    objects.bar.Visible = true
+                elseif objects.bar and objects.outline then
+                    objects.bar.Visible = false
+                    objects.outline.Visible = false
+                end
+            end
+        end
+    end)
+    drawingNotify("血量条透视", "已开启")
+end
+
+local function clearSkeleton()
+    if DrawingState.Skeleton.Connection then
+        DrawingState.Skeleton.Connection:Disconnect()
+        DrawingState.Skeleton.Connection = nil
+    end
+    for _, skeleton in pairs(DrawingState.Skeleton.Objects) do
+        for _, line in pairs(skeleton) do
+            removeDrawing(line)
+        end
+    end
+    DrawingState.Skeleton.Objects = {}
+end
+
+local function setSkeletonEnabled(enabled)
+    DrawingState.Skeleton.Enabled = enabled
+    clearSkeleton()
+    if not enabled then
+        drawingNotify("骨骼透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Skeleton.Enabled = false
+        drawingNotify("骨骼透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    local function makeLine()
+        local line = newDrawing("Line")
+        if line then
+            line.Color = Color3.fromRGB(255, 255, 255)
+            line.Thickness = 1
+        end
+        return line
+    end
+
+    DrawingState.Skeleton.Connection = RunService.RenderStepped:Connect(function()
+        local camera = getDrawingCamera()
+        if not camera then return end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local character = player.Character
+                local parts = {
+                    head = character:FindFirstChild("Head"),
+                    upper = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"),
+                    lower = character:FindFirstChild("LowerTorso") or character:FindFirstChild("HumanoidRootPart"),
+                    left_arm = character:FindFirstChild("LeftUpperArm") or character:FindFirstChild("Left Arm"),
+                    right_arm = character:FindFirstChild("RightUpperArm") or character:FindFirstChild("Right Arm"),
+                    left_leg = character:FindFirstChild("LeftUpperLeg") or character:FindFirstChild("Left Leg"),
+                    right_leg = character:FindFirstChild("RightUpperLeg") or character:FindFirstChild("Right Leg"),
+                }
+                local skeleton = DrawingState.Skeleton.Objects[player]
+                if not skeleton then
+                    skeleton = {
+                        head = makeLine(), torso = makeLine(), left_arm = makeLine(),
+                        right_arm = makeLine(), left_leg = makeLine(), right_leg = makeLine(),
+                    }
+                    DrawingState.Skeleton.Objects[player] = skeleton
+                end
+
+                local valid = true
+                local screen = {}
+                for name, part in pairs(parts) do
+                    if not part then
+                        valid = false
+                        break
+                    end
+                    local position, onScreen = camera:WorldToViewportPoint(part.Position)
+                    screen[name] = {Position = Vector2.new(position.X, position.Y), Visible = onScreen and position.Z > 0}
+                    if not screen[name].Visible then valid = false end
+                end
+
+                if valid then
+                    local pairsToDraw = {
+                        {"head", "upper"}, {"upper", "lower"}, {"upper", "left_arm"},
+                        {"upper", "right_arm"}, {"lower", "left_leg"}, {"lower", "right_leg"},
+                    }
+                    local names = {"head", "torso", "left_arm", "right_arm", "left_leg", "right_leg"}
+                    for index, pair in ipairs(pairsToDraw) do
+                        local line = skeleton[names[index]]
+                        if line then
+                            line.From = screen[pair[1]].Position
+                            line.To = screen[pair[2]].Position
+                            line.Visible = true
+                        end
+                    end
+                else
+                    for _, line in pairs(skeleton) do
+                        if line then line.Visible = false end
+                    end
+                end
+            end
+        end
+    end)
+    drawingNotify("骨骼透视", "已开启")
+end
+
+local function clearTracers()
+    if DrawingState.Tracers.Connection then
+        DrawingState.Tracers.Connection:Disconnect()
+        DrawingState.Tracers.Connection = nil
+    end
+    for _, line in pairs(DrawingState.Tracers.Objects) do
+        removeDrawing(line)
+    end
+    DrawingState.Tracers.Objects = {}
+end
+
+local function setTracersEnabled(enabled)
+    DrawingState.Tracers.Enabled = enabled
+    clearTracers()
+    if not enabled then
+        drawingNotify("射线透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Tracers.Enabled = false
+        drawingNotify("射线透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    DrawingState.Tracers.Connection = RunService.RenderStepped:Connect(function()
+        local camera = getDrawingCamera()
+        if not camera then return end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local line = DrawingState.Tracers.Objects[player]
+                if not line then
+                    line = newDrawing("Line")
+                    if line then
+                        line.Color = Color3.fromRGB(255, 255, 255)
+                        line.Thickness = 1
+                        DrawingState.Tracers.Objects[player] = line
+                    end
+                end
+                if line then
+                    local position, onScreen = camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+                    line.From = Vector2.new(camera.ViewportSize.X / 2, 0)
+                    line.To = Vector2.new(position.X, position.Y)
+                    line.Visible = onScreen and position.Z > 0
+                end
+            end
+        end
+    end)
+    drawingNotify("射线透视", "已开启")
+end
+
+DrawingTab:Section({Title = "玩家绘制"})
+DrawingTab:Toggle({
+    Title = "方框透视", Desc = "显示玩家方框", Icon = "solar:box-bold-duotone", Value = false,
+    Callback = setBoxesEnabled,
+})
+DrawingTab:Toggle({
+    Title = "人物透视", Desc = "高亮显示玩家模型", Icon = "solar:layers-bold-duotone", Value = false,
+    Callback = setChamsEnabled,
+})
+DrawingTab:Colorpicker({
+    Title = "透视颜色", Desc = "设置人物透视颜色", Icon = "solar:palette-bold-duotone",
+    Value = DrawingState.Chams.Color,
+    Callback = function(value)
+        DrawingState.Chams.Color = value
+        for _, highlight in pairs(DrawingState.Chams.Objects) do
+            if highlight and highlight:IsA("Highlight") then
+                highlight.FillColor = value
+            end
+        end
+    end,
+})
+DrawingTab:Toggle({
+    Title = "名字透视", Desc = "显示玩家名称", Icon = "solar:user-bold-duotone", Value = false,
+    Callback = setNamesEnabled,
+})
+DrawingTab:Toggle({
+    Title = "血量条透视", Desc = "显示玩家血量", Icon = "solar:heart-pulse-bold-duotone", Value = false,
+    Callback = setHealthEnabled,
+})
+DrawingTab:Toggle({
+    Title = "骨骼透视", Desc = "显示玩家骨骼线条", Icon = "solar:accessibility-bold-duotone", Value = false,
+    Callback = setSkeletonEnabled,
+})
+DrawingTab:Toggle({
+    Title = "射线透视", Desc = "从屏幕顶部指向玩家", Icon = "solar:radar-2-bold-duotone", Value = false,
+    Callback = setTracersEnabled,
+})
+
+-- FE 标签按要求保留为空，后续可单独添加 FE 功能。
+
+for _, server in ipairs(ServerScripts) do
+    local tab = Window:Tab({
+        Title = server.Name,
+        Icon = server.Icon,
+    })
+
+    local scriptSection = tab:Section({
+        Title = "脚本列表",
+    })
+
+    for _, scriptInfo in ipairs(server.Scripts) do
+        tab:Button({
+            Title = scriptInfo.Name,
+            Desc = "点击直接执行",
+            Icon = "solar:bolt-bold-duotone",
+            Callback = function()
+                SafeExecute(scriptInfo.Name, scriptInfo.Url)
+            end,
+        })
+    end
+end
+
+-- 设置永远在所有服务器标签之后。
+local SettingTab = Window:Tab({
+    Title = "设置",
+    Icon = "solar:settings-bold-duotone",
+})
+
+SettingTab:Section({
+    Title = "主题切换",
+})
+
+local themeNames = {}
+for themeName in pairs(WindUI:GetThemes()) do
+    table.insert(themeNames, themeName)
+end
+table.sort(themeNames)
+
+SettingTab:Dropdown({
+    Title = "选择主题",
+    Desc = "切换后整个 WindUI 会使用新的主题颜色",
+    Icon = "solar:palette-bold-duotone",
+    Values = themeNames,
+    Value = WindUI:GetCurrentTheme(),
+    Callback = function(selected)
+        local themeName = type(selected) == "table" and selected[1] or selected
+        if type(themeName) ~= "string" or themeName == "" then
+            return
+        end
+
+        local appliedTheme = WindUI:SetTheme(themeName)
+        if appliedTheme then
+            WindUI:Notify({
+                Title = "主题已切换",
+                Content = "当前主题：" .. themeName,
+                Duration = 3,
+            })
+        end
+    end,
+})
+
+WindUI:OnThemeChange(function(themeName)
+    print("WindUI theme changed:", themeName)
+end)
