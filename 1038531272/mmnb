@@ -155,7 +155,7 @@ WindUI:AddTheme({
     -- 核心主题颜色
     Accent = Color3.fromHex("#FFD700"),
     Background = Color3.fromHex("#090909"),
-    BackgroundTransparency = 0,
+    BackgroundTransparency = 0.4,
     Dialog = Color3.fromHex("#181818"),
     Outline = Color3.fromHex("#333333"),
     Text = Color3.fromHex("#FFFFFF"),
