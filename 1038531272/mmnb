@@ -148,8 +148,8 @@ WindUI.Services.xiaolincloud = {
     end,
 }
 
-local LUSTRE_ICON_URL = "https://lucide.dev/framework-logos/lustre.webp"
-local LUSTRE_ICON_FILE = "LiquidGlass_Lustre.webp"
+local LUSTRE_ICON_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/XLM.png"
+local LUSTRE_ICON_FILE = "LiquidGlass_XLM.png"
 
 local function loadLustreIcon()
     local assetLoader = getcustomasset or getsynasset
