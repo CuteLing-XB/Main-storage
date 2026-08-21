@@ -1,5 +1,3 @@
-
-
 local WindUI = loadstring(game:HttpGet(
     "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"
 ))()
@@ -34,15 +32,24 @@ local function clearSavedKey()
         return
     end
 
-    local keyFile = KEY_FOLDER .. "/" .. getHWID() .. ".key"
-    pcall(function()
-        if isfile(keyFile) then
-            delfile(keyFile)
-        end
-    end)
+    -- 兼容清理 WindUI 默认保存文件及自定义 HWID 文件
+    local filesToClear = {
+        KEY_FOLDER .. "/" .. getHWID() .. ".key",
+        KEY_FOLDER .. "/key.txt",
+        KEY_FOLDER .. "/savedkey.txt",
+    }
+
+    for _, filePath in ipairs(filesToClear) do
+        pcall(function()
+            if isfile(filePath) then
+                delfile(filePath)
+            end
+        end)
+    end
 end
 
-local function safeHttpRequest(requestData)
+local function safeHttpRequest(requestData, retries)
+    retries = retries or 2
     local httpRequest = (syn and syn.request)
         or (http and http.request)
         or http_request
@@ -53,18 +60,33 @@ local function safeHttpRequest(requestData)
         return false, "当前执行器不支持 HTTP 请求"
     end
 
-    local success, result = pcall(function()
-        return httpRequest(requestData)
-    end)
+    -- 增加重试机制应对 Render 免费服务器冷启动
+    for i = 1, retries do
+        local success, result = pcall(function()
+            return httpRequest(requestData)
+        end)
 
-    if success and result and result.Body then
-        return true, result.Body
+        if success and result and result.Body and result.Body ~= "" then
+            return true, result.Body
+        end
+
+        if i < retries then
+            task.wait(1.5)
+        end
     end
 
     return false, "无法连接卡密服务器，请稍后再试"
 end
 
-local function verifyCloudKey(enteredKey)
+-- 修复参数解析：兼容 Service:Verify(key) 和 Verify(key) 两种调用方式
+local function verifyCloudKey(arg1, arg2)
+    local enteredKey = ""
+    if type(arg1) == "string" then
+        enteredKey = arg1
+    elseif type(arg2) == "string" then
+        enteredKey = arg2
+    end
+
     local cleanKey = trim(enteredKey)
     if cleanKey == "" then
         return false, "请输入有效卡密"
@@ -102,7 +124,7 @@ local function verifyCloudKey(enteredKey)
     local valid = decoded.success == true
     local message = tostring(decoded.message or (valid and "云端验证通过" or "卡密无效"))
 
-    if not valid and decoded.success == false then
+    if not valid then
         clearSavedKey()
     end
 
@@ -375,7 +397,7 @@ local Window = WindUI:CreateWindow({
 
 Window:EditOpenButton({
     Icon = LUSTRE_ICON,
-    Title = "Liquid Glass",
+    Title = "XL Hub",
 })
 
 local VersionTag = Window:Tag({
@@ -500,9 +522,7 @@ local GeneralTab = Window:Tab({
     Icon = "solar:widget-5-bold-duotone",
 })
 
-local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
 
 local GeneralState = {
     SpeedEnabled = false,
@@ -677,9 +697,6 @@ GeneralTab:Toggle({
 -- 移位锁与飞行功能
 -- 直接使用 WindUI 控件，不创建附件中的旧版独立 ScreenGui。
 --==================================================
-
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
 local ShiftLockState = {
     Enabled = false,
@@ -1518,3 +1535,4 @@ SettingTab:Dropdown({
 WindUI:OnThemeChange(function(themeName)
     print("WindUI theme changed:", themeName)
 end)
+
