@@ -11,149 +11,12 @@ local WindUI = loadstring(game:HttpGet(
 ))()
 
 local HttpService = game:GetService("HttpService")
-local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
-local API_URL = "https://gh-jkll.onrender.com/api/bind-hwid"
-local AUTH_SECRET = "XiaoLin666"
-local KEY_PAGE_URL = "https://gh-jkll.onrender.com/get-key"
-local KEY_FOLDER = "LiquidGlassHub"
-
-local function trim(value)
-    if type(value) ~= "string" then
-        return ""
-    end
-    return value:match("^%s*(.-)%s*$")
-end
-
-local function getHWID()
-    local hwid = "UNKNOWN_HWID"
-    pcall(function()
-        hwid = RbxAnalyticsService:GetClientId()
-    end)
-    return hwid
-end
-
-local function clearSavedKey()
-    if not (isfile and delfile) then
-        return
-    end
-
-    local filesToClear = {
-        KEY_FOLDER .. "/" .. getHWID() .. ".key",
-        KEY_FOLDER .. "/key.txt",
-        KEY_FOLDER .. "/savedkey.txt",
-    }
-
-    for _, filePath in ipairs(filesToClear) do
-        pcall(function()
-            if isfile(filePath) then
-                delfile(filePath)
-            end
-        end)
-    end
-end
-
-local function safeHttpRequest(requestData, retries)
-    retries = retries or 3
-    local httpRequest = (syn and syn.request)
-        or (http and http.request)
-        or http_request
-        or (fluxus and fluxus.request)
-        or request
-
-    if not httpRequest then
-        return false, "当前执行器不支持 HTTP 请求"
-    end
-
-    for i = 1, retries do
-        local success, result = pcall(function()
-            return httpRequest(requestData)
-        end)
-
-        if success and result and result.Body and result.Body ~= "" then
-            return true, result.Body
-        end
-
-        if i < retries then
-            task.wait(1.5)
-        end
-    end
-
-    return false, "无法连接卡密服务器，请稍后再试"
-end
-
-local function verifyCloudKey(arg1, arg2)
-    local enteredKey = ""
-    if type(arg1) == "string" then
-        enteredKey = arg1
-    elseif type(arg2) == "string" then
-        enteredKey = arg2
-    end
-
-    local cleanKey = trim(enteredKey)
-    if cleanKey == "" then
-        return false, "请输入有效卡密"
-    end
-
-    local payload = {
-        key = cleanKey,
-        hwid = getHWID(),
-        username = LocalPlayer and LocalPlayer.Name or "Unknown",
-        secret = AUTH_SECRET,
-    }
-
-    local success, responseBody = safeHttpRequest({
-        Url = API_URL,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json",
-            ["Accept"] = "application/json",
-        },
-        Body = HttpService:JSONEncode(payload),
-    })
-
-    if not success then
-        return false, responseBody
-    end
-
-    local jsonSuccess, decoded = pcall(function()
-        return HttpService:JSONDecode(responseBody)
-    end)
-
-    if not jsonSuccess or type(decoded) ~= "table" then
-        return false, "卡密服务器返回了无效数据"
-    end
-
-    local valid = decoded.success == true
-    local message = tostring(decoded.message or (valid and "云端验证通过" or "卡密无效"))
-
-    if not valid then
-        clearSavedKey()
-    end
-
-    return valid, message
-end
-
-WindUI.Services.xiaolincloud = {
-    Name = "云端卡密",
-    Icon = "key",
-    Args = {},
-    New = function()
-        return {
-            Verify = verifyCloudKey,
-            Copy = function()
-                local clipboard = setclipboard or toclipboard
-                if clipboard and KEY_PAGE_URL ~= "" then
-                    pcall(clipboard, KEY_PAGE_URL)
-                end
-            end,
-        }
-    end,
-}
+local CONFIG_FOLDER = "LiquidGlassHub"
 
 local LUSTRE_ICON_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/XLM.png"
 local LUSTRE_ICON_FILE = "XL_Hub_Icon.png"
@@ -347,16 +210,7 @@ local Window = WindUI:CreateWindow({
     Icon = LUSTRE_ICON,
     Author = "Modern UI",
     Theme = "Light",
-    ToggleKey = Enum.KeyCode.RightControl,
-    Folder = KEY_FOLDER,
-    KeySystem = {
-        SaveKey = true,
-        API = {
-            {
-                Type = "xiaolincloud",
-            },
-        },
-    },
+    Folder = CONFIG_FOLDER,
     Transparent = true,
     Acrylic = true,
     NewElements = true,
@@ -771,9 +625,9 @@ do
             return
         end
 
-        local oldestKey
+        local oldestTextId
         local oldestTime = math.huge
-        for key, record in pairs(Engine.textData) do
+        for textId, record in pairs(Engine.textData) do
             local hasLiveElement = false
             if record.elements then
                 for element in pairs(record.elements) do
@@ -785,24 +639,24 @@ do
             end
             local lastUsed = tonumber(record.lastUsed) or 0
             if not hasLiveElement and lastUsed < oldestTime then
-                oldestKey = key
+                oldestTextId = key
                 oldestTime = lastUsed
             end
         end
 
         -- 如果所有缓存仍有关联控件，仍淘汰最旧项，保证缓存有硬上限。
-        if not oldestKey then
-            for key, record in pairs(Engine.textData) do
+        if not oldestTextId then
+            for textId, record in pairs(Engine.textData) do
                 local lastUsed = tonumber(record.lastUsed) or 0
                 if lastUsed < oldestTime then
-                    oldestKey = key
+                    oldestTextId = key
                     oldestTime = lastUsed
                 end
             end
         end
 
-        if oldestKey then
-            Engine.textData[oldestKey] = nil
+        if oldestTextId then
+            Engine.textData[oldestTextId] = nil
             Engine.textDataCount = math.max(0, Engine.textDataCount - 1)
         end
     end
@@ -1463,7 +1317,7 @@ FETab:Section({
 
 FETab:Button({
     Title = "自由摄像头",
-    Desc = "加载自由摄像头；可以tp传送",
+    Desc = "加载自由摄像头；已加载时不会重复创建界面和连接",
     Icon = "solar:camera-bold-duotone",
     Callback = function()
         local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
@@ -2161,24 +2015,6 @@ end
 local SettingTab = Window:Tab({
     Title = "设置",
     Icon = "solar:settings-bold-duotone",
-})
-
-SettingTab:Section({
-    Title = "窗口快捷键",
-})
-
-SettingTab:Keybind({
-    Title = "PC端缩小悬浮窗绑定",
-    Desc = "按下自定义按键显示或隐藏 XL Hub 窗口",
-    Icon = "solar:keyboard-bold-duotone",
-    Value = "RightControl",
-    Flag = "WindowToggleKeybind",
-    Callback = function(keyName)
-        local keyCode = type(keyName) == "string" and Enum.KeyCode[keyName]
-        if keyCode then
-            Window:SetToggleKey(keyCode)
-        end
-    end,
 })
 
 SettingTab:Section({
