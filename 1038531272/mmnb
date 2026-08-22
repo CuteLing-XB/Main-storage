@@ -5,6 +5,8 @@ local WindUI = loadstring(game:HttpGet(
 local HttpService = game:GetService("HttpService")
 local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 local API_URL = "https://gh-jkll.onrender.com/api/bind-hwid"
@@ -32,7 +34,6 @@ local function clearSavedKey()
         return
     end
 
-    -- 兼容清理 WindUI 默认保存文件及自定义 HWID 文件，防止错误卡密死循环
     local filesToClear = {
         KEY_FOLDER .. "/" .. getHWID() .. ".key",
         KEY_FOLDER .. "/key.txt",
@@ -49,7 +50,7 @@ local function clearSavedKey()
 end
 
 local function safeHttpRequest(requestData, retries)
-    retries = retries or 3 -- 默认重试 3 次，防止 Render 休眠导致首次请求超时
+    retries = retries or 3
     local httpRequest = (syn and syn.request)
         or (http and http.request)
         or http_request
@@ -77,10 +78,8 @@ local function safeHttpRequest(requestData, retries)
     return false, "无法连接卡密服务器，请稍后再试"
 end
 
--- 修复参数解析：兼容 WindUI 自动读取时的 Service:Verify(key) 和手动输入的 Verify(key)
 local function verifyCloudKey(arg1, arg2)
     local enteredKey = ""
-    -- 如果 arg1 是 table(也就是 self)，那么卡密在 arg2；否则在 arg1
     if type(arg1) == "string" then
         enteredKey = arg1
     elseif type(arg2) == "string" then
@@ -148,7 +147,6 @@ WindUI.Services.xiaolincloud = {
     end,
 }
 
--- 替换为您要求的图标
 local LUSTRE_ICON_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/XLM.png"
 local LUSTRE_ICON_FILE = "XL_Hub_Icon.png"
 
@@ -166,7 +164,6 @@ local function loadLustreIcon()
         end
     end
 
-    -- 不支持本地自定义资源的执行器使用稳定的 WindUI 图标作为回退。
     return "solar:widget-5-bold-duotone"
 end
 
@@ -175,7 +172,6 @@ local LUSTRE_ICON = loadLustreIcon()
 WindUI:AddTheme({
     Name = "LiquidGold",
 
-    -- 核心主题颜色
     Accent = Color3.fromHex("#FFD700"),
     Background = Color3.fromHex("#090909"),
     BackgroundTransparency = 0.4,
@@ -188,7 +184,6 @@ WindUI:AddTheme({
     Hover = Color3.fromHex("#2A2A2A"),
     White = Color3.fromHex("#FFFFFF"),
 
-    -- 窗口和亚克力
     AcrylicMain = Color3.fromHex("#090909"),
     AcrylicNoise = 0.88,
     WindowBackground = Color3.fromHex("#090909"),
@@ -201,7 +196,6 @@ WindUI:AddTheme({
     WindowTopbarAuthor = Color3.fromHex("#AAAAAA"),
     WindowTopbarIcon = Color3.fromHex("#FFD700"),
 
-    -- 面板、标签和元素
     PanelBackground = Color3.fromHex("#181818"),
     PanelBackgroundTransparency = 0.2,
     LabelBackground = Color3.fromHex("#181818"),
@@ -224,7 +218,6 @@ WindUI:AddTheme({
     DescTextTransparency = 0,
     ElementIcon = Color3.fromHex("#FFD700"),
 
-    -- 下拉框、复选框和开关
     DropdownTabBackground = Color3.fromHex("#2A2A2A"),
     DropdownTabBorder = Color3.fromHex("#665500"),
     DropdownBackground = Color3.fromHex("#181818"),
@@ -237,26 +230,22 @@ WindUI:AddTheme({
     CheckboxBorderTransparency = 0.25,
     Primary = Color3.fromHex("#FFD700"),
 
-    -- 滑块
     Slider = Color3.fromHex("#FFD700"),
     SliderThumb = Color3.fromHex("#FFFFFF"),
     SliderIcon = Color3.fromHex("#FFFFFF"),
 
-    -- 对话框
     DialogBackground = Color3.fromHex("#181818"),
     DialogBackgroundTransparency = 0.05,
     DialogTitle = Color3.fromHex("#FFFFFF"),
     DialogContent = Color3.fromHex("#AAAAAA"),
     DialogIcon = Color3.fromHex("#FFD700"),
 
-    -- 弹出窗口
     PopupBackground = Color3.fromHex("#181818"),
     PopupBackgroundTransparency = 0.05,
     PopupTitle = Color3.fromHex("#FFFFFF"),
     PopupContent = Color3.fromHex("#AAAAAA"),
     PopupIcon = Color3.fromHex("#FFD700"),
 
-    -- 通知
     Notification = Color3.fromHex("#181818"),
     Notification2 = Color3.fromHex("#2A2A2A"),
     Notification2Transparency = 0.05,
@@ -267,13 +256,11 @@ WindUI:AddTheme({
     NotificationDuration = Color3.fromHex("#FFD700"),
     NotificationDurationTransparency = 0,
 
-    -- 进度条
     ProgressBar = Color3.fromHex("#FFD700"),
     ProgressBarText = Color3.fromHex("#FFFFFF"),
     ProgressBarTrack = Color3.fromHex("#333333"),
     ProgressBarTrackTransparency = 0.25,
 
-    -- Section 折叠区域
     SectionBoxBackground = Color3.fromHex("#181818"),
     SectionBoxTransparency = 0.2,
     SectionBoxBackgroundTransparency = 0.2,
@@ -282,7 +269,6 @@ WindUI:AddTheme({
     SectionExpandIcon = Color3.fromHex("#FFD700"),
     SectionExpandIconTransparency = 0,
 
-    -- Tooltip
     Tooltip = Color3.fromHex("#181818"),
     TooltipText = Color3.fromHex("#FFFFFF"),
     TooltipSmall = Color3.fromHex("#181818"),
@@ -292,7 +278,6 @@ WindUI:AddTheme({
     TooltipLight = Color3.fromHex("#2A2A2A"),
     TooltipLightText = Color3.fromHex("#FFFFFF"),
 
-    -- Viewport
     ViewportBackground = Color3.fromHex("#090909"),
     ViewportBackgroundTransparency = 0,
 })
@@ -383,7 +368,6 @@ local Window = WindUI:CreateWindow({
         Draggable = true,
         OnlyMobile = true,
         Scale = 0.85,
-        -- 静态金色边框，不使用跑马灯动画。
         Color = ColorSequence.new(
             Color3.fromRGB(255, 215, 0),
             Color3.fromRGB(255, 215, 0)
@@ -408,10 +392,9 @@ local VersionTag = Window:Tag({
 })
 
 --==================================================
--- 大窗口与缩小悬浮窗共享的动态颜色控制器
+-- 大窗口与缩小悬浮窗共享的动态颜色控制器（优化频率）
 --==================================================
 
-local RunService = game:GetService("RunService")
 local BaseTheme = WindUI:GetThemes().LiquidGold or {}
 local DynamicPalettes = {
     {Name = "DynamicGold", Color = Color3.fromRGB(255, 215, 0)},
@@ -463,7 +446,6 @@ end
 
 local function syncSmallWindowColor(color)
     pcall(function()
-        -- 官方 EditOpenButton 的 Color 会同步更新悬浮窗边框和发光层。
         Window:EditOpenButton({
             Color = ColorSequence.new(color, color),
         })
@@ -487,22 +469,20 @@ local function syncLargeWindowColor(palette)
     end
 end
 
--- 默认先使用金色，再以中等速度同步切换大窗口主题与小窗口颜色。
 syncSmallWindowColor(DynamicPalettes[1].Color)
+-- 优化：将主题高频重绘频率降低到5秒一次，大幅减轻渲染开销
 task.spawn(function()
-    task.wait(1.2)
+    task.wait(2)
     while Window and not Window.Destroyed do
         local palette = DynamicPalettes[dynamicIndex]
-        syncLargeWindowColor(palette)
-        dynamicIndex = dynamicIndex + 1
-        if dynamicIndex > #DynamicPalettes then
-            dynamicIndex = 1
+        if lastDynamicTheme ~= palette.Name then
+            syncLargeWindowColor(palette)
         end
-        task.wait(1.2)
+        dynamicIndex = (dynamicIndex % #DynamicPalettes) + 1
+        task.wait(5.0)
     end
 end)
 
--- 固定标签顺序：首页在最上面，通用紧随其后。
 local HomeTab = Window:Tab({
     Title = "首页",
     Icon = "solar:home-2-bold-duotone",
@@ -521,8 +501,6 @@ local GeneralTab = Window:Tab({
     Title = "通用",
     Icon = "solar:widget-5-bold-duotone",
 })
-
-local UserInputService = game:GetService("UserInputService")
 
 local GeneralState = {
     SpeedEnabled = false,
@@ -601,7 +579,6 @@ local function setCompatibilityProtectionEnabled(enabled)
     end
 
     if enabled then
-        -- 安全兼容保护：仅在重生后重新应用本地设置，不禁用校验、不拦截远程。
         GeneralState.CharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
             character:WaitForChild("Humanoid", 5)
             task.wait(0.15)
@@ -695,7 +672,6 @@ GeneralTab:Toggle({
 
 --==================================================
 -- 移位锁与飞行功能
--- 直接使用 WindUI 控件，不创建附件中的旧版独立 ScreenGui。
 --==================================================
 
 local ShiftLockState = {
@@ -941,7 +917,6 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
--- 通用页最下面：外部脚本入口。
 GeneralTab:Section({
     Title = "外部脚本",
 })
@@ -956,12 +931,14 @@ GeneralTab:Button({
 })
 
 --==================================================
--- 碰飞：完整迁移第二个脚本的碰飞逻辑，放在通用页最下面。
+-- 碰飞逻辑优化：移除无休止的 task.wait 死循环，改用帧事件驱动
 --==================================================
 local BumpFlyState = {
     Enabled = false,
     TargetPlayer = nil,
     ChatConnection = nil,
+    HeartbeatConn = nil,
+    MoveConn = nil,
 }
 
 local function bumpFindPlayer(text)
@@ -982,21 +959,34 @@ BumpFlyState.ChatConnection = LocalPlayer.Chatted:Connect(function(msg)
     end
 end)
 
-task.spawn(function()
-    while task.wait(0.01) do
-        if not BumpFlyState.Enabled or not BumpFlyState.TargetPlayer then continue end
+local function stopBumpFlyLogic()
+    if BumpFlyState.HeartbeatConn then
+        BumpFlyState.HeartbeatConn:Disconnect()
+        BumpFlyState.HeartbeatConn = nil
+    end
+    if BumpFlyState.MoveConn then
+        BumpFlyState.MoveConn:Disconnect()
+        BumpFlyState.MoveConn = nil
+    end
+end
+
+local function startBumpFlyLogic()
+    stopBumpFlyLogic()
+
+    BumpFlyState.HeartbeatConn = RunService.Heartbeat:Connect(function()
+        if not BumpFlyState.Enabled or not BumpFlyState.TargetPlayer then return end
 
         local targetPlayer = BumpFlyState.TargetPlayer
         local char = targetPlayer.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then
             BumpFlyState.TargetPlayer = nil
-            continue
+            return
         end
 
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hum or hum.Health <= 0 then
             BumpFlyState.TargetPlayer = nil
-            continue
+            return
         end
 
         local myChar = LocalPlayer.Character
@@ -1014,18 +1004,16 @@ task.spawn(function()
             myHRP.Velocity = Vector3.zero
             myHRP.RotVelocity = Vector3.zero
         end
-    end
-end)
+    end)
 
-task.spawn(function()
-    while task.wait() do
-        if not BumpFlyState.Enabled then continue end
+    BumpFlyState.MoveConn = RunService.RenderStepped:Connect(function()
+        if not BumpFlyState.Enabled then return end
         local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
         if hum then
             hum:Move(Vector3.one * 1e31)
         end
-    end
-end)
+    end)
+end
 
 GeneralTab:Section({
     Title = "碰飞",
@@ -1040,38 +1028,29 @@ GeneralTab:Toggle({
         BumpFlyState.Enabled = value
         BumpFlyState.TargetPlayer = nil
         if value then
-            warn("碰飞已开启")
+            startBumpFlyLogic()
         else
-            warn("碰飞已关闭")
+            stopBumpFlyLogic()
         end
     end,
 })
 
 --==================================================
--- 汉化标签：只保留第二个脚本的实时汉化逻辑。
+-- 实时汉化系统（内存泄露与变量命名 Bug 修复）
 --==================================================
 local HanHuaTab = Window:Tab({
     Title = "汉化",
     Icon = "solar:translation-bold-duotone",
 })
 
---// ================= 实时汉化系统 =================
 do
-    local HttpService = game:GetService("HttpService")
-    local Players = game:GetService("Players")
-    local CoreGui = game:GetService("CoreGui")
-    local LocalPlayer = Players.LocalPlayer
-
-    if not LocalPlayer then
-        LocalPlayer = Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
-    end
-
     local MY_NAMESPACE = "EnhancedTranslator_" .. tostring(math.random(10000, 99999))
     if not _G[MY_NAMESPACE] then
         _G[MY_NAMESPACE] = {
             textData = {},
-            scannedElements = {},
-            translatedElements = {},
+            -- 优化：使用 Weak Table 弱引用，当 GUI 被游戏销毁时自动被垃圾回收，解决内存泄露
+            scannedElements = setmetatable({}, { __mode = "k" }),
+            translatedElements = setmetatable({}, { __mode = "k" }),
             monitorConnections = {},
             translateQueue = {},
             queuedSet = {},
@@ -1165,8 +1144,7 @@ do
             end
         end
         
-        local result = table.concat(parts)
-        return result
+        return table.concat(parts)
     end
 
     local function translateWithMyMemory(text)
@@ -1227,6 +1205,7 @@ do
         
         return translation
     end
+
     local function enqueueText(text)
         if not text or shouldFilterText(text) then return end
         if Engine.queuedSet[text] or (Engine.textData[text] and Engine.textData[text].translated) then return end
@@ -1234,6 +1213,7 @@ do
         table.insert(Engine.translateQueue, { text = text, priority = #text })
         Engine.queuedSet[text] = true
     end
+
     local function gethui_enhanced()
         local guis = {}
         
@@ -1261,9 +1241,8 @@ do
             table.insert(guis, result)
         end
         
-        local localPlayer = Players.LocalPlayer
-        if localPlayer then
-            local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui")
+        if LocalPlayer then
+            local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
             if playerGui then
                 table.insert(guis, playerGui)
             end
@@ -1271,6 +1250,7 @@ do
         
         return guis
     end
+
     local function extractElementText(element)
         if not element then return end
         if not (element:IsA("TextLabel") or element:IsA("TextButton") or element:IsA("TextBox")) then return end
@@ -1326,11 +1306,11 @@ do
             return element:GetPropertyChangedSignal("Text"):Connect(function()
                 task.wait(0.05)
                 extractElementText(element)
-                -- 实时应用翻译
+                -- 修正变量名 Bug，将原先未定义的 currentText 修复为 currentTitle，控件属性修正为 Text
                 local currentTitle = element.Text
-                local data = Engine.textData[currentText]
-                if data and data.translation and data.translation ~= "" and data.translation ~= currentText then
-                    pcall(function() element.Title = data.translation end)
+                local data = Engine.textData[currentTitle]
+                if data and data.translation and data.translation ~= "" and data.translation ~= currentTitle then
+                    pcall(function() element.Text = data.translation end)
                 end
             end)
         end)
@@ -1338,6 +1318,7 @@ do
             table.insert(Engine.monitorConnections, textConn) 
         end
     end
+
     local function scanAllGuiElements()
         local guis = gethui_enhanced()
         
@@ -1374,6 +1355,7 @@ do
             end
         end
     end
+
     local function processTranslationQueue()
         while Engine.isRunning do
             if #Engine.translateQueue > 0 then
@@ -1398,6 +1380,7 @@ do
             end
         end
     end
+
     local function applyLocalizations()
         while Engine.isRunning do
             local guis = gethui_enhanced()
@@ -1421,12 +1404,13 @@ do
                         local ok, text = pcall(function() return desc.Text end)
                         if not ok or not text then continue end
                         
+                        -- 修正变量名 Bug，从 origText 修复为 origTitle，控件属性修正为 Text
                         local origTitle = tostring(text)
-                        local data = Engine.textData[origText]
+                        local data = Engine.textData[origTitle]
                         
-                        if data and data.translation and data.translation ~= "" and data.translation ~= origText then
+                        if data and data.translation and data.translation ~= "" and data.translation ~= origTitle then
                             local success = pcall(function()
-                                desc.Title = data.translation
+                                desc.Text = data.translation
                             end)
                             
                             if success then
@@ -1441,26 +1425,27 @@ do
             task.wait(RUNTIME.scanInterval)
         end
     end
+
     local function manualRefresh()
-        Engine.scannedElements = {}
-        Engine.translatedElements = {}
+        Engine.scannedElements = setmetatable({}, { __mode = "k" })
+        Engine.translatedElements = setmetatable({}, { __mode = "k" })
         scanAllGuiElements()
     end
+
     local function resetCache()
         Engine.textData = {}
-        Engine.scannedElements = {}
-        Engine.translatedElements = {}
+        Engine.scannedElements = setmetatable({}, { __mode = "k" })
+        Engine.translatedElements = setmetatable({}, { __mode = "k" })
         Engine.translateQueue = {}
         Engine.queuedSet = {}
         Engine.extractCount = 0
         Engine.translateCount = 0
         Engine.localizeCount = 0
     end
+
     local function startLocalization()
         if Engine.isRunning then return end
-        
         Engine.isRunning = true
-        
         task.spawn(scanAllGuiElements)
         task.spawn(processTranslationQueue)
         task.spawn(applyLocalizations)
@@ -1468,9 +1453,7 @@ do
 
     local function stopLocalization()
         if not Engine.isRunning then return end
-        
         Engine.isRunning = false
-        
         for _, conn in ipairs(Engine.monitorConnections) do
             pcall(function() 
                 if conn and conn.Disconnect then 
@@ -1480,6 +1463,7 @@ do
         end
         Engine.monitorConnections = {}
     end
+
     HanHuaTab:Toggle({
         Title = "启用实时汉化",
         Icon = "solar:translation-bold-duotone",
@@ -1500,13 +1484,9 @@ do
     })
     HanHuaTab:Slider({
         Title = "翻译速度",
-
         Desc = "每秒处理的翻译请求数",
-
         Icon = "solar:bolt-bold-duotone",
-
         Step = 1,
-
         Value = {Min = 5, Max = 60, Default = 20},
         Callback = function(v)
             RUNTIME.translationsPerSecond = v
@@ -1514,13 +1494,9 @@ do
     })
     HanHuaTab:Slider({
         Title = "刷新间隔",
-
         Desc = "扫描界面的时间间隔",
-
         Icon = "solar:refresh-bold-duotone",
-
         Step = 0.1,
-
         Value = {Min = 1, Max = 10, Default = 2},
         Callback = function(v)
             RUNTIME.scanInterval = v
@@ -1528,13 +1504,9 @@ do
     })
     HanHuaTab:Slider({
         Title = "批量翻译数",
-
         Desc = "每批处理的文本数量",
-
         Icon = "solar:list-check-bold-duotone",
-
         Step = 1,
-
         Value = {Min = 1, Max = 15, Default = 5},
         Callback = function(v)
             RUNTIME.batchSize = v
@@ -1564,20 +1536,10 @@ do
         Callback = function(v)
         end
     })
-
-    task.spawn(function()
-        while wait(2) do
-            if Engine.isRunning then
-                local status = string.format("📊 已提取:%d | 已翻译:%d | 已应用:%d", 
-                    Engine.extractCount, Engine.translateCount, Engine.localizeCount)
-            end
-        end
-    end)
 end
 
-
 --==================================================
--- 传送标签：完整迁移第二个脚本的选择玩家传送逻辑。
+-- 传送标签
 --==================================================
 local TeleportTab = Window:Tab({
     Title = "传送",
@@ -1617,11 +1579,6 @@ local teleportPlayerDropdown = TeleportTab:Dropdown({
     Values = getTeleportPlayerNames(),
     Callback = function(value)
         selectedTeleportPlayer = resolveTeleportPlayer(value)
-        if selectedTeleportPlayer then
-            print("[回调] 选中玩家:", selectedTeleportPlayer.Name)
-        else
-            print("[回调] 未选中任何玩家")
-        end
     end,
 })
 
@@ -1645,98 +1602,51 @@ TeleportTab:Button({
     Icon = "solar:plain-3-bold-duotone",
     Callback = function()
         if not selectedTeleportPlayer then
-            WindUI:Notify({
-                Title = "传送失败",
-                Content = "请先在玩家列表中选择一个玩家！",
-                Duration = 3,
-            })
+            WindUI:Notify({Title = "传送失败", Content = "请先在玩家列表中选择一个玩家！", Duration = 3})
             return
         end
 
         local localPlayer = Players.LocalPlayer
         if not selectedTeleportPlayer.Parent then
-            WindUI:Notify({
-                Title = "传送失败",
-                Content = "目标玩家已退出游戏！",
-                Duration = 3,
-            })
+            WindUI:Notify({Title = "传送失败", Content = "目标玩家已退出游戏！", Duration = 3})
             selectedTeleportPlayer = nil
             refreshTeleportPlayers()
             return
         end
 
         if selectedTeleportPlayer == localPlayer then
-            WindUI:Notify({
-                Title = "传送失败",
-                Content = "不能传送到自己！",
-                Duration = 3,
-            })
+            WindUI:Notify({Title = "传送失败", Content = "不能传送到自己！", Duration = 3})
             return
         end
 
         local targetChar = selectedTeleportPlayer.Character
         if not targetChar or not targetChar.Parent then
-            WindUI:Notify({
-                Title = "传送失败",
-                Content = "目标玩家尚未加载角色！",
-                Duration = 3,
-            })
+            WindUI:Notify({Title = "传送失败", Content = "目标玩家尚未加载角色！", Duration = 3})
             return
         end
 
-        local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+        local targetHRP = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:WaitForChild("HumanoidRootPart", 2)
         if not targetHRP then
-            targetHRP = targetChar:WaitForChild("HumanoidRootPart", 2)
-            if not targetHRP then
-                WindUI:Notify({
-                    Title = "传送失败",
-                    Content = "无法获取目标玩家位置！",
-                    Duration = 3,
-                })
-                return
-            end
+            WindUI:Notify({Title = "传送失败", Content = "无法获取目标玩家位置！", Duration = 3})
+            return
         end
 
-        local myChar = localPlayer.Character
-        if not myChar or not myChar.Parent then
-            local charAdded = localPlayer.CharacterAdded:Wait(3)
-            if not charAdded then
-                WindUI:Notify({
-                    Title = "传送失败",
-                    Content = "等待角色加载超时！",
-                    Duration = 3,
-                })
-                return
-            end
-            myChar = charAdded
-        end
-
-        local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+        local myChar = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+        local myHRP = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:WaitForChild("HumanoidRootPart", 2))
         if not myHRP then
-            myHRP = myChar:WaitForChild("HumanoidRootPart", 2)
-            if not myHRP then
-                WindUI:Notify({
-                    Title = "传送失败",
-                    Content = "无法获取你的位置！",
-                    Duration = 3,
-                })
-                return
-            end
+            WindUI:Notify({Title = "传送失败", Content = "无法获取你的位置！", Duration = 3})
+            return
         end
 
         local offset = Vector3.new(0, 0, 3)
         myHRP.CFrame = targetHRP.CFrame + targetHRP.CFrame:VectorToWorldSpace(offset)
 
-        WindUI:Notify({
-            Title = "传送成功",
-            Content = "已传送到玩家：" .. selectedTeleportPlayer.Name,
-            Duration = 3,
-        })
+        WindUI:Notify({Title = "传送成功", Content = "已传送到玩家：" .. selectedTeleportPlayer.Name, Duration = 3})
     end,
 })
 
 --==================================================
--- 绘制标签：完整迁移绘制功能，并保留每项关闭清理逻辑。
+-- 绘制标签：新增 PlayerRemoving 离开退出销毁
 --==================================================
 
 local DrawingTab = Window:Tab({
@@ -1788,6 +1698,23 @@ end
 local function getDrawingCamera()
     return workspace.CurrentCamera
 end
+
+-- 玩家离线清理（解决 ESP 内存泄露与残留）
+Players.PlayerRemoving:Connect(function(player)
+    for _, category in pairs(DrawingState) do
+        if category.Objects and category.Objects[player] then
+            local obj = category.Objects[player]
+            if type(obj) == "table" then
+                for _, subObj in pairs(obj) do
+                    removeDrawing(subObj)
+                end
+            else
+                removeDrawing(obj)
+            end
+            category.Objects[player] = nil
+        end
+    end
+end)
 
 local function getScreenBounds(character)
     local camera = getDrawingCamera()
@@ -2249,8 +2176,6 @@ DrawingTab:Toggle({
     Callback = setTracersEnabled,
 })
 
--- FE 标签按要求保留为空，后续可单独添加 FE 功能。
-
 for _, server in ipairs(ServerScripts) do
     local tab = Window:Tab({
         Title = server.Name,
@@ -2273,7 +2198,6 @@ for _, server in ipairs(ServerScripts) do
     end
 end
 
--- 设置永远在所有服务器标签之后。
 local SettingTab = Window:Tab({
     Title = "设置",
     Icon = "solar:settings-bold-duotone",
@@ -2315,5 +2239,4 @@ SettingTab:Dropdown({
 WindUI:OnThemeChange(function(themeName)
     print("WindUI theme changed:", themeName)
 end)
-
 
