@@ -1,0 +1,1243 @@
+--[[
+	自由视角 (FREE CAM)
+	• 移动端: 使用 D-pad (方向盘) 控制移动
+	• 电脑端: 使用 WASD 控制移动
+	• 拖动屏幕任意位置 (除了原版虚拟摇杆区域) 来转动视角
+	• 摄像机图标 (CAM): 开启/关闭自由视角
+	• 齿轮图标 (GEAR): 打开设置
+	• 电脑图标 (PC): 切换 PC/WASD 控制模式
+	• 传送图标 (TP): 将人物实体传送到当前摄像机位置
+	• 紫色发光描边表示激活状态
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local playerGui = player:WaitForChild("PlayerGui")
+
+local freeCamActive = false
+local pcMode = false
+local dragging = false
+local lastInputPos = nil
+local dragInput = nil
+
+local ignoredControlTouches = {}
+
+local camPos = Vector3.zero
+local velocity = Vector3.zero
+local yaw, pitch = 0, 0
+
+local moveDir = {
+	Up = false,
+	Down = false,
+	Left = false,
+	Right = false
+}
+
+local speed = 120
+local smoothness = 1
+
+local SPEED_MIN, SPEED_STEP = 1, 20
+local SMOOTH_MIN, SMOOTH_MAX, SMOOTH_STEP = 0.05, 1, 0.1
+
+local SENSITIVITY_BASE = 0.009
+local SENSITIVITY_MIN_PERCENT, SENSITIVITY_MAX_PERCENT, SENSITIVITY_STEP_PERCENT =
+	20, 500, 20
+
+local sensitivity = SENSITIVITY_BASE
+local maxPitch = math.rad(89)
+
+local controls = nil
+
+local function getControls()
+	local playerScripts =
+		player:FindFirstChild("PlayerScripts")
+
+	if not playerScripts then
+		return nil
+	end
+
+	local playerModule =
+		playerScripts:FindFirstChild("PlayerModule")
+
+	if not playerModule then
+		return nil
+	end
+
+	local success, module =
+		pcall(require, playerModule)
+
+	if
+		not success
+		or typeof(module) ~= "table"
+		or typeof(module.GetControls) ~= "function"
+	then
+		return nil
+	end
+
+	local ok, ctrl =
+		pcall(module.GetControls, module)
+
+	if ok and ctrl then
+		return ctrl
+	end
+
+	return nil
+end
+
+local function disableCharacterControls()
+	if not controls then
+		controls = getControls()
+	end
+
+	if
+		controls
+		and typeof(controls.Disable) == "function"
+	then
+		controls:Disable()
+	end
+end
+
+local function enableCharacterControls()
+	if
+		controls
+		and typeof(controls.Enable) == "function"
+	then
+		controls:Enable()
+	end
+end
+
+local function updateCharacterControls()
+	if freeCamActive and pcMode then
+		disableCharacterControls()
+	else
+		enableCharacterControls()
+	end
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "FreeCamGui"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.DisplayOrder = 999
+gui.Parent = playerGui
+
+local function buildIconButton(assetId, size, pos, imageScale)
+	local btn = Instance.new("ImageButton")
+
+	btn.AnchorPoint = Vector2.new(0.5, 0.5)
+	btn.Size = size
+	btn.Position = pos
+	btn.BackgroundColor3 = Color3.fromRGB(45, 52, 71)
+	btn.BackgroundTransparency = 0.05
+	btn.AutoButtonColor = false
+	btn.Image = ""
+	btn.ZIndex = 6
+	btn.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = btn
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Name = "ActiveGlow"
+	stroke.Thickness = 1
+	stroke.Color = Color3.fromRGB(255, 255, 255)
+	stroke.Transparency = 0.6
+	stroke.Parent = btn
+
+	local icon = Instance.new("ImageLabel")
+	icon.BackgroundTransparency = 1
+	icon.AnchorPoint = Vector2.new(0.5, 0.5)
+	icon.Position = UDim2.new(0.5, 0, 0.5, 0)
+	icon.Size = UDim2.new(imageScale, 0, imageScale, 0)
+	icon.Image = "rbxthumb://type=Asset&id=" .. assetId .. "&w=150&h=150"
+	icon.ScaleType = Enum.ScaleType.Fit
+	icon.ZIndex = 7
+	icon.Parent = btn
+
+	return btn
+end
+
+-- 摄像头开关按钮
+local camIcon = buildIconButton(
+	"9266631437",
+	UDim2.new(0, 42, 0, 42),
+	UDim2.new(0.94, 0, 0.1, 0),
+	0.62
+)
+camIcon.Name = "CamIcon"
+
+-- 设置按钮
+local gearIcon = buildIconButton(
+	"7059346386",
+	UDim2.new(0, 42, 0, 42),
+	UDim2.new(0.94, 0, 0.1, 55),
+	0.8
+)
+gearIcon.Name = "GearIcon"
+
+-- PC控制模式按钮
+local pcIcon = buildIconButton(
+	"12684119292",
+	UDim2.new(0, 42, 0, 42),
+	UDim2.new(0.94, 0, 0.1, 110),
+	0.72
+)
+pcIcon.Name = "PCIcon"
+
+-- 新增：传送按钮
+local tpIcon = buildIconButton(
+	"7183623773", -- 使用一个代表位置/传送的图标
+	UDim2.new(0, 42, 0, 42),
+	UDim2.new(0.94, 0, 0.1, 165), -- 位于PC图标下方
+	0.65
+)
+tpIcon.Name = "TPIcon"
+
+local function setIconGlow(button, enabled)
+	local stroke = button:FindFirstChild("ActiveGlow")
+
+	if not stroke then
+		return
+	end
+
+	local goal
+
+	if enabled then
+		goal = {
+			Color = Color3.fromRGB(190, 90, 255),
+			Transparency = 0.05,
+			Thickness = 2
+		}
+	else
+		goal = {
+			Color = Color3.fromRGB(255, 255, 255),
+			Transparency = 0.6,
+			Thickness = 1
+		}
+	end
+
+	TweenService:Create(
+		stroke,
+		TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+		goal
+	):Play()
+end
+
+local dpad = Instance.new("Frame")
+dpad.Name = "DPad"
+dpad.AnchorPoint = Vector2.new(0, 1)
+dpad.Position = UDim2.new(0, 50, 1, -50)
+dpad.Size = UDim2.new(0, 240, 0, 240)
+dpad.BackgroundTransparency = 1
+dpad.Parent = gui
+
+local DPAD_IMAGE =
+	"rbxthumb://type=Asset&id=124372870787270&w=150&h=150"
+
+local function makeArrowButton(name, pos, rotation)
+	local btn = Instance.new("ImageButton")
+
+	btn.Name = name
+	btn.AnchorPoint = Vector2.new(0.5, 0.5)
+	btn.Size = UDim2.new(0, 80, 0, 80)
+	btn.Position = pos
+	btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	btn.BackgroundTransparency = 0.45
+	btn.AutoButtonColor = false
+	btn.Image = DPAD_IMAGE
+	btn.Rotation = rotation
+	btn.ScaleType = Enum.ScaleType.Fit
+	btn.ZIndex = 5
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = btn
+
+	btn.Parent = dpad
+	return btn
+end
+
+local upBtn =
+	makeArrowButton("Up", UDim2.new(0.5, 0, 0.5, -95), 0)
+
+local downBtn =
+	makeArrowButton("Down", UDim2.new(0.5, 0, 0.5, 95), 180)
+
+local leftBtn =
+	makeArrowButton("Left", UDim2.new(0.5, -95, 0.5, 0), -90)
+
+local rightBtn =
+	makeArrowButton("Right", UDim2.new(0.5, 95, 0.5, 0), 90)
+
+local arrowButtons = {
+	upBtn,
+	downBtn,
+	leftBtn,
+	rightBtn
+}
+
+local function updateControls()
+	for _, button in ipairs(arrowButtons) do
+		button.Visible = freeCamActive and not pcMode
+	end
+end
+
+updateControls()
+
+local settingsPanel = Instance.new("Frame")
+settingsPanel.Name = "SettingsPanel"
+settingsPanel.AnchorPoint = Vector2.new(0.5, 0.5)
+settingsPanel.Position = UDim2.new(0.5, 0, 0.42, 0)
+settingsPanel.Size = UDim2.new(0, 280, 0, 330)
+settingsPanel.BackgroundColor3 = Color3.fromRGB(18, 13, 27)
+settingsPanel.BackgroundTransparency = 0.08
+settingsPanel.BorderSizePixel = 0
+settingsPanel.Visible = false
+settingsPanel.ZIndex = 10
+settingsPanel.ClipsDescendants = true
+settingsPanel.Parent = gui
+
+local panelCorner = Instance.new("UICorner")
+panelCorner.CornerRadius = UDim.new(0, 14)
+panelCorner.Parent = settingsPanel
+
+local backgroundGradient = Instance.new("UIGradient")
+
+backgroundGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(29, 19, 43)),
+	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(23, 16, 34)),
+	ColorSequenceKeypoint.new(0.65, Color3.fromRGB(19, 14, 28)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 11, 20))
+})
+
+backgroundGradient.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0.04),
+	NumberSequenceKeypoint.new(0.45, 0),
+	NumberSequenceKeypoint.new(0.75, 0.02),
+	NumberSequenceKeypoint.new(1, 0.06)
+})
+
+backgroundGradient.Rotation = 25
+backgroundGradient.Parent = settingsPanel
+
+local ROUNDY_FONT = Enum.Font.FredokaOne
+
+local topBar = Instance.new("Frame")
+topBar.Name = "TopBar"
+topBar.Size = UDim2.new(1, 0, 0, 40)
+topBar.BackgroundColor3 = Color3.fromRGB(155, 75, 220)
+topBar.BorderSizePixel = 0
+topBar.ZIndex = 20
+topBar.Parent = settingsPanel
+
+local topBarCorner = Instance.new("UICorner")
+topBarCorner.CornerRadius = UDim.new(0, 14)
+topBarCorner.Parent = topBar
+
+local topBarMask = Instance.new("Frame")
+topBarMask.Size = UDim2.new(1, 0, 0, 14)
+topBarMask.Position = UDim2.new(0, 0, 1, -14)
+topBarMask.BackgroundColor3 = topBar.BackgroundColor3
+topBarMask.BorderSizePixel = 0
+topBarMask.ZIndex = 20
+topBarMask.Parent = topBar
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.BackgroundTransparency = 1
+titleLabel.Size = UDim2.new(0, 150, 1, 0)
+titleLabel.Position = UDim2.new(0, 14, 0, 0)
+titleLabel.Text = "自由视角设置"
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Font = ROUNDY_FONT
+titleLabel.TextSize = 14
+titleLabel.TextColor3 = Color3.fromRGB(10, 10, 10)
+titleLabel.ZIndex = 21
+titleLabel.Parent = topBar
+
+local topBarMadeBy = Instance.new("TextLabel")
+topBarMadeBy.BackgroundTransparency = 1
+topBarMadeBy.AnchorPoint = Vector2.new(1, 0.5)
+topBarMadeBy.Position = UDim2.new(1, -42, 0.5, -6)
+topBarMadeBy.Size = UDim2.new(0, 86, 0, 14)
+topBarMadeBy.Text = "作者: DuaKNo"
+topBarMadeBy.Font = ROUNDY_FONT
+topBarMadeBy.TextSize = 10
+topBarMadeBy.TextColor3 = Color3.fromRGB(0, 0, 0)
+topBarMadeBy.TextXAlignment = Enum.TextXAlignment.Right
+topBarMadeBy.ZIndex = 21
+topBarMadeBy.Parent = topBar
+
+local topBarMadeByCredits = Instance.new("TextLabel")
+topBarMadeByCredits.BackgroundTransparency = 1
+topBarMadeByCredits.AnchorPoint = Vector2.new(1, 0.5)
+topBarMadeByCredits.Position = UDim2.new(1, -42, 0.5, 6)
+topBarMadeByCredits.Size = UDim2.new(0, 86, 0, 11)
+topBarMadeByCredits.Text = "与 ChatGPT + Claude"
+topBarMadeByCredits.Font = ROUNDY_FONT
+topBarMadeByCredits.TextSize = 7
+topBarMadeByCredits.TextColor3 = Color3.fromRGB(30, 30, 30)
+topBarMadeByCredits.TextXAlignment = Enum.TextXAlignment.Right
+topBarMadeByCredits.ZIndex = 21
+topBarMadeByCredits.Parent = topBar
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 32, 0, 32)
+closeBtn.AnchorPoint = Vector2.new(1, 0.5)
+closeBtn.Position = UDim2.new(1, -6, 0.5, 0)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "X"
+closeBtn.Font = ROUNDY_FONT
+closeBtn.TextSize = 18
+closeBtn.TextColor3 = Color3.fromRGB(10, 10, 10)
+closeBtn.AutoButtonColor = false
+closeBtn.ZIndex = 22
+closeBtn.Parent = topBar
+
+local settingsHeader = Instance.new("TextLabel")
+settingsHeader.BackgroundTransparency = 1
+settingsHeader.Position = UDim2.new(0, 14, 0, 44)
+settingsHeader.Size = UDim2.new(1, -28, 0, 20)
+settingsHeader.Text = "设置选项"
+settingsHeader.Font = ROUNDY_FONT
+settingsHeader.TextSize = 16
+settingsHeader.TextColor3 = Color3.fromRGB(230, 230, 230)
+settingsHeader.TextXAlignment = Enum.TextXAlignment.Left
+settingsHeader.ZIndex = 20
+settingsHeader.Parent = settingsPanel
+
+local function buildAdjustRow(labelText, yPos, initialDisplay)
+	local row = Instance.new("Frame")
+
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, -28, 0, 44)
+	row.Position = UDim2.new(0, 14, 0, yPos)
+	row.ZIndex = 20
+	row.Parent = settingsPanel
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.new(1, 0, 0, 20)
+	label.Text = labelText
+	label.Font = ROUNDY_FONT
+	label.TextSize = 15
+	label.TextColor3 = Color3.fromRGB(230, 230, 230)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 20
+	label.Parent = row
+
+	local minusBtn = Instance.new("TextButton")
+	minusBtn.Size = UDim2.new(0, 34, 0, 34)
+	minusBtn.Position = UDim2.new(0, 0, 0, 22)
+	minusBtn.BackgroundColor3 = Color3.fromRGB(38, 32, 45)
+	minusBtn.Text = "-"
+	minusBtn.Font = ROUNDY_FONT
+	minusBtn.TextSize = 20
+	minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	minusBtn.AutoButtonColor = false
+	minusBtn.ZIndex = 21
+	minusBtn.Parent = row
+
+	local minusCorner = Instance.new("UICorner")
+	minusCorner.CornerRadius = UDim.new(0, 8)
+	minusCorner.Parent = minusBtn
+
+	local valueBox = Instance.new("TextBox")
+	valueBox.Size = UDim2.new(0, 80, 0, 34)
+	valueBox.Position = UDim2.new(0, 42, 0, 22)
+	valueBox.BackgroundColor3 = Color3.fromRGB(27, 22, 34)
+	valueBox.BackgroundTransparency = 0.2
+	valueBox.Text = initialDisplay
+	valueBox.ClearTextOnFocus = false
+	valueBox.Font = ROUNDY_FONT
+	valueBox.TextSize = 16
+	valueBox.TextColor3 = Color3.fromRGB(150, 190, 255)
+	valueBox.ZIndex = 21
+	valueBox.Parent = row
+
+	local valueCorner = Instance.new("UICorner")
+	valueCorner.CornerRadius = UDim.new(0, 8)
+	valueCorner.Parent = valueBox
+
+	local plusBtn = Instance.new("TextButton")
+	plusBtn.Size = UDim2.new(0, 34, 0, 34)
+	plusBtn.Position = UDim2.new(0, 130, 0, 22)
+	plusBtn.BackgroundColor3 = Color3.fromRGB(38, 32, 45)
+	plusBtn.Text = "+"
+	plusBtn.Font = ROUNDY_FONT
+	plusBtn.TextSize = 20
+	plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	plusBtn.AutoButtonColor = false
+	plusBtn.ZIndex = 21
+	plusBtn.Parent = row
+
+	local plusCorner = Instance.new("UICorner")
+	plusCorner.CornerRadius = UDim.new(0, 8)
+	plusCorner.Parent = plusBtn
+
+	return minusBtn, plusBtn, valueBox
+end
+
+local speedMinus, speedPlus, speedValueLabel =
+	buildAdjustRow("飞行速度", 70, tostring(speed))
+
+local smoothMinus, smoothPlus, smoothValueLabel =
+	buildAdjustRow(
+		"平滑度",
+		126,
+		tostring(math.floor(smoothness * 100)) .. "%"
+	)
+
+local sensitivityMinus, sensitivityPlus, sensitivityValueLabel =
+	buildAdjustRow(
+		"灵敏度",
+		182,
+		tostring(math.floor((sensitivity / SENSITIVITY_BASE) * 100)) .. "%"
+	)
+
+local divider = Instance.new("Frame")
+divider.BackgroundColor3 = Color3.fromRGB(55, 48, 65)
+divider.BorderSizePixel = 0
+divider.Position = UDim2.new(0, 14, 0, 240)
+divider.Size = UDim2.new(1, -28, 0, 2)
+divider.ZIndex = 20
+divider.Parent = settingsPanel
+
+local socialsHeader = Instance.new("TextLabel")
+socialsHeader.BackgroundTransparency = 1
+socialsHeader.Position = UDim2.new(0, 14, 0, 242)
+socialsHeader.Size = UDim2.new(1, -28, 0, 20)
+socialsHeader.Text = "社交媒体"
+socialsHeader.Font = ROUNDY_FONT
+socialsHeader.TextSize = 16
+socialsHeader.TextColor3 = Color3.fromRGB(180, 80, 235)
+socialsHeader.TextXAlignment = Enum.TextXAlignment.Left
+socialsHeader.ZIndex = 20
+socialsHeader.Parent = settingsPanel
+
+local socialsCycleColors = {
+	Color3.fromRGB(180, 80, 235),
+	Color3.fromRGB(215, 95, 220),
+	Color3.fromRGB(130, 120, 235)
+}
+
+task.spawn(function()
+	local index = 1
+
+	while true do
+		local nextIndex =
+			index % #socialsCycleColors + 1
+
+		local tween = TweenService:Create(
+			socialsHeader,
+			TweenInfo.new(
+				1.6,
+				Enum.EasingStyle.Sine,
+				Enum.EasingDirection.InOut
+			),
+			{
+				TextColor3 =
+					socialsCycleColors[nextIndex]
+			}
+		)
+
+		tween:Play()
+		tween.Completed:Wait()
+
+		index = nextIndex
+	end
+end)
+
+local function makeSocialLine(text, yPos)
+	local line = Instance.new("TextLabel")
+
+	line.BackgroundTransparency = 1
+	line.Position = UDim2.new(0, 14, 0, yPos)
+	line.Size = UDim2.new(1, -28, 0, 18)
+	line.Text = text
+	line.Font = ROUNDY_FONT
+	line.TextSize = 14
+	line.TextColor3 = Color3.fromRGB(175, 90, 225)
+	line.TextXAlignment = Enum.TextXAlignment.Left
+	line.ZIndex = 20
+	line.Parent = settingsPanel
+end
+
+makeSocialLine("Spotify: DuaKNo", 266)
+makeSocialLine("Instagram: Me_DuaKNo", 284)
+makeSocialLine("Discord: _duakno_", 302)
+
+local function commitSpeed(newSpeed)
+	speed = math.max(
+		SPEED_MIN,
+		math.floor(newSpeed + 0.5)
+	)
+
+	speedValueLabel.Text = tostring(speed)
+end
+
+local function commitSmoothness(newPercent)
+	local clampedPercent =
+		math.clamp(
+			math.floor(newPercent + 0.5),
+			SMOOTH_MIN * 100,
+			SMOOTH_MAX * 100
+		)
+
+	smoothness = clampedPercent / 100
+	smoothValueLabel.Text =
+		tostring(clampedPercent) .. "%"
+end
+
+local function commitSensitivity(newPercent)
+	local clampedPercent =
+		math.clamp(
+			math.floor(newPercent + 0.5),
+			SENSITIVITY_MIN_PERCENT,
+			SENSITIVITY_MAX_PERCENT
+		)
+
+	sensitivity =
+		SENSITIVITY_BASE * (clampedPercent / 100)
+
+	sensitivityValueLabel.Text =
+		tostring(clampedPercent) .. "%"
+end
+
+speedMinus.MouseButton1Click:Connect(function()
+	commitSpeed(speed - SPEED_STEP)
+end)
+
+speedPlus.MouseButton1Click:Connect(function()
+	commitSpeed(speed + SPEED_STEP)
+end)
+
+smoothMinus.MouseButton1Click:Connect(function()
+	commitSmoothness(
+		smoothness * 100 -
+		SMOOTH_STEP * 100
+	)
+end)
+
+smoothPlus.MouseButton1Click:Connect(function()
+	commitSmoothness(
+		smoothness * 100 +
+		SMOOTH_STEP * 100
+	)
+end)
+
+sensitivityMinus.MouseButton1Click:Connect(function()
+	commitSensitivity(
+		(sensitivity / SENSITIVITY_BASE) * 100 -
+		SENSITIVITY_STEP_PERCENT
+	)
+end)
+
+sensitivityPlus.MouseButton1Click:Connect(function()
+	commitSensitivity(
+		(sensitivity / SENSITIVITY_BASE) * 100 +
+		SENSITIVITY_STEP_PERCENT
+	)
+end)
+
+speedValueLabel.FocusLost:Connect(function()
+	local cleaned =
+		speedValueLabel.Text:gsub(
+			"[^%d%.%-]",
+			""
+		)
+
+	local num = tonumber(cleaned)
+
+	if num then
+		commitSpeed(num)
+	else
+		speedValueLabel.Text =
+			tostring(speed)
+	end
+end)
+
+smoothValueLabel.FocusLost:Connect(function()
+	local cleaned =
+		smoothValueLabel.Text:gsub(
+			"[^%d%.%-]",
+			""
+		)
+
+	local num = tonumber(cleaned)
+
+	if num then
+		commitSmoothness(num)
+	else
+		smoothValueLabel.Text =
+			tostring(math.floor(smoothness * 100))
+			.. "%"
+	end
+end)
+
+sensitivityValueLabel.FocusLost:Connect(function()
+	local cleaned =
+		sensitivityValueLabel.Text:gsub(
+			"[^%d%.]",
+			""
+		)
+
+	local num = tonumber(cleaned)
+
+	if num then
+		commitSensitivity(num)
+	else
+		sensitivityValueLabel.Text =
+			tostring(math.floor((sensitivity / SENSITIVITY_BASE) * 100))
+			.. "%"
+	end
+end)
+
+local settingsOpen = false
+
+local function toggleSettings()
+	settingsOpen = not settingsOpen
+	settingsPanel.Visible = settingsOpen
+	setIconGlow(gearIcon, settingsOpen)
+end
+
+gearIcon.MouseButton1Click:Connect(toggleSettings)
+
+closeBtn.MouseButton1Click:Connect(function()
+	settingsOpen = false
+	settingsPanel.Visible = false
+	setIconGlow(gearIcon, false)
+end)
+
+local function enterFreeCam()
+	freeCamActive = true
+
+	updateControls()
+	updateCharacterControls()
+
+	local cf = camera.CFrame
+
+	camPos = cf.Position
+	velocity = Vector3.zero
+
+	local look = cf.LookVector
+
+	yaw =
+		math.atan2(
+			-look.X,
+			-look.Z
+		)
+
+	pitch =
+		math.asin(
+			math.clamp(
+				look.Y,
+				-1,
+				1
+			)
+		)
+
+	camera.CameraType =
+		Enum.CameraType.Scriptable
+
+	camera.CameraSubject = nil
+
+	setIconGlow(camIcon, true)
+end
+
+local function exitFreeCam()
+	freeCamActive = false
+
+	updateControls()
+	enableCharacterControls()
+
+	settingsOpen = false
+	settingsPanel.Visible = false
+
+	dragging = false
+	dragInput = nil
+	lastInputPos = nil
+
+	table.clear(ignoredControlTouches)
+
+	for k in pairs(moveDir) do
+		moveDir[k] = false
+	end
+
+	camera.CameraType =
+		Enum.CameraType.Custom
+
+	local char = player.Character
+
+	if char then
+		local hum =
+			char:FindFirstChildOfClass("Humanoid")
+
+		if hum then
+			camera.CameraSubject = hum
+		end
+	end
+
+	setIconGlow(camIcon, false)
+	setIconGlow(gearIcon, false)
+	setIconGlow(pcIcon, false)
+	setIconGlow(tpIcon, false) -- 退出时关闭传送按钮发光
+
+	pcMode = false
+
+	updateControls()
+end
+
+camIcon.MouseButton1Click:Connect(function()
+	if freeCamActive then
+		exitFreeCam()
+	else
+		enterFreeCam()
+	end
+end)
+
+pcIcon.MouseButton1Click:Connect(function()
+	if not freeCamActive then
+		return
+	end
+
+	pcMode = not pcMode
+
+	moveDir.Up = false
+	moveDir.Down = false
+	moveDir.Left = false
+	moveDir.Right = false
+
+	updateControls()
+	updateCharacterControls()
+	setIconGlow(pcIcon, pcMode)
+end)
+
+-- 绑定传送按钮的点击事件
+tpIcon.MouseButton1Click:Connect(function()
+	-- 仅在开启自由视角时允许传送
+	if not freeCamActive then
+		return
+	end
+
+	local char = player.Character
+	if char then
+		-- 计算目标CFrame：相机的当前坐标 (camPos)，并保留水平朝向 (yaw)
+		local newCFrame = CFrame.new(camPos) * CFrame.Angles(0, yaw, 0)
+		
+		-- PivotTo 是最新且最安全的实体传送方式，防止出现关节脱落或物理乱飞报错
+		char:PivotTo(newCFrame)
+		
+		-- 给按钮一个成功传送的闪烁提示
+		setIconGlow(tpIcon, true)
+		task.delay(0.2, function()
+			if freeCamActive then
+				setIconGlow(tpIcon, false)
+			end
+		end)
+	end
+end)
+
+local function bindHold(button, key)
+	button.MouseButton1Down:Connect(function()
+		if freeCamActive and not pcMode then
+			moveDir[key] = true
+		end
+	end)
+
+	button.MouseButton1Up:Connect(function()
+		moveDir[key] = false
+	end)
+
+	button.MouseLeave:Connect(function()
+		moveDir[key] = false
+	end)
+end
+
+bindHold(upBtn, "Up")
+bindHold(downBtn, "Down")
+bindHold(leftBtn, "Left")
+bindHold(rightBtn, "Right")
+
+local function withinAbs(guiObj, pos)
+	local abs = guiObj.AbsolutePosition
+	local size = guiObj.AbsoluteSize
+
+	return
+		pos.X >= abs.X
+		and pos.X <= abs.X + size.X
+		and pos.Y >= abs.Y
+		and pos.Y <= abs.Y + size.Y
+end
+
+local function isOverAnyButton(pos)
+	for _, b in ipairs(arrowButtons) do
+		if b.Visible and withinAbs(b, pos) then
+			return true
+		end
+	end
+
+	if withinAbs(camIcon, pos) then
+		return true
+	end
+
+	if withinAbs(gearIcon, pos) then
+		return true
+	end
+
+	if withinAbs(pcIcon, pos) then
+		return true
+	end
+	
+	if withinAbs(tpIcon, pos) then
+		return true
+	end
+
+	if
+		settingsPanel.Visible
+		and withinAbs(settingsPanel, pos)
+	then
+		return true
+	end
+
+	return false
+end
+
+local function findJoystickGuiObject()
+	local touchGui =
+		playerGui:FindFirstChild("TouchGui")
+
+	if not touchGui then
+		return nil
+	end
+
+	local preferredNames = {
+		"ThumbstickFrame",
+		"DynamicThumbstickFrame",
+		"Thumbstick",
+		"DynamicThumbstick"
+	}
+
+	for _, wantedName in ipairs(preferredNames) do
+		for _, obj in ipairs(
+			touchGui:GetDescendants()
+		) do
+			if
+				obj:IsA("GuiObject")
+				and obj.Visible
+				and obj.Name == wantedName
+			then
+				return obj
+			end
+		end
+	end
+
+	for _, obj in ipairs(
+		touchGui:GetDescendants()
+	) do
+		if
+			obj:IsA("GuiObject")
+			and obj.Visible
+		then
+			local lowerName =
+				string.lower(obj.Name)
+
+			if
+				lowerName:find("thumbstick")
+				or lowerName:find("joystick")
+			then
+				return obj
+			end
+		end
+	end
+
+	return nil
+end
+
+local function isInsideJoystick(pos)
+	local joystick =
+		findJoystickGuiObject()
+
+	if not joystick then
+		return false
+	end
+
+	local abs =
+		joystick.AbsolutePosition
+
+	local size =
+		joystick.AbsoluteSize
+
+	local padding = 6
+
+	return
+		pos.X >= abs.X - padding
+		and pos.X <= abs.X + size.X + padding
+		and pos.Y >= abs.Y - padding
+		and pos.Y <= abs.Y + size.Y + padding
+end
+
+UserInputService.InputBegan:Connect(
+	function(input, gameProcessed)
+
+		if not freeCamActive then
+			return
+		end
+
+		if
+			input.UserInputType
+				~= Enum.UserInputType.Touch
+			and
+			input.UserInputType
+				~= Enum.UserInputType.MouseButton1
+			and
+			input.UserInputType
+				~= Enum.UserInputType.MouseButton2
+		then
+			return
+		end
+
+		local pos =
+			Vector2.new(
+				input.Position.X,
+				input.Position.Y
+			)
+
+		if
+			input.UserInputType
+				== Enum.UserInputType.Touch
+			and isInsideJoystick(pos)
+		then
+			ignoredControlTouches[input] = true
+			return
+		end
+
+		if isOverAnyButton(pos) then
+			return
+		end
+
+		if not dragging then
+			dragging = true
+			dragInput = input
+			lastInputPos = pos
+		end
+	end
+)
+
+UserInputService.InputChanged:Connect(
+	function(input)
+
+		if not freeCamActive then
+			return
+		end
+
+		if
+			input.UserInputType
+				== Enum.UserInputType.Touch
+			and ignoredControlTouches[input]
+		then
+			return
+		end
+
+		if not dragging then
+			return
+		end
+
+		local isMouse =
+			input.UserInputType
+				== Enum.UserInputType.MouseMovement
+
+		local isTouch =
+			input.UserInputType
+				== Enum.UserInputType.Touch
+
+		if not (isMouse or isTouch) then
+			return
+		end
+
+		if isTouch and input ~= dragInput then
+			return
+		end
+
+		local pos =
+			Vector2.new(
+				input.Position.X,
+				input.Position.Y
+			)
+
+		if lastInputPos then
+			local delta =
+				pos - lastInputPos
+
+			yaw =
+				yaw -
+				delta.X *
+				sensitivity
+
+			pitch =
+				math.clamp(
+					pitch -
+					delta.Y *
+					sensitivity,
+					-maxPitch,
+					maxPitch
+				)
+		end
+
+		lastInputPos = pos
+	end
+)
+
+UserInputService.InputEnded:Connect(
+	function(input)
+
+		if ignoredControlTouches[input] then
+			ignoredControlTouches[input] = nil
+			return
+		end
+
+		if input == dragInput then
+			dragging = false
+			dragInput = nil
+			lastInputPos = nil
+		end
+	end
+)
+
+UserInputService.InputBegan:Connect(
+	function(input, gameProcessed)
+
+		if gameProcessed then
+			return
+		end
+
+		if not freeCamActive or not pcMode then
+			return
+		end
+
+		if
+			input.UserInputType
+				~= Enum.UserInputType.Keyboard
+		then
+			return
+		end
+
+		if input.KeyCode == Enum.KeyCode.W then
+			moveDir.Up = true
+		elseif input.KeyCode == Enum.KeyCode.S then
+			moveDir.Down = true
+		elseif input.KeyCode == Enum.KeyCode.A then
+			moveDir.Left = true
+		elseif input.KeyCode == Enum.KeyCode.D then
+			moveDir.Right = true
+		end
+	end
+)
+
+UserInputService.InputEnded:Connect(
+	function(input)
+
+		if
+			input.UserInputType
+				~= Enum.UserInputType.Keyboard
+		then
+			return
+		end
+
+		if input.KeyCode == Enum.KeyCode.W then
+			moveDir.Up = false
+		elseif input.KeyCode == Enum.KeyCode.S then
+			moveDir.Down = false
+		elseif input.KeyCode == Enum.KeyCode.A then
+			moveDir.Left = false
+		elseif input.KeyCode == Enum.KeyCode.D then
+			moveDir.Right = false
+		end
+	end
+)
+
+RunService.RenderStepped:Connect(
+	function(dt)
+
+		if not freeCamActive then
+			return
+		end
+
+		camera.CameraType =
+			Enum.CameraType.Scriptable
+
+		local rotationCFrame =
+			CFrame.Angles(0, yaw, 0)
+			*
+			CFrame.Angles(pitch, 0, 0)
+
+		local lookVector =
+			rotationCFrame.LookVector
+
+		local rightVector =
+			rotationCFrame.RightVector
+
+		local inputDir = Vector3.zero
+
+		if moveDir.Up then
+			inputDir += lookVector
+		end
+
+		if moveDir.Down then
+			inputDir -= lookVector
+		end
+
+		if moveDir.Left then
+			inputDir -= rightVector
+		end
+
+		if moveDir.Right then
+			inputDir += rightVector
+		end
+
+		if inputDir.Magnitude > 0 then
+			inputDir = inputDir.Unit
+		end
+
+		local targetVelocity =
+			inputDir * speed
+
+		local rampAlpha =
+			math.clamp(
+				smoothness * dt * 60,
+				0,
+				1
+			)
+
+		velocity =
+			velocity:Lerp(
+				targetVelocity,
+				rampAlpha
+			)
+
+		camPos += velocity * dt
+
+		camera.CFrame =
+			CFrame.new(camPos)
+			*
+			rotationCFrame
+	end
+)
+
+player.CharacterAdded:Connect(
+	function()
+
+		if freeCamActive then
+			camera.CameraType =
+				Enum.CameraType.Scriptable
+
+			camera.CameraSubject = nil
+		end
+	end
+)
+
