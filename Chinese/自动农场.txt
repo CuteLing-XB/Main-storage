@@ -671,7 +671,7 @@ task.spawn(function()
 
 end)
 pcall(function()
-	farmSettings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+	settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
 end)
 local desyncActive = false
 
@@ -740,8 +740,10 @@ local function findWeakestTarget()
 		if not humanoid.Health then
 			continue
 		end
-		local torso = char:FindFirstChild("Torso")
-		if not torso or torso.Transparency == 1 then
+			local torso = char:FindFirstChild("Torso")
+				or char:FindFirstChild("UpperTorso")
+				or char:FindFirstChild("LowerTorso")
+			if not torso or torso.Transparency == 1 then
 			continue
 		end
 		if hasAnimation(humanoid, "15128849047") then
@@ -1054,8 +1056,8 @@ local function setupCharacterHandlers(character)
 					pcall(function()
 						localPlayer2.Character.HumanoidRootPart.CFrame = CFrame.new(150, 441, 32)
 					end)
-					ultKeyReady = true
-					pcall(function()
+						ultKeyReady = true
+						pcall(function()
 						localPlayer2.Character.HumanoidRootPart.CFrame = CFrame.new(0, -29000, 0)
 					end)
 					task.wait(1.5)
@@ -3014,6 +3016,30 @@ local function detachSelfPhysics()
 
 end
 
+local function fireCommunicateGoal(communicate, payload)
+		if not communicate or not communicate.Parent then
+			return false
+		end
+		return pcall(function()
+			communicate:FireServer(payload)
+		end)
+end
+
+local function tapCommunicateKey(communicate, keyCode)
+	-- 先发送游戏实际使用的数字键协议，再同步发送一次 PC 键盘输入，
+	-- 用于兼容不同客户端版本的输入处理方式。
+	local remoteSent = fireCommunicateGoal(communicate, {
+		Goal = "KeyPress",
+		Key = keyCode,
+	})
+	local inputSent = pcall(function()
+		virtualInput:SendKeyEvent(true, keyCode, false, game)
+		task.wait(0.025)
+		virtualInput:SendKeyEvent(false, keyCode, false, game)
+	end)
+	return remoteSent or inputSent
+end
+
 local function setupCombatLoop()
 	local unusedCount = 6
 	local dashCooldown = nil
@@ -3186,13 +3212,18 @@ local function setupCombatLoop()
 			if targetChar:FindFirstChild("AtomicCounter") then
 				return
 			end
-			local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
-			if isAttacking2(myHumanoid) then
-				return
-			end
-			local targetHumanoid = targetChar:FindFirstChildOfClass("Humanoid")
-			local targetTorso = targetChar:FindFirstChild("Torso")
-			if not targetHumanoid or not targetTorso or targetTorso.Transparency == 1 then
+				local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
+				if not myHumanoid or myHumanoid.Health <= 0 then
+					return
+				end
+				if isAttacking2(myHumanoid) then
+					return
+				end
+				local targetHumanoid = targetChar:FindFirstChildOfClass("Humanoid")
+				local targetTorso = targetChar:FindFirstChild("Torso")
+					or targetChar:FindFirstChild("UpperTorso")
+					or targetChar:FindFirstChild("LowerTorso")
+				if not targetHumanoid or not targetTorso or targetTorso.Transparency == 1 then
 				return
 			end
 			processing = true
@@ -3201,28 +3232,31 @@ local function setupCombatLoop()
 				processing = false
 				return
 			end
-			if not myChar:GetAttribute("HoldingSpace") then
-				local var = myChar:FindFirstChild("Communicate")
-				pcall(var.FireServer, var, {
-					Goal = "KeyPress",
-					Key = Enum.KeyCode.Space,
-					MousePos = CFrame.new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-				})
-			end
-			if myChar:FindFirstChild("Ragdoll") or myChar:FindFirstChild("RagdollSim") then
-				communicate:FireServer({ Dash = Enum.KeyCode.S, Key = Enum.KeyCode.Q, Goal = "KeyPress" })
-			end
+				if not myChar:GetAttribute("HoldingSpace") then
+					fireCommunicateGoal(communicate, {
+						Goal = "KeyPress",
+						Key = Enum.KeyCode.Space,
+						MousePos = CFrame.new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+					})
+				end
+				if myChar:FindFirstChild("Ragdoll") or myChar:FindFirstChild("RagdollSim") then
+					fireCommunicateGoal(communicate, {
+						Dash = Enum.KeyCode.S,
+						Key = Enum.KeyCode.Q,
+						Goal = "KeyPress",
+					})
+				end
 			if
 				(targetChar:FindFirstChild("Ragdoll") or targetChar:FindFirstChild("RagdollSim"))
 				or targetHumanoid.Health <= 15
 			then
 				if myChar:GetAttribute("HoldingM1") then
-					communicate:FireServer(jsonEncode(releaseGoal))
+					fireCommunicateGoal(communicate, { Goal = "LeftClickRelease", Mobile = myChar:GetAttribute("mobile") == true })
 					task.wait(0.1)
 				end
 				if not (targetHumanoid.Health <= 15) then
 					if not dashCooldown or tick() - dashCooldown >= 7 then
-						communicate:FireServer(jsonEncode(dashGoal))
+						fireCommunicateGoal(communicate, dashGoal[1])
 						dashCooldown = tick()
 					end
 				end
@@ -3241,17 +3275,17 @@ local function setupCombatLoop()
 				virtualInput:SendKeyEvent(true, Enum.KeyCode.Four, false, game)
 				task.wait(0.001)
 				virtualInput:SendKeyEvent(false, Enum.KeyCode.Four, false, game)
-			else
-				task.wait(0.1)
-				if myChar:GetAttribute("mobile") then
-					communicate:FireServer(jsonEncode(mobileClickGoal))
 				else
-					communicate:FireServer(jsonEncode(leftClickGoal))
+						task.wait(0.06)
+						if myChar:GetAttribute("mobile") then
+						fireCommunicateGoal(communicate, mobileClickGoal[1])
+					else
+						fireCommunicateGoal(communicate, leftClickGoal[1])
+					end
+						task.wait(0.06)
+						fireCommunicateGoal(communicate, releaseGoal[1])
+						task.wait(0.04)
 				end
-				task.wait(0.1)
-				communicate:FireServer(jsonEncode(releaseGoal))
-				task.wait(0.1)
-			end
 		end
 		processing = false
 	end)
@@ -3294,17 +3328,23 @@ local function setupAimLoop()
 		if not myChar then
 			return
 		end
-		local magicHealthBar = localPlayer2.PlayerGui.Bar.MagicHealth.Health.Bar
-		if magicHealthBar.Size.X == UDim.new(1, 0) and not gKeyBusy then
+			local playerGui = localPlayer2:FindFirstChild("PlayerGui")
+			local bar = playerGui and playerGui:FindFirstChild("Bar")
+			local magicHealth = bar and bar:FindFirstChild("MagicHealth")
+			local magicHealthInner = magicHealth and magicHealth:FindFirstChild("Health")
+			local magicHealthBar = magicHealthInner and magicHealthInner:FindFirstChild("Bar")
+			if magicHealthBar
+				and magicHealthBar.Size.X.Scale >= 0.999
+				and not gKeyBusy then
 			gKeyBusy = true
 			ultKeyReady = false
-			task.spawn(function()
-				task.wait(0.5)
-				virtualInput:SendKeyEvent(true, Enum.KeyCode.G, false, game)
-				task.wait(0.001)
-				virtualInput:SendKeyEvent(false, Enum.KeyCode.G, false, game)
-				gKeyBusy = false
-			end)
+				task.spawn(function()
+					task.wait(0.5)
+					virtualInput:SendKeyEvent(true, Enum.KeyCode.G, false, game)
+					task.wait(0.001)
+					virtualInput:SendKeyEvent(false, Enum.KeyCode.G, false, game)
+					gKeyBusy = false
+				end)
 		end
 		if myChar:GetAttribute("Ulted") then
 			isUlted = true
@@ -3376,9 +3416,11 @@ local function setupAimLoop()
 			currentTarget = findWeakestTarget()
 			return
 		end
-		local targetTorso = targetChar:FindFirstChild("Torso")
-		if not targetTorso or targetTorso.Transparency == 1 then
-			if currentlyTargeting then
+			local targetTorso = targetChar:FindFirstChild("Torso")
+				or targetChar:FindFirstChild("UpperTorso")
+				or targetChar:FindFirstChild("LowerTorso")
+			if not targetTorso or targetTorso.Transparency == 1 then
+				if currentlyTargeting then
 				currentlyTargeting = false
 			end
 			detachSelfPhysics()
