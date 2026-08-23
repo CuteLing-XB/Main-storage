@@ -1395,6 +1395,60 @@ FETab:Button({
     end,
 })
 
+FETab:Section({
+    Title = "外部脚本",
+})
+
+FETab:Button({
+    Title = "掐死npc",
+    Desc = "点击执行 NPC 脚本",
+    Icon = "solar:skull-bold-duotone",
+    Callback = function()
+        SafeExecute(
+            "掐死npc",
+            "https://raw.githubusercontent.com/GUI-Offical/FileTest/refs/heads/main/Grab%20R6.txt"
+        )
+    end,
+})
+
+FETab:Button({
+    Title = "磁铁吸附",
+    Desc = "执行移动方块和磁铁吸附脚本",
+    Icon = "solar:magnet-bold-duotone",
+    Callback = function()
+        SafeExecute(
+            "磁铁吸附",
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E7%A3%81%E9%93%81%E5%90%B8%E9%99%84.txt"
+        )
+    end,
+})
+
+FETab:Button({
+    Title = "高级吸附",
+    Desc = "获取经典念力工具",
+    Icon = "solar:hand-stars-bold-duotone",
+    Callback = function()
+        SafeExecute(
+            "高级吸附",
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E9%AB%98%E7%BA%A7%E5%90%B8%E9%99%84.txt"
+        )
+    end,
+})
+
+FETab:Button({
+    Title = "C00",
+    Desc = "该功能已锁定",
+    Icon = "solar:lock-keyhole-bold-duotone",
+    Locked = true,
+    LockedTitle = "无法使用该力量",
+    Callback = function()
+        SafeExecute(
+            "禁忌之力",
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E7%A6%81%E5%BF%8C%E4%B9%8B%E5%8A%9B.txt"
+        )
+    end,
+})
+
 local DrawingState = {
     Boxes = {Enabled = false, Update = nil, Objects = {}},
     Chams = {Enabled = false, Update = nil, Objects = {}, Color = Color3.fromRGB(255, 255, 255)},
@@ -2057,7 +2111,7 @@ for themeName in pairs(WindUI:GetThemes()) do
 end
 table.sort(themeNames)
 
-SettingTab:Dropdown({
+local themeDropdown = SettingTab:Dropdown({
     Title = "选择主题",
     Desc = "默认使用白色 Light 主题，可手动选择其他主题；不会自动循环切换",
     Icon = "solar:palette-bold-duotone",
@@ -2080,6 +2134,146 @@ SettingTab:Dropdown({
     end,
 })
 
+SettingTab:Section({
+    Title = "PC 端按键绑定",
+})
+
+local pcToggleKeybind = SettingTab:Keybind({
+    Title = "自定义开关按键",
+    Desc = "按下绑定键切换 XL Hub 的显示状态",
+    Icon = "solar:keyboard-bold-duotone",
+    Value = "RightShift",
+    Flag = "PCWindowToggleKey",
+    Callback = function(keyName)
+        local keyCode = typeof(keyName) == "EnumItem" and keyName or Enum.KeyCode[keyName]
+        if keyCode then
+            Window:SetToggleKey(keyCode)
+        end
+    end,
+})
+
+
+--==================================================
+-- WindUI 官方配置管理器：保存并自动读取主题、按键等控件配置
+--==================================================
+local ConfigManager = Window.ConfigManager
+local ConfigName = "default"
+local ConfigFile = nil
+
+local function getWindUIConfig()
+    if not ConfigManager then
+        return nil
+    end
+
+    if not ConfigFile then
+        ConfigFile = ConfigManager:CreateConfig(ConfigName)
+        if ConfigFile then
+            ConfigFile:Register("ThemeSelection", themeDropdown)
+            ConfigFile:Register("PCWindowToggleKey", pcToggleKeybind)
+        end
+    end
+
+    return ConfigFile
+end
+
+local function saveWindUIConfig()
+    local config = getWindUIConfig()
+    if not config then
+        return false
+    end
+
+    local ok, result = pcall(function()
+        return config:Save()
+    end)
+    return ok and result == true
+end
+
+local function loadWindUIConfig()
+    local config = getWindUIConfig()
+    if not config then
+        return false
+    end
+
+    local ok, result = pcall(function()
+        return config:Load()
+    end)
+    return ok and result ~= nil
+end
+
+if ConfigManager then
+    ConfigManager:Init(Window)
+    getWindUIConfig()
+
+    SettingTab:Section({
+        Title = "配置保存",
+    })
+
+    SettingTab:Button({
+        Title = "保存主题和控件配置",
+        Desc = "保存当前主题、PC 按键和已注册控件；下次启动会自动读取",
+        Icon = "solar:diskette-bold-duotone",
+        Callback = function()
+            if saveWindUIConfig() then
+                WindUI:Notify({
+                    Title = "配置已保存",
+                    Content = "主题和控件配置已保存到 default",
+                    Duration = 3,
+                })
+            else
+                WindUI:Notify({
+                    Title = "保存失败",
+                    Content = "WindUI ConfigManager 不可用或配置保存失败",
+                    Duration = 4,
+                })
+            end
+        end,
+    })
+
+    SettingTab:Button({
+        Title = "立即读取已保存配置",
+        Desc = "手动恢复上次保存的主题和控件配置",
+        Icon = "solar:folder-open-bold-duotone",
+        Callback = function()
+            if loadWindUIConfig() then
+                WindUI:Notify({
+                    Title = "配置已读取",
+                    Content = "已恢复 default 配置",
+                    Duration = 3,
+                })
+            else
+                WindUI:Notify({
+                    Title = "读取失败",
+                    Content = "暂未找到可读取的配置文件",
+                    Duration = 4,
+                })
+            end
+        end,
+    })
+
+    task.defer(function()
+        if loadWindUIConfig() then
+            WindUI:Notify({
+                Title = "配置已自动读取",
+                Content = "已恢复上次保存的主题和控件设置",
+                Duration = 3,
+            })
+        end
+    end)
+
+    Window:OnClose(function()
+        saveWindUIConfig()
+    end)
+
+    Window:OnDestroy(function()
+        saveWindUIConfig()
+    end)
+else
+    SettingTab:Paragraph({
+        Title = "配置管理器不可用",
+        Desc = "当前 WindUI 版本未提供 ConfigManager，无法保存主题配置",
+        Icon = "solar:danger-triangle-bold-duotone",
+    })
+end
 
 _G.__XLHubCleanup = function()
     if TranslatorCleanup then
