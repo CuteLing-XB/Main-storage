@@ -1,0 +1,975 @@
+-- This file was generated at discord.gg/syncrypt
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local CurrentCamera = workspace.CurrentCamera
+local u6 = false
+local u7
+local n1 = 10
+local u9
+local u10
+local AlignOrientation
+local u12
+local u13 = false
+local u14 = false
+local vector3 = Vector3.new(0, 0, 0)
+local vector3_2 = Vector3.new(0, 0, 0)
+local WeldConstraint
+local u18 = false
+local u19 = false
+local t1 = {
+	x = 0,
+	y = 0,
+	z = 0
+}
+pcall(function()
+    sethiddenproperty(LocalPlayer, "SimulationRadius", 1e999)
+    LocalPlayer.ReplicationFocus = workspace
+end)
+RunService.Heartbeat:Connect(function()
+    pcall(function()
+        sethiddenproperty(LocalPlayer, "SimulationRadius", 1e999)
+    end)
+end)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 240, 0, 200)
+Frame.Position = UDim2.new(0.5, -120, 0.3, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+Frame.Parent = ScreenGui
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 20)
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Color = Color3.fromRGB(100, 200, 255)
+UIStroke.Thickness = 3
+UIStroke.Parent = Frame
+local Frame2 = Instance.new("Frame")
+Frame2.Size = UDim2.new(1, 0, 0, 30)
+Frame2.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Frame2.BorderSizePixel = 0
+Frame2.Parent = Frame
+Instance.new("UICorner", Frame2).CornerRadius = UDim.new(0, 20)
+local TextLabel = Instance.new("TextLabel")
+TextLabel.Size = UDim2.new(1, -80, 1, 0)
+TextLabel.Position = UDim2.new(0, 15, 0, 0)
+TextLabel.BackgroundTransparency = 1
+TextLabel.Text = "🧲 移动方块 V20"
+TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextLabel.TextSize = 13
+TextLabel.Font = Enum.Font.GothamBold
+TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+TextLabel.Parent = Frame2
+local TextButton = Instance.new("TextButton")
+TextButton.Size = UDim2.new(0, 30, 0, 30)
+TextButton.Position = UDim2.new(1, -70, 0, 0)
+TextButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+TextButton.Text = "−"
+TextButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextButton.TextSize = 14
+TextButton.Font = Enum.Font.GothamBold
+TextButton.BorderSizePixel = 0
+TextButton.Parent = Frame2
+Instance.new("UICorner", TextButton).CornerRadius = UDim.new(1, 0)
+local TextButton2 = Instance.new("TextButton")
+TextButton2.Size = UDim2.new(0, 30, 0, 30)
+TextButton2.Position = UDim2.new(1, -35, 0, 0)
+TextButton2.BackgroundColor3 = Color3.fromRGB(220, 53, 69)
+TextButton2.Text = "X"
+TextButton2.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextButton2.TextSize = 16
+TextButton2.Font = Enum.Font.GothamBold
+TextButton2.BorderSizePixel = 0
+TextButton2.Parent = Frame2
+Instance.new("UICorner", TextButton2).CornerRadius = UDim.new(1, 0)
+local TextButton3 = Instance.new("TextButton")
+TextButton3.Size = UDim2.new(0, 50, 0, 50)
+TextButton3.Position = UDim2.new(0, 10, 0, 200)
+TextButton3.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+TextButton3.Text = "🧲"
+TextButton3.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextButton3.TextSize = 24
+TextButton3.Font = Enum.Font.GothamBold
+TextButton3.Active = true
+TextButton3.Draggable = true
+TextButton3.Visible = false
+TextButton3.BorderSizePixel = 0
+TextButton3.Parent = ScreenGui
+Instance.new("UICorner", TextButton3).CornerRadius = UDim.new(1, 0)
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Size = UDim2.new(1, 0, 1, -30)
+ScrollingFrame.Position = UDim2.new(0, 0, 0, 30)
+ScrollingFrame.BackgroundTransparency = 1
+ScrollingFrame.BorderSizePixel = 0
+ScrollingFrame.ScrollBarThickness = 6
+ScrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(60, 140, 230)
+ScrollingFrame.Parent = Frame
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = ScrollingFrame
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+local function v31(p1, p2, p3)
+    local TextButton4 = Instance.new("TextButton")
+
+    TextButton4.Size = UDim2.new(1, -20, 0, 40)
+    TextButton4.BackgroundColor3 = p2
+    TextButton4.Text = p3 .. " " .. p1
+    TextButton4.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TextButton4.TextSize = 13
+    TextButton4.Font = Enum.Font.GothamBold
+    TextButton4.BorderSizePixel = 0
+    TextButton4.Parent = ScrollingFrame
+    Instance.new("UICorner", TextButton4).CornerRadius = UDim.new(0, 10)
+
+    return TextButton4
+end
+local v32 = v31("拾取方块：关闭", Color3.fromRGB(220, 53, 69), "✋")
+v32.LayoutOrder = 1
+local v33 = v31("冻结方块", Color3.fromRGB(100, 150, 255), "🔒")
+v33.LayoutOrder = 2
+local Frame3 = Instance.new("Frame")
+Frame3.Size = UDim2.new(1, -20, 0, 40)
+Frame3.BackgroundTransparency = 1
+Frame3.BorderSizePixel = 0
+Frame3.Parent = ScrollingFrame
+Frame3.LayoutOrder = 3
+local TextButton5 = Instance.new("TextButton")
+TextButton5.Size = UDim2.new(1, -55, 0, 40)
+TextButton5.Position = UDim2.new(0, 0, 0, 0)
+TextButton5.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
+TextButton5.Text = "🚀 发射方块"
+TextButton5.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextButton5.TextSize = 13
+TextButton5.Font = Enum.Font.GothamBold
+TextButton5.BorderSizePixel = 0
+TextButton5.Parent = Frame3
+Instance.new("UICorner", TextButton5).CornerRadius = UDim.new(0, 10)
+local TextBox = Instance.new("TextBox")
+TextBox.Size = UDim2.new(0, 50, 0, 40)
+TextBox.Position = UDim2.new(1, -50, 0, 0)
+TextBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+TextBox.Text = "1000"
+TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextBox.TextSize = 11
+TextBox.Font = Enum.Font.GothamBold
+TextBox.PlaceholderText = "力度"
+TextBox.BorderSizePixel = 0
+TextBox.Parent = Frame3
+Instance.new("UICorner", TextBox).CornerRadius = UDim.new(0, 10)
+local Frame4 = Instance.new("Frame")
+Frame4.Size = UDim2.new(1, -20, 0, 35)
+Frame4.BackgroundTransparency = 1
+Frame4.BorderSizePixel = 0
+Frame4.Parent = ScrollingFrame
+Frame4.LayoutOrder = 4
+local TextButton6 = Instance.new("TextButton")
+TextButton6.Size = UDim2.new(0, 55, 0, 35)
+TextButton6.Position = UDim2.new(0, 0, 0, 0)
+TextButton6.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+TextButton6.Text = "−"
+TextButton6.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextButton6.TextSize = 16
+TextButton6.Font = Enum.Font.GothamBold
+TextButton6.BorderSizePixel = 0
+TextButton6.Parent = Frame4
+Instance.new("UICorner", TextButton6).CornerRadius = UDim.new(0, 8)
+local TextLabel2 = Instance.new("TextLabel")
+TextLabel2.Size = UDim2.new(0, 100, 0, 35)
+TextLabel2.Position = UDim2.new(0, 60, 0, 0)
+TextLabel2.BackgroundTransparency = 1
+TextLabel2.Text = "距离：10"
+TextLabel2.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextLabel2.TextSize = 11
+TextLabel2.Font = Enum.Font.GothamBold
+TextLabel2.Parent = Frame4
+local TextButton7 = Instance.new("TextButton")
+TextButton7.Size = UDim2.new(0, 55, 0, 35)
+TextButton7.Position = UDim2.new(1, -55, 0, 0)
+TextButton7.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+TextButton7.Text = "+"
+TextButton7.TextColor3 = Color3.fromRGB(0, 0, 0)
+TextButton7.TextSize = 16
+TextButton7.Font = Enum.Font.GothamBold
+TextButton7.BorderSizePixel = 0
+TextButton7.Parent = Frame4
+Instance.new("UICorner", TextButton7).CornerRadius = UDim.new(0, 8)
+local TextLabel3 = Instance.new("TextLabel")
+TextLabel3.Size = UDim2.new(1, -20, 0, 18)
+TextLabel3.BackgroundTransparency = 1
+TextLabel3.Text = "🔄 旋转"
+TextLabel3.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextLabel3.TextSize = 10
+TextLabel3.Font = Enum.Font.GothamBold
+TextLabel3.Parent = ScrollingFrame
+TextLabel3.LayoutOrder = 5
+local t2 = {
+	"X",
+	"Y",
+	"Z"
+}
+local t3 = {}
+local t4 = {}
+local t5 = {}
+for k, v in pairs(t2) do
+    local Frame5 = Instance.new("Frame")
+
+    Frame5.Size = UDim2.new(1, -20, 0, 26)
+    Frame5.BackgroundTransparency = 1
+    Frame5.BorderSizePixel = 0
+    Frame5.Parent = ScrollingFrame
+    Frame5.LayoutOrder = 5 + k
+
+    local TextLabel4 = Instance.new("TextLabel")
+
+    TextLabel4.Size = UDim2.new(0, 40, 1, 0)
+    TextLabel4.BackgroundTransparency = 1
+    TextLabel4.Text = v .. ": 0°"
+    TextLabel4.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TextLabel4.TextSize = 9
+    TextLabel4.Font = Enum.Font.Gotham
+    TextLabel4.Parent = Frame5
+    t3[v] = TextLabel4
+
+    local TextButton8 = Instance.new("TextButton")
+
+    TextButton8.Size = UDim2.new(0, 80, 1, 0)
+    TextButton8.Position = UDim2.new(0, 45, 0, 0)
+    TextButton8.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+    TextButton8.Text = "−"
+    TextButton8.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TextButton8.TextSize = 11
+    TextButton8.Font = Enum.Font.GothamBold
+    TextButton8.BorderSizePixel = 0
+    TextButton8.Parent = Frame5
+    Instance.new("UICorner", TextButton8).CornerRadius = UDim.new(0, 6)
+    t5[v] = TextButton8
+
+    local TextButton9 = Instance.new("TextButton")
+
+    TextButton9.Size = UDim2.new(0, 80, 1, 0)
+    TextButton9.Position = UDim2.new(1, -80, 0, 0)
+    TextButton9.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+    TextButton9.Text = "+"
+    TextButton9.TextColor3 = Color3.fromRGB(0, 0, 0)
+    TextButton9.TextSize = 11
+    TextButton9.Font = Enum.Font.GothamBold
+    TextButton9.BorderSizePixel = 0
+    TextButton9.Parent = Frame5
+    Instance.new("UICorner", TextButton9).CornerRadius = UDim.new(0, 6)
+    t4[v] = TextButton9
+end
+local TextButton10 = Instance.new("TextButton")
+TextButton10.Size = UDim2.new(1, -20, 0, 32)
+TextButton10.BackgroundColor3 = Color3.fromRGB(150, 100, 255)
+TextButton10.Text = "↻ 重置"
+TextButton10.TextColor3 = Color3.fromRGB(255, 255, 255)
+TextButton10.TextSize = 11
+TextButton10.Font = Enum.Font.GothamBold
+TextButton10.BorderSizePixel = 0
+TextButton10.Parent = ScrollingFrame
+TextButton10.LayoutOrder = 9
+Instance.new("UICorner", TextButton10).CornerRadius = UDim.new(0, 8)
+local TextLabel5 = Instance.new("TextLabel")
+TextLabel5.Size = UDim2.new(1, -20, 0, 18)
+TextLabel5.BackgroundTransparency = 1
+TextLabel5.Text = "作者：Axion Scripts"
+TextLabel5.TextColor3 = Color3.fromRGB(100, 200, 255)
+TextLabel5.TextSize = 9
+TextLabel5.Font = Enum.Font.GothamBold
+TextLabel5.Parent = ScrollingFrame
+TextLabel5.LayoutOrder = 10
+UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    ScrollingFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+end)
+for _, v in pairs({
+	{
+		UDim2.new(0.5, -2, 0.48, -2),
+		UDim2.new(0, 4, 0, 4)
+	},
+	{
+		UDim2.new(0.5, -8, 0.48, -1),
+		UDim2.new(0, 16, 0, 2)
+	},
+	{
+		UDim2.new(0.5, -1, 0.48, -8),
+		UDim2.new(0, 2, 0, 16)
+	}
+}) do
+    local Frame6 = Instance.new("Frame")
+
+    Frame6.Position = v[1]
+    Frame6.Size = v[2]
+    Frame6.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Frame6.BorderSizePixel = 0
+    Frame6.ZIndex = 10
+    Frame6.Parent = ScreenGui
+end
+local Attachment = Instance.new("Attachment")
+Attachment.Parent = workspace.Terrain
+local function v58()
+    local v89 = CurrentCamera:ScreenPointToRay(CurrentCamera.ViewportSize.X / 2, CurrentCamera.ViewportSize.Y / 2)
+    local raycastParams = RaycastParams.new()
+
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = { LocalPlayer.Character }
+
+    local raycastResult = workspace:Raycast(v89.Origin, v89.Direction * 1000, raycastParams)
+    local v92 = raycastResult
+
+    if raycastResult then
+        v92 = raycastResult.Instance:IsA("BasePart")
+
+        if v92 then
+            v92 = not raycastResult.Instance.Anchored
+        end
+    end
+
+    if v92 then
+        return raycastResult.Instance, raycastResult.Position
+    end
+
+    return nil, nil
+end
+local function v59(p4)
+    if not p4 or not p4.Parent then
+        return false
+    end
+
+    local Character = LocalPlayer.Character
+
+    if not Character then
+        return false
+    end
+
+    local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
+
+    if not HumanoidRootPart then
+        return false
+    end
+
+    local raycastParams = RaycastParams.new()
+
+    raycastParams.FilterType = Enum.RaycastFilterType.Whitelist
+    raycastParams.FilterDescendantsInstances = { p4 }
+
+    return workspace:Raycast(HumanoidRootPart.Position, Vector3.new(0, -5, 0), raycastParams) ~= nil
+end
+local function v60(p5)
+    local Character = LocalPlayer.Character
+
+    if not Character or u18 then
+        return
+    end
+
+    local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
+
+    if not HumanoidRootPart then
+        return
+    end
+
+    if WeldConstraint then
+        pcall(function()
+            WeldConstraint:Destroy()
+        end)
+    end
+
+    WeldConstraint = Instance.new("WeldConstraint")
+    WeldConstraint.Part0 = HumanoidRootPart
+    WeldConstraint.Part1 = p5
+    WeldConstraint.Parent = HumanoidRootPart
+    u18 = true
+    pcall(function()
+        for _, descendant in pairs(Character:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                descendant.CanCollide = false
+            end
+        end
+    end)
+end
+local function v61()
+    if WeldConstraint then
+        pcall(function()
+            WeldConstraint:Destroy()
+        end)
+        WeldConstraint = nil
+    end
+
+    u18 = false
+
+    local Character = LocalPlayer.Character
+
+    if Character then
+        for _, descendant in pairs(Character:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                descendant.CanCollide = true
+            end
+        end
+    end
+end
+local function v62()
+    local v93 = not u7
+
+    if not v93 then
+        v93 = not u7.Parent or not u12
+    end
+
+    if v93 then
+        return
+    end
+
+    local v94 = math.rad(t1.x)
+    local v95 = math.rad(t1.y)
+    local v96 = math.rad(t1.z)
+
+    if AlignOrientation then
+        pcall(function()
+            AlignOrientation:Destroy()
+        end)
+    end
+
+    AlignOrientation = Instance.new("AlignOrientation")
+    AlignOrientation.MaxTorque = Vector3.new(1e999, 1e999, 1e999)
+    AlignOrientation.MaxAngularVelocity = 0
+    AlignOrientation.Responsiveness = 200
+    AlignOrientation.RigidityEnabled = true
+    AlignOrientation.Attachment0 = u12
+    AlignOrientation.Attachment1 = Attachment
+    AlignOrientation.Parent = u7
+
+    local WorldPosition = Attachment.WorldPosition
+
+    Attachment.CFrame = CFrame.new(WorldPosition) * CFrame.Angles(v94, v95, v96)
+end
+local function v63()
+    local v98 = not u7
+
+    if not v98 then
+        v98 = not u7.Parent
+    end
+
+    if v98 then
+        return
+    end
+
+    v61()
+
+    local v99 = math.max(1, (math.min(10000, tonumber(TextBox.Text) or 1000)))
+
+    if u10 then
+        pcall(function()
+            u10:Destroy()
+        end)
+        u10 = nil
+    end
+
+    if AlignOrientation then
+        pcall(function()
+            AlignOrientation:Destroy()
+        end)
+        AlignOrientation = nil
+    end
+
+    if u12 then
+        pcall(function()
+            u12:Destroy()
+        end)
+        u12 = nil
+    end
+
+    u7.AssemblyLinearVelocity = CurrentCamera.CFrame.LookVector * v99
+    u7.CanCollide = true
+    u7 = nil
+    u6 = false
+    v32.Text = "✋ 拾取方块：关闭"
+    v32.BackgroundColor3 = Color3.fromRGB(220, 53, 69)
+
+    if u9 then
+        u9:Disconnect()
+        u9 = nil
+    end
+end
+local function v64()
+    if u10 then
+        pcall(function()
+            u10:Destroy()
+        end)
+        u10 = nil
+    end
+
+    if AlignOrientation then
+        pcall(function()
+            AlignOrientation:Destroy()
+        end)
+        AlignOrientation = nil
+    end
+
+    if u12 then
+        pcall(function()
+            u12:Destroy()
+        end)
+        u12 = nil
+    end
+
+    v61()
+
+    local v100 = u7
+
+    if v100 then
+        v100 = u7.Parent
+    end
+
+    if v100 then
+        u7.CustomPhysicalProperties = nil
+        u7.CanCollide = true
+    end
+
+    u7 = nil
+    t1 = {
+		x = 0,
+		y = 0,
+		z = 0
+	}
+end
+v32.MouseButton1Click:Connect(function()
+    u6 = not u6
+
+    if u6 then
+        v32.Text = "✋ 拾取方块：开启"
+        v32.BackgroundColor3 = Color3.fromRGB(40, 167, 69)
+        u9 = RunService.RenderStepped:Connect(function()
+            if not u6 then
+                return
+            end
+
+            if not u7 then
+                local v118, v119 = v58()
+                if not (v118 and v119) then
+                    return
+                end
+                u19 = v59(v118)
+                u7 = v118
+                vector3 = u7.CFrame:PointToObjectSpace(v119)
+                u7.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.3, 0.5, 1, 1)
+                u7.CanCollide = true
+                pcall(function()
+                    if u7:CanSetNetworkOwnership() then
+                        u7:SetNetworkOwner(LocalPlayer)
+                    end
+                end)
+                for v122, v123 in pairs(u7:GetChildren()) do
+
+                    local v124 = v123
+                    local v125 = v124:IsA("BodyAngularVelocity")
+
+                    if not v125 then
+                        v125 = v124:IsA("BodyForce")
+
+                        if not v125 then
+                            v125 = v124:IsA("BodyGyro")
+
+                            if not v125 then
+                                v125 = v124:IsA("BodyPosition")
+
+                                if not v125 then
+                                    v125 = v124:IsA("BodyThrust")
+
+                                    if not v125 then
+                                        v125 = v124:IsA("BodyVelocity")
+
+                                        if not v125 then
+                                            v125 = v124:IsA("RocketPropulsion")
+
+                                            if not v125 then
+                                                v125 = v124:IsA("Torque")
+
+                                                if not v125 then
+                                                    v125 = v124.Name:match("Frozen")
+
+                                                    if not v125 then
+                                                        v125 = v124.Name:match("Freeze")
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    if v125 then
+                        pcall(function()
+                            v124:Destroy()
+                        end)
+                    end
+                end
+                local Character = LocalPlayer.Character
+                if Character then
+                    Character = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                end
+                if Character then
+                    n1 = (v119 - Character.Position).Magnitude
+                    TextLabel2.Text = "距离：" .. math.floor(n1)
+                end
+                u12 = Instance.new("Attachment")
+                u12.Position = vector3
+                u12.Parent = u7
+                u10 = Instance.new("AlignPosition")
+                u10.MaxForce = 1e999
+                u10.MaxVelocity = 150
+                u10.Responsiveness = 35
+                u10.Attachment0 = u12
+                u10.Attachment1 = Attachment
+                u10.Parent = u7
+                AlignOrientation = Instance.new("AlignOrientation")
+                AlignOrientation.MaxTorque = Vector3.new(1e999, 1e999, 1e999)
+                AlignOrientation.MaxAngularVelocity = 0
+                AlignOrientation.Responsiveness = 200
+                AlignOrientation.RigidityEnabled = true
+                AlignOrientation.Attachment0 = u12
+                AlignOrientation.Attachment1 = Attachment
+                AlignOrientation.Parent = u7
+                Attachment.CFrame = u7.CFrame - u7.CFrame.Position
+                vector3_2 = v119
+                t1 = {
+					x = 0,
+					y = 0,
+					z = 0
+				}
+                for _, v in pairs(t2) do
+                    t3[v].Text = v .. ": 0°"
+                end
+            end
+
+            local v129 = u7
+
+            if v129 then
+                v129 = u7.Parent
+
+                if v129 then
+                    v129 = not u7.Anchored and u10
+                end
+            end
+
+            if v129 then
+                local v130 = CurrentCamera.CFrame.Position + CurrentCamera.CFrame.LookVector * n1
+
+                vector3_2 = vector3_2:Lerp(v130, 0.12)
+                Attachment.WorldPosition = vector3_2
+                pcall(function()
+                    if u7:CanSetNetworkOwnership() then
+                        u7:SetNetworkOwner(LocalPlayer)
+                    end
+                end)
+                u7.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            else
+                local v131 = u7
+
+                if v131 then
+                    v131 = not u7.Parent
+
+                    if not v131 then
+                        v131 = u7.Anchored
+                    end
+                end
+
+                if v131 then
+                    v64()
+                end
+            end
+
+            local v132 = u7
+
+            if v132 then
+                v132 = u7.Parent
+
+                if v132 then
+                    v132 = not u18 and u19
+                end
+            end
+
+            if v132 and v59(u7) then
+                v60(u7)
+            end
+
+            local v133 = u7
+
+            if v133 then
+                v133 = u7.Parent and u18
+            end
+
+            if v133 and not v59(u7) then
+                v61()
+            end
+        end)
+
+        return
+    end
+
+    v32.Text = "✋ 拾取方块：关闭"
+    v32.BackgroundColor3 = Color3.fromRGB(220, 53, 69)
+    v64()
+
+    if u9 then
+        u9:Disconnect()
+        u9 = nil
+    end
+end)
+v33.MouseButton1Click:Connect(function()
+    local v101 = u7
+
+    if v101 then
+        v101 = u7.Parent
+    end
+
+    if v101 then
+        local Position = u7.Position
+        local CFrame2 = u7.CFrame
+
+        if u10 then
+            pcall(function()
+                u10:Destroy()
+            end)
+            u10 = nil
+        end
+
+        if AlignOrientation then
+            pcall(function()
+                AlignOrientation:Destroy()
+            end)
+            AlignOrientation = nil
+        end
+
+        if u12 then
+            pcall(function()
+                u12:Destroy()
+            end)
+            u12 = nil
+        end
+
+        v61()
+        u7.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        u7.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+        local BodyPosition = Instance.new("BodyPosition")
+
+        BodyPosition.MaxForce = Vector3.new(1e999, 1e999, 1e999)
+        BodyPosition.D = 99999
+        BodyPosition.P = 999999
+        BodyPosition.Position = Position
+        BodyPosition.Parent = u7
+
+        local BodyGyro = Instance.new("BodyGyro")
+
+        BodyGyro.MaxTorque = Vector3.new(1e999, 1e999, 1e999)
+        BodyGyro.D = 999999
+        BodyGyro.P = 9999999
+        BodyGyro.CFrame = CFrame2
+        BodyGyro.Parent = u7
+        u7.CanCollide = true
+        u7 = nil
+        u6 = false
+        v32.Text = "✋ 拾取方块：关闭"
+        v32.BackgroundColor3 = Color3.fromRGB(220, 53, 69)
+
+        if u9 then
+            u9:Disconnect()
+            u9 = nil
+        end
+    end
+end)
+TextButton5.MouseButton1Click:Connect(function()
+    v63()
+end)
+local t6 = {
+	minus = false,
+	plus = false
+}
+local t7 = {
+	minus = false,
+	plus = false
+}
+local t8 = {
+	x = t6,
+	y = t7,
+	z = {
+		minus = false,
+		plus = false
+	}
+}
+local t9 = {
+	minus = nil,
+	plus = nil
+}
+local t10 = {
+	minus = nil,
+	plus = nil
+}
+local t11 = {
+	x = t9,
+	y = t10,
+	z = {
+		minus = nil,
+		plus = nil
+	}
+}
+local UserInputService = game:GetService("UserInputService")
+for _, v in pairs(t2) do
+    local v74 = string.lower(v)
+
+    t5[v].MouseButton1Down:Connect(function()
+        t11[v74].minus = UserInputService:GetMouseLocation()
+        t8[v74].minus = true
+    end)
+    t5[v].MouseButton1Up:Connect(function()
+        t8[v74].minus = false
+        t11[v74].minus = nil
+    end)
+    t4[v].MouseButton1Down:Connect(function()
+        t11[v74].plus = UserInputService:GetMouseLocation()
+        t8[v74].plus = true
+    end)
+    t4[v].MouseButton1Up:Connect(function()
+        t8[v74].plus = false
+        t11[v74].plus = nil
+    end)
+end
+TextButton10.MouseButton1Click:Connect(function()
+    local v106 = u7
+
+    if v106 then
+        v106 = u7.Parent
+    end
+
+    if v106 then
+        t1 = {
+			x = 0,
+			y = 0,
+			z = 0
+		}
+
+        for _, v in pairs(t2) do
+            t3[v].Text = v .. ": 0°"
+        end
+
+        v62()
+    end
+end)
+TextButton6.MouseButton1Down:Connect(function()
+    u13 = true
+end)
+TextButton6.MouseButton1Up:Connect(function()
+    u13 = false
+end)
+TextButton7.MouseButton1Down:Connect(function()
+    u14 = true
+end)
+TextButton7.MouseButton1Up:Connect(function()
+    u14 = false
+end)
+RunService.RenderStepped:Connect(function()
+    if not u6 then
+        return
+    end
+
+    if u13 then
+        n1 = math.max(0, n1 - 0.3)
+        TextLabel2.Text = "距离：" .. math.floor(n1)
+    end
+
+    if u14 then
+        n1 += 0.3
+        TextLabel2.Text = "距离：" .. math.floor(n1)
+    end
+
+    for _, v in pairs(t2) do
+        local v111 = string.lower(v)
+        local minus = t8[v111].minus
+
+        if minus then
+            minus = t11[v111].minus
+        end
+
+        if minus and (UserInputService:GetMouseLocation() - t11[v111].minus).Magnitude > 10 then
+            t8[v111].minus = false
+        end
+
+        local plus = t8[v111].plus
+
+        if plus then
+            plus = t11[v111].plus
+        end
+
+        if plus and (UserInputService:GetMouseLocation() - t11[v111].plus).Magnitude > 10 then
+            t8[v111].plus = false
+        end
+
+        local v114 = t8[v111]
+
+        if v114 then
+            v114 = t8[v111].minus
+        end
+
+        if v114 then
+            t1[v111] = t1[v111] - 1.5
+
+            if t1[v111] < 0 then
+                t1[v111] = 360 + t1[v111]
+            end
+
+            t3[v].Text = v .. ": " .. math.floor(t1[v111]) .. "°"
+            v62()
+        end
+
+        local v115 = t8[v111]
+
+        if v115 then
+            v115 = t8[v111].plus
+        end
+
+        if v115 then
+            t1[v111] = t1[v111] + 1.5
+
+            if t1[v111] >= 360 then
+                t1[v111] = 0
+            end
+
+            t3[v].Text = v .. ": " .. math.floor(t1[v111]) .. "°"
+            v62()
+        end
+    end
+end)
+TextButton.MouseButton1Click:Connect(function()
+    Frame.Visible = false
+    TextButton3.Visible = true
+end)
+TextButton3.MouseButton1Click:Connect(function()
+    Frame.Visible = true
+    TextButton3.Visible = false
+end)
+TextButton2.MouseButton1Click:Connect(function()
+    v64()
+
+    if u9 then
+        u9:Disconnect()
+    end
+
+    ScreenGui:Destroy()
+end)
+LocalPlayer.CharacterAdded:Connect(function()
+    v64()
+
+    if u9 then
+        u9:Disconnect()
+    end
+end)
+print("✅ V20 最终版！")
+print("📏 拖动时距离功能正常")
+print("🔄 拖动时旋转会取消")
+print("💥 已添加力场！")
