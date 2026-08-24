@@ -1,12 +1,13 @@
 --[[
-	自由视角 (FREE CAM)
+	自由视角 (FREE CAM) + 完美磁铁吸附 (实体修复版)
 	• 移动端: 使用 D-pad (方向盘) 控制移动
 	• 电脑端: 使用 WASD 控制移动
 	• 拖动屏幕任意位置 (除了原版虚拟摇杆区域) 来转动视角
 	• 摄像机图标 (CAM): 开启/关闭自由视角
-	• 齿轮图标 (GEAR): 打开设置
-	• 电脑图标 (PC): 切换 PC/WASD 控制模式
-	• 传送图标 (TP): 将人物实体传送到当前摄像机位置
+	• 齿轮图标 (GEAR): 打开设置 (内含速度、平滑度及人物吸附偏移设置)
+	• 电脑图标 (PC): 切换 PC/WASD 控制模式 (开启后断开实体/车辆控制)
+	• 传送图标 (TP): 将人物实体/车辆传送到当前摄像机位置
+	• 磁铁图标 (MAGNET): 必须开启摄像机后才可使用。开启后人物或车辆完美吸附摄像头，且保持真实的物理实体同步！
 	• 紫色发光描边表示激活状态
 ]]
 
@@ -14,6 +15,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -50,6 +52,13 @@ local SENSITIVITY_MIN_PERCENT, SENSITIVITY_MAX_PERCENT, SENSITIVITY_STEP_PERCENT
 
 local sensitivity = SENSITIVITY_BASE
 local maxPitch = math.rad(89)
+
+-- 吸附功能变量
+local magnetActive = false
+local offsetX = 0
+local offsetY = 0
+local offsetZ = 0
+local OFFSET_STEP = 1
 
 local controls = nil
 
@@ -100,6 +109,16 @@ local function disableCharacterControls()
 	then
 		controls:Disable()
 	end
+	
+	-- 绑定 ContextActionService 阻止 WASD 操控车辆
+	ContextActionService:BindActionAtPriority(
+		"FreeCamSinkControls",
+		function() return Enum.ContextActionResult.Sink end,
+		false,
+		Enum.ContextActionPriority.High.Value + 100,
+		Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D,
+		Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right, Enum.KeyCode.Space
+	)
 end
 
 local function enableCharacterControls()
@@ -109,6 +128,9 @@ local function enableCharacterControls()
 	then
 		controls:Enable()
 	end
+	
+	-- 解除阻止
+	ContextActionService:UnbindAction("FreeCamSinkControls")
 end
 
 local function updateCharacterControls()
@@ -190,14 +212,23 @@ local pcIcon = buildIconButton(
 )
 pcIcon.Name = "PCIcon"
 
--- 新增：传送按钮
+-- 传送按钮
 local tpIcon = buildIconButton(
-	"7183623773", -- 使用一个代表位置/传送的图标
+	"7183623773", 
 	UDim2.new(0, 42, 0, 42),
-	UDim2.new(0.94, 0, 0.1, 165), -- 位于PC图标下方
+	UDim2.new(0.94, 0, 0.1, 165),
 	0.65
 )
 tpIcon.Name = "TPIcon"
+
+-- 磁铁吸附人物按钮
+local magnetIcon = buildIconButton(
+	"7485051715", 
+	UDim2.new(0, 42, 0, 42),
+	UDim2.new(0.94, 0, 0.1, 220), 
+	0.65
+)
+magnetIcon.Name = "MagnetIcon"
 
 local function setIconGlow(button, enabled)
 	local stroke = button:FindFirstChild("ActiveGlow")
@@ -263,23 +294,13 @@ local function makeArrowButton(name, pos, rotation)
 	return btn
 end
 
-local upBtn =
-	makeArrowButton("Up", UDim2.new(0.5, 0, 0.5, -95), 0)
-
-local downBtn =
-	makeArrowButton("Down", UDim2.new(0.5, 0, 0.5, 95), 180)
-
-local leftBtn =
-	makeArrowButton("Left", UDim2.new(0.5, -95, 0.5, 0), -90)
-
-local rightBtn =
-	makeArrowButton("Right", UDim2.new(0.5, 95, 0.5, 0), 90)
+local upBtn = makeArrowButton("Up", UDim2.new(0.5, 0, 0.5, -95), 0)
+local downBtn = makeArrowButton("Down", UDim2.new(0.5, 0, 0.5, 95), 180)
+local leftBtn = makeArrowButton("Left", UDim2.new(0.5, -95, 0.5, 0), -90)
+local rightBtn = makeArrowButton("Right", UDim2.new(0.5, 95, 0.5, 0), 90)
 
 local arrowButtons = {
-	upBtn,
-	downBtn,
-	leftBtn,
-	rightBtn
+	upBtn, downBtn, leftBtn, rightBtn
 }
 
 local function updateControls()
@@ -294,7 +315,7 @@ local settingsPanel = Instance.new("Frame")
 settingsPanel.Name = "SettingsPanel"
 settingsPanel.AnchorPoint = Vector2.new(0.5, 0.5)
 settingsPanel.Position = UDim2.new(0.5, 0, 0.42, 0)
-settingsPanel.Size = UDim2.new(0, 280, 0, 330)
+settingsPanel.Size = UDim2.new(0, 280, 0, 520)
 settingsPanel.BackgroundColor3 = Color3.fromRGB(18, 13, 27)
 settingsPanel.BackgroundTransparency = 0.08
 settingsPanel.BorderSizePixel = 0
@@ -487,30 +508,27 @@ local speedMinus, speedPlus, speedValueLabel =
 	buildAdjustRow("飞行速度", 70, tostring(speed))
 
 local smoothMinus, smoothPlus, smoothValueLabel =
-	buildAdjustRow(
-		"平滑度",
-		126,
-		tostring(math.floor(smoothness * 100)) .. "%"
-	)
+	buildAdjustRow("平滑度", 126, tostring(math.floor(smoothness * 100)) .. "%")
 
 local sensitivityMinus, sensitivityPlus, sensitivityValueLabel =
-	buildAdjustRow(
-		"灵敏度",
-		182,
-		tostring(math.floor((sensitivity / SENSITIVITY_BASE) * 100)) .. "%"
-	)
+	buildAdjustRow("灵敏度", 182, tostring(math.floor((sensitivity / SENSITIVITY_BASE) * 100)) .. "%")
+
+-- 偏移调节
+local xMinus, xPlus, xValueLabel = buildAdjustRow("左右偏移 (X)", 238, tostring(offsetX))
+local yMinus, yPlus, yValueLabel = buildAdjustRow("上下偏移 (Y)", 294, tostring(offsetY))
+local zMinus, zPlus, zValueLabel = buildAdjustRow("前后偏移 (Z)", 350, tostring(offsetZ))
 
 local divider = Instance.new("Frame")
 divider.BackgroundColor3 = Color3.fromRGB(55, 48, 65)
 divider.BorderSizePixel = 0
-divider.Position = UDim2.new(0, 14, 0, 240)
+divider.Position = UDim2.new(0, 14, 0, 408)
 divider.Size = UDim2.new(1, -28, 0, 2)
 divider.ZIndex = 20
 divider.Parent = settingsPanel
 
 local socialsHeader = Instance.new("TextLabel")
 socialsHeader.BackgroundTransparency = 1
-socialsHeader.Position = UDim2.new(0, 14, 0, 242)
+socialsHeader.Position = UDim2.new(0, 14, 0, 410)
 socialsHeader.Size = UDim2.new(1, -28, 0, 20)
 socialsHeader.Text = "社交媒体"
 socialsHeader.Font = ROUNDY_FONT
@@ -541,8 +559,7 @@ task.spawn(function()
 				Enum.EasingDirection.InOut
 			),
 			{
-				TextColor3 =
-					socialsCycleColors[nextIndex]
+				TextColor3 = socialsCycleColors[nextIndex]
 			}
 		)
 
@@ -568,135 +585,86 @@ local function makeSocialLine(text, yPos)
 	line.Parent = settingsPanel
 end
 
-makeSocialLine("Spotify: DuaKNo", 266)
-makeSocialLine("Instagram: Me_DuaKNo", 284)
-makeSocialLine("Discord: _duakno_", 302)
+makeSocialLine("Spotify: DuaKNo", 434)
+makeSocialLine("Instagram: Me_DuaKNo", 452)
+makeSocialLine("Discord: _duakno_", 470)
 
 local function commitSpeed(newSpeed)
-	speed = math.max(
-		SPEED_MIN,
-		math.floor(newSpeed + 0.5)
-	)
-
+	speed = math.max(SPEED_MIN, math.floor(newSpeed + 0.5))
 	speedValueLabel.Text = tostring(speed)
 end
 
 local function commitSmoothness(newPercent)
-	local clampedPercent =
-		math.clamp(
-			math.floor(newPercent + 0.5),
-			SMOOTH_MIN * 100,
-			SMOOTH_MAX * 100
-		)
-
+	local clampedPercent = math.clamp(math.floor(newPercent + 0.5), SMOOTH_MIN * 100, SMOOTH_MAX * 100)
 	smoothness = clampedPercent / 100
-	smoothValueLabel.Text =
-		tostring(clampedPercent) .. "%"
+	smoothValueLabel.Text = tostring(clampedPercent) .. "%"
 end
 
 local function commitSensitivity(newPercent)
-	local clampedPercent =
-		math.clamp(
-			math.floor(newPercent + 0.5),
-			SENSITIVITY_MIN_PERCENT,
-			SENSITIVITY_MAX_PERCENT
-		)
-
-	sensitivity =
-		SENSITIVITY_BASE * (clampedPercent / 100)
-
-	sensitivityValueLabel.Text =
-		tostring(clampedPercent) .. "%"
+	local clampedPercent = math.clamp(math.floor(newPercent + 0.5), SENSITIVITY_MIN_PERCENT, SENSITIVITY_MAX_PERCENT)
+	sensitivity = SENSITIVITY_BASE * (clampedPercent / 100)
+	sensitivityValueLabel.Text = tostring(clampedPercent) .. "%"
 end
 
-speedMinus.MouseButton1Click:Connect(function()
-	commitSpeed(speed - SPEED_STEP)
-end)
+local function commitOffsetX(newVal)
+	offsetX = math.floor(newVal * 10) / 10
+	xValueLabel.Text = tostring(offsetX)
+end
 
-speedPlus.MouseButton1Click:Connect(function()
-	commitSpeed(speed + SPEED_STEP)
-end)
+local function commitOffsetY(newVal)
+	offsetY = math.floor(newVal * 10) / 10
+	yValueLabel.Text = tostring(offsetY)
+end
 
-smoothMinus.MouseButton1Click:Connect(function()
-	commitSmoothness(
-		smoothness * 100 -
-		SMOOTH_STEP * 100
-	)
-end)
+local function commitOffsetZ(newVal)
+	offsetZ = math.floor(newVal * 10) / 10
+	zValueLabel.Text = tostring(offsetZ)
+end
 
-smoothPlus.MouseButton1Click:Connect(function()
-	commitSmoothness(
-		smoothness * 100 +
-		SMOOTH_STEP * 100
-	)
-end)
+speedMinus.MouseButton1Click:Connect(function() commitSpeed(speed - SPEED_STEP) end)
+speedPlus.MouseButton1Click:Connect(function() commitSpeed(speed + SPEED_STEP) end)
+smoothMinus.MouseButton1Click:Connect(function() commitSmoothness(smoothness * 100 - SMOOTH_STEP * 100) end)
+smoothPlus.MouseButton1Click:Connect(function() commitSmoothness(smoothness * 100 + SMOOTH_STEP * 100) end)
+sensitivityMinus.MouseButton1Click:Connect(function() commitSensitivity((sensitivity / SENSITIVITY_BASE) * 100 - SENSITIVITY_STEP_PERCENT) end)
+sensitivityPlus.MouseButton1Click:Connect(function() commitSensitivity((sensitivity / SENSITIVITY_BASE) * 100 + SENSITIVITY_STEP_PERCENT) end)
 
-sensitivityMinus.MouseButton1Click:Connect(function()
-	commitSensitivity(
-		(sensitivity / SENSITIVITY_BASE) * 100 -
-		SENSITIVITY_STEP_PERCENT
-	)
-end)
-
-sensitivityPlus.MouseButton1Click:Connect(function()
-	commitSensitivity(
-		(sensitivity / SENSITIVITY_BASE) * 100 +
-		SENSITIVITY_STEP_PERCENT
-	)
-end)
+xMinus.MouseButton1Click:Connect(function() commitOffsetX(offsetX - OFFSET_STEP) end)
+xPlus.MouseButton1Click:Connect(function() commitOffsetX(offsetX + OFFSET_STEP) end)
+yMinus.MouseButton1Click:Connect(function() commitOffsetY(offsetY - OFFSET_STEP) end)
+yPlus.MouseButton1Click:Connect(function() commitOffsetY(offsetY + OFFSET_STEP) end)
+zMinus.MouseButton1Click:Connect(function() commitOffsetZ(offsetZ - OFFSET_STEP) end)
+zPlus.MouseButton1Click:Connect(function() commitOffsetZ(offsetZ + OFFSET_STEP) end)
 
 speedValueLabel.FocusLost:Connect(function()
-	local cleaned =
-		speedValueLabel.Text:gsub(
-			"[^%d%.%-]",
-			""
-		)
-
-	local num = tonumber(cleaned)
-
-	if num then
-		commitSpeed(num)
-	else
-		speedValueLabel.Text =
-			tostring(speed)
-	end
+	local num = tonumber((speedValueLabel.Text:gsub("[^%d%.%-]", "")))
+	if num then commitSpeed(num) else speedValueLabel.Text = tostring(speed) end
 end)
 
 smoothValueLabel.FocusLost:Connect(function()
-	local cleaned =
-		smoothValueLabel.Text:gsub(
-			"[^%d%.%-]",
-			""
-		)
-
-	local num = tonumber(cleaned)
-
-	if num then
-		commitSmoothness(num)
-	else
-		smoothValueLabel.Text =
-			tostring(math.floor(smoothness * 100))
-			.. "%"
-	end
+	local num = tonumber((smoothValueLabel.Text:gsub("[^%d%.%-]", "")))
+	if num then commitSmoothness(num) else smoothValueLabel.Text = tostring(math.floor(smoothness * 100)) .. "%" end
 end)
 
 sensitivityValueLabel.FocusLost:Connect(function()
-	local cleaned =
-		sensitivityValueLabel.Text:gsub(
-			"[^%d%.]",
-			""
-		)
-
-	local num = tonumber(cleaned)
-
-	if num then
-		commitSensitivity(num)
-	else
-		sensitivityValueLabel.Text =
-			tostring(math.floor((sensitivity / SENSITIVITY_BASE) * 100))
-			.. "%"
-	end
+	local num = tonumber((sensitivityValueLabel.Text:gsub("[^%d%.]", "")))
+	if num then commitSensitivity(num) else sensitivityValueLabel.Text = tostring(math.floor((sensitivity / SENSITIVITY_BASE) * 100)) .. "%" end
 end)
+
+xValueLabel.FocusLost:Connect(function()
+	local num = tonumber((xValueLabel.Text:gsub("[^%d%.%-]", "")))
+	if num then commitOffsetX(num) else commitOffsetX(offsetX) end
+end)
+
+yValueLabel.FocusLost:Connect(function()
+	local num = tonumber((yValueLabel.Text:gsub("[^%d%.%-]", "")))
+	if num then commitOffsetY(num) else commitOffsetY(offsetY) end
+end)
+
+zValueLabel.FocusLost:Connect(function()
+	local num = tonumber((zValueLabel.Text:gsub("[^%d%.%-]", "")))
+	if num then commitOffsetZ(num) else commitOffsetZ(offsetZ) end
+end)
+
 
 local settingsOpen = false
 
@@ -714,6 +682,30 @@ closeBtn.MouseButton1Click:Connect(function()
 	setIconGlow(gearIcon, false)
 end)
 
+-- 新增：设置磁铁吸附状态函数，包含冻结躯干和改变角色动作
+local function setMagnetState(state)
+	magnetActive = state
+	setIconGlow(magnetIcon, magnetActive)
+	
+	local char = player.Character
+	if char then
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		
+		if hum and magnetActive then
+			-- 强行将角色状态设为落地，避免出现空中乱挥舞手脚的“坠落”动画，让人物乖乖站好
+			hum:ChangeState(Enum.HumanoidStateType.Landed)
+		end
+		
+		-- 每次关闭吸附时，重置装配体物理速度防卡顿
+		if not state and hrp then
+			local rootPart = hrp.AssemblyRootPart or hrp
+			rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			rootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end
+	end
+end
+
 local function enterFreeCam()
 	freeCamActive = true
 
@@ -721,30 +713,14 @@ local function enterFreeCam()
 	updateCharacterControls()
 
 	local cf = camera.CFrame
-
 	camPos = cf.Position
 	velocity = Vector3.zero
 
 	local look = cf.LookVector
+	yaw = math.atan2(-look.X, -look.Z)
+	pitch = math.asin(math.clamp(look.Y, -1, 1))
 
-	yaw =
-		math.atan2(
-			-look.X,
-			-look.Z
-		)
-
-	pitch =
-		math.asin(
-			math.clamp(
-				look.Y,
-				-1,
-				1
-			)
-		)
-
-	camera.CameraType =
-		Enum.CameraType.Scriptable
-
+	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CameraSubject = nil
 
 	setIconGlow(camIcon, true)
@@ -769,27 +745,27 @@ local function exitFreeCam()
 		moveDir[k] = false
 	end
 
-	camera.CameraType =
-		Enum.CameraType.Custom
+	camera.CameraType = Enum.CameraType.Custom
 
 	local char = player.Character
-
 	if char then
-		local hum =
-			char:FindFirstChildOfClass("Humanoid")
-
+		local hum = char:FindFirstChildOfClass("Humanoid")
 		if hum then
 			camera.CameraSubject = hum
 		end
 	end
 
+	-- 退出自由视角时，必须强制关闭吸附功能并恢复重力
+	if magnetActive then
+		setMagnetState(false)
+	end
+
 	setIconGlow(camIcon, false)
 	setIconGlow(gearIcon, false)
 	setIconGlow(pcIcon, false)
-	setIconGlow(tpIcon, false) -- 退出时关闭传送按钮发光
-
+	setIconGlow(tpIcon, false)
+	
 	pcMode = false
-
 	updateControls()
 end
 
@@ -802,46 +778,48 @@ camIcon.MouseButton1Click:Connect(function()
 end)
 
 pcIcon.MouseButton1Click:Connect(function()
-	if not freeCamActive then
-		return
-	end
-
+	if not freeCamActive then return end
 	pcMode = not pcMode
 
-	moveDir.Up = false
-	moveDir.Down = false
-	moveDir.Left = false
-	moveDir.Right = false
+	moveDir.Up = false; moveDir.Down = false; moveDir.Left = false; moveDir.Right = false
 
 	updateControls()
 	updateCharacterControls()
 	setIconGlow(pcIcon, pcMode)
 end)
 
--- 绑定传送按钮的点击事件
 tpIcon.MouseButton1Click:Connect(function()
-	-- 仅在开启自由视角时允许传送
-	if not freeCamActive then
-		return
-	end
-
+	if not freeCamActive then return end
 	local char = player.Character
 	if char then
-		-- 计算目标CFrame：相机的当前坐标 (camPos)，并保留水平朝向 (yaw)
 		local newCFrame = CFrame.new(camPos) * CFrame.Angles(0, yaw, 0)
+		local hrp = char:FindFirstChild("HumanoidRootPart")
 		
-		-- PivotTo 是最新且最安全的实体传送方式，防止出现关节脱落或物理乱飞报错
-		char:PivotTo(newCFrame)
+		-- 如果传送时有载具(装配体)，则优先传送载具
+		if hrp then
+			local rootPart = hrp.AssemblyRootPart or hrp
+			if rootPart ~= hrp then
+				rootPart.CFrame = newCFrame
+			else
+				char:PivotTo(newCFrame)
+			end
+		else
+			char:PivotTo(newCFrame)
+		end
 		
-		-- 给按钮一个成功传送的闪烁提示
 		setIconGlow(tpIcon, true)
 		task.delay(0.2, function()
-			if freeCamActive then
-				setIconGlow(tpIcon, false)
-			end
+			if freeCamActive then setIconGlow(tpIcon, false) end
 		end)
 	end
 end)
+
+-- 磁铁按钮事件：必须先打开自由视角摄像头，才能触发
+magnetIcon.MouseButton1Click:Connect(function()
+	if not freeCamActive then return end
+	setMagnetState(not magnetActive)
+end)
+
 
 local function bindHold(button, key)
 	button.MouseButton1Down:Connect(function()
@@ -849,14 +827,8 @@ local function bindHold(button, key)
 			moveDir[key] = true
 		end
 	end)
-
-	button.MouseButton1Up:Connect(function()
-		moveDir[key] = false
-	end)
-
-	button.MouseLeave:Connect(function()
-		moveDir[key] = false
-	end)
+	button.MouseButton1Up:Connect(function() moveDir[key] = false end)
+	button.MouseLeave:Connect(function() moveDir[key] = false end)
 end
 
 bindHold(upBtn, "Up")
@@ -867,377 +839,187 @@ bindHold(rightBtn, "Right")
 local function withinAbs(guiObj, pos)
 	local abs = guiObj.AbsolutePosition
 	local size = guiObj.AbsoluteSize
-
-	return
-		pos.X >= abs.X
-		and pos.X <= abs.X + size.X
-		and pos.Y >= abs.Y
-		and pos.Y <= abs.Y + size.Y
+	return pos.X >= abs.X and pos.X <= abs.X + size.X and pos.Y >= abs.Y and pos.Y <= abs.Y + size.Y
 end
 
 local function isOverAnyButton(pos)
 	for _, b in ipairs(arrowButtons) do
-		if b.Visible and withinAbs(b, pos) then
-			return true
-		end
+		if b.Visible and withinAbs(b, pos) then return true end
 	end
-
-	if withinAbs(camIcon, pos) then
-		return true
-	end
-
-	if withinAbs(gearIcon, pos) then
-		return true
-	end
-
-	if withinAbs(pcIcon, pos) then
-		return true
-	end
-	
-	if withinAbs(tpIcon, pos) then
-		return true
-	end
-
-	if
-		settingsPanel.Visible
-		and withinAbs(settingsPanel, pos)
-	then
-		return true
-	end
+	if withinAbs(camIcon, pos) then return true end
+	if withinAbs(gearIcon, pos) then return true end
+	if withinAbs(pcIcon, pos) then return true end
+	if withinAbs(tpIcon, pos) then return true end
+	if withinAbs(magnetIcon, pos) then return true end
+	if settingsPanel.Visible and withinAbs(settingsPanel, pos) then return true end
 
 	return false
 end
 
 local function findJoystickGuiObject()
-	local touchGui =
-		playerGui:FindFirstChild("TouchGui")
+	local touchGui = playerGui:FindFirstChild("TouchGui")
+	if not touchGui then return nil end
 
-	if not touchGui then
-		return nil
-	end
-
-	local preferredNames = {
-		"ThumbstickFrame",
-		"DynamicThumbstickFrame",
-		"Thumbstick",
-		"DynamicThumbstick"
-	}
-
+	local preferredNames = {"ThumbstickFrame", "DynamicThumbstickFrame", "Thumbstick", "DynamicThumbstick"}
 	for _, wantedName in ipairs(preferredNames) do
-		for _, obj in ipairs(
-			touchGui:GetDescendants()
-		) do
-			if
-				obj:IsA("GuiObject")
-				and obj.Visible
-				and obj.Name == wantedName
-			then
+		for _, obj in ipairs(touchGui:GetDescendants()) do
+			if obj:IsA("GuiObject") and obj.Visible and obj.Name == wantedName then
 				return obj
 			end
 		end
 	end
 
-	for _, obj in ipairs(
-		touchGui:GetDescendants()
-	) do
-		if
-			obj:IsA("GuiObject")
-			and obj.Visible
-		then
-			local lowerName =
-				string.lower(obj.Name)
-
-			if
-				lowerName:find("thumbstick")
-				or lowerName:find("joystick")
-			then
+	for _, obj in ipairs(touchGui:GetDescendants()) do
+		if obj:IsA("GuiObject") and obj.Visible then
+			local lowerName = string.lower(obj.Name)
+			if lowerName:find("thumbstick") or lowerName:find("joystick") then
 				return obj
 			end
 		end
 	end
-
 	return nil
 end
 
 local function isInsideJoystick(pos)
-	local joystick =
-		findJoystickGuiObject()
-
-	if not joystick then
-		return false
-	end
-
-	local abs =
-		joystick.AbsolutePosition
-
-	local size =
-		joystick.AbsoluteSize
-
+	local joystick = findJoystickGuiObject()
+	if not joystick then return false end
+	local abs = joystick.AbsolutePosition
+	local size = joystick.AbsoluteSize
 	local padding = 6
-
-	return
-		pos.X >= abs.X - padding
-		and pos.X <= abs.X + size.X + padding
-		and pos.Y >= abs.Y - padding
-		and pos.Y <= abs.Y + size.Y + padding
+	return pos.X >= abs.X - padding and pos.X <= abs.X + size.X + padding and pos.Y >= abs.Y - padding and pos.Y <= abs.Y + size.Y + padding
 end
 
-UserInputService.InputBegan:Connect(
-	function(input, gameProcessed)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if not freeCamActive then return end
+	if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.MouseButton2 then return end
 
-		if not freeCamActive then
-			return
-		end
+	local pos = Vector2.new(input.Position.X, input.Position.Y)
 
-		if
-			input.UserInputType
-				~= Enum.UserInputType.Touch
-			and
-			input.UserInputType
-				~= Enum.UserInputType.MouseButton1
-			and
-			input.UserInputType
-				~= Enum.UserInputType.MouseButton2
-		then
-			return
-		end
-
-		local pos =
-			Vector2.new(
-				input.Position.X,
-				input.Position.Y
-			)
-
-		if
-			input.UserInputType
-				== Enum.UserInputType.Touch
-			and isInsideJoystick(pos)
-		then
-			ignoredControlTouches[input] = true
-			return
-		end
-
-		if isOverAnyButton(pos) then
-			return
-		end
-
-		if not dragging then
-			dragging = true
-			dragInput = input
-			lastInputPos = pos
-		end
+	if input.UserInputType == Enum.UserInputType.Touch and isInsideJoystick(pos) then
+		ignoredControlTouches[input] = true
+		return
 	end
-)
+	if isOverAnyButton(pos) then return end
 
-UserInputService.InputChanged:Connect(
-	function(input)
-
-		if not freeCamActive then
-			return
-		end
-
-		if
-			input.UserInputType
-				== Enum.UserInputType.Touch
-			and ignoredControlTouches[input]
-		then
-			return
-		end
-
-		if not dragging then
-			return
-		end
-
-		local isMouse =
-			input.UserInputType
-				== Enum.UserInputType.MouseMovement
-
-		local isTouch =
-			input.UserInputType
-				== Enum.UserInputType.Touch
-
-		if not (isMouse or isTouch) then
-			return
-		end
-
-		if isTouch and input ~= dragInput then
-			return
-		end
-
-		local pos =
-			Vector2.new(
-				input.Position.X,
-				input.Position.Y
-			)
-
-		if lastInputPos then
-			local delta =
-				pos - lastInputPos
-
-			yaw =
-				yaw -
-				delta.X *
-				sensitivity
-
-			pitch =
-				math.clamp(
-					pitch -
-					delta.Y *
-					sensitivity,
-					-maxPitch,
-					maxPitch
-				)
-		end
-
+	if not dragging then
+		dragging = true
+		dragInput = input
 		lastInputPos = pos
 	end
-)
+end)
 
-UserInputService.InputEnded:Connect(
-	function(input)
+UserInputService.InputChanged:Connect(function(input)
+	if not freeCamActive then return end
+	if input.UserInputType == Enum.UserInputType.Touch and ignoredControlTouches[input] then return end
+	if not dragging then return end
 
-		if ignoredControlTouches[input] then
-			ignoredControlTouches[input] = nil
-			return
-		end
+	local isMouse = input.UserInputType == Enum.UserInputType.MouseMovement
+	local isTouch = input.UserInputType == Enum.UserInputType.Touch
+	if not (isMouse or isTouch) then return end
+	if isTouch and input ~= dragInput then return end
 
-		if input == dragInput then
-			dragging = false
-			dragInput = nil
-			lastInputPos = nil
+	local pos = Vector2.new(input.Position.X, input.Position.Y)
+
+	if lastInputPos then
+		local delta = pos - lastInputPos
+		yaw = yaw - delta.X * sensitivity
+		pitch = math.clamp(pitch - delta.Y * sensitivity, -maxPitch, maxPitch)
+	end
+	lastInputPos = pos
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if ignoredControlTouches[input] then
+		ignoredControlTouches[input] = nil
+		return
+	end
+	if input == dragInput then
+		dragging = false
+		dragInput = nil
+		lastInputPos = nil
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if not freeCamActive or not pcMode then return end
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+
+	local isMoveKey = (input.KeyCode == Enum.KeyCode.W or input.KeyCode == Enum.KeyCode.S or input.KeyCode == Enum.KeyCode.A or input.KeyCode == Enum.KeyCode.D)
+	
+	if gameProcessed and not isMoveKey then return end
+
+	if input.KeyCode == Enum.KeyCode.W then moveDir.Up = true
+	elseif input.KeyCode == Enum.KeyCode.S then moveDir.Down = true
+	elseif input.KeyCode == Enum.KeyCode.A then moveDir.Left = true
+	elseif input.KeyCode == Enum.KeyCode.D then moveDir.Right = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+
+	if input.KeyCode == Enum.KeyCode.W then moveDir.Up = false
+	elseif input.KeyCode == Enum.KeyCode.S then moveDir.Down = false
+	elseif input.KeyCode == Enum.KeyCode.A then moveDir.Left = false
+	elseif input.KeyCode == Enum.KeyCode.D then moveDir.Right = false
+	end
+end)
+
+-- 统一在 RenderStepped 中渲染摄像机和吸附人物，确保 0 延迟，0 抽搐
+RunService.RenderStepped:Connect(function(dt)
+	if not freeCamActive then return end
+
+	camera.CameraType = Enum.CameraType.Scriptable
+	local rotationCFrame = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
+	local lookVector = rotationCFrame.LookVector
+	local rightVector = rotationCFrame.RightVector
+	local inputDir = Vector3.zero
+
+	if moveDir.Up then inputDir += lookVector end
+	if moveDir.Down then inputDir -= lookVector end
+	if moveDir.Left then inputDir -= rightVector end
+	if moveDir.Right then inputDir += rightVector end
+	if inputDir.Magnitude > 0 then inputDir = inputDir.Unit end
+
+	local targetVelocity = inputDir * speed
+	local rampAlpha = math.clamp(smoothness * dt * 60, 0, 1)
+
+	velocity = velocity:Lerp(targetVelocity, rampAlpha)
+	camPos += velocity * dt
+	camera.CFrame = CFrame.new(camPos) * rotationCFrame
+	
+	-- 【修复核心】丝滑吸附代码：不冻结实体，直接强制跟随，并清空所有碰撞/重力动量
+	if magnetActive then
+		local char = player.Character
+		if char then
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				-- 获取装配体：如果是坐车，就会连带着车一块获取到
+				local rootPart = hrp.AssemblyRootPart or hrp
+				
+				-- 将偏移量直接应用到人物/车
+				rootPart.CFrame = camera.CFrame * CFrame.new(offsetX, offsetY, offsetZ)
+				
+				-- 实时清空物理速度，完美抵消重力和碰撞，真正成为“跟你飞行的实体”
+				rootPart.AssemblyLinearVelocity = Vector3.zero
+				rootPart.AssemblyAngularVelocity = Vector3.zero
+			end
 		end
 	end
-)
+end)
 
-UserInputService.InputBegan:Connect(
-	function(input, gameProcessed)
-
-		if gameProcessed then
-			return
-		end
-
-		if not freeCamActive or not pcMode then
-			return
-		end
-
-		if
-			input.UserInputType
-				~= Enum.UserInputType.Keyboard
-		then
-			return
-		end
-
-		if input.KeyCode == Enum.KeyCode.W then
-			moveDir.Up = true
-		elseif input.KeyCode == Enum.KeyCode.S then
-			moveDir.Down = true
-		elseif input.KeyCode == Enum.KeyCode.A then
-			moveDir.Left = true
-		elseif input.KeyCode == Enum.KeyCode.D then
-			moveDir.Right = true
-		end
+player.CharacterAdded:Connect(function(char)
+	if freeCamActive then
+		camera.CameraType = Enum.CameraType.Scriptable
+		camera.CameraSubject = nil
 	end
-)
-
-UserInputService.InputEnded:Connect(
-	function(input)
-
-		if
-			input.UserInputType
-				~= Enum.UserInputType.Keyboard
-		then
-			return
+	
+	-- 角色重生后重新检查并应用磁铁状态
+	task.spawn(function()
+		char:WaitForChild("HumanoidRootPart")
+		if magnetActive then
+			setMagnetState(true)
 		end
-
-		if input.KeyCode == Enum.KeyCode.W then
-			moveDir.Up = false
-		elseif input.KeyCode == Enum.KeyCode.S then
-			moveDir.Down = false
-		elseif input.KeyCode == Enum.KeyCode.A then
-			moveDir.Left = false
-		elseif input.KeyCode == Enum.KeyCode.D then
-			moveDir.Right = false
-		end
-	end
-)
-
-RunService.RenderStepped:Connect(
-	function(dt)
-
-		if not freeCamActive then
-			return
-		end
-
-		camera.CameraType =
-			Enum.CameraType.Scriptable
-
-		local rotationCFrame =
-			CFrame.Angles(0, yaw, 0)
-			*
-			CFrame.Angles(pitch, 0, 0)
-
-		local lookVector =
-			rotationCFrame.LookVector
-
-		local rightVector =
-			rotationCFrame.RightVector
-
-		local inputDir = Vector3.zero
-
-		if moveDir.Up then
-			inputDir += lookVector
-		end
-
-		if moveDir.Down then
-			inputDir -= lookVector
-		end
-
-		if moveDir.Left then
-			inputDir -= rightVector
-		end
-
-		if moveDir.Right then
-			inputDir += rightVector
-		end
-
-		if inputDir.Magnitude > 0 then
-			inputDir = inputDir.Unit
-		end
-
-		local targetVelocity =
-			inputDir * speed
-
-		local rampAlpha =
-			math.clamp(
-				smoothness * dt * 60,
-				0,
-				1
-			)
-
-		velocity =
-			velocity:Lerp(
-				targetVelocity,
-				rampAlpha
-			)
-
-		camPos += velocity * dt
-
-		camera.CFrame =
-			CFrame.new(camPos)
-			*
-			rotationCFrame
-	end
-)
-
-player.CharacterAdded:Connect(
-	function()
-
-		if freeCamActive then
-			camera.CameraType =
-				Enum.CameraType.Scriptable
-
-			camera.CameraSubject = nil
-		end
-	end
-)
+	end)
+end)
 
