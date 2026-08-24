@@ -1,0 +1,3431 @@
+local PreviousCleanup = rawget(_G, "__XLHubCleanup")
+if type(PreviousCleanup) == "function" then
+    pcall(PreviousCleanup)
+end
+_G.__XLHubCleanup = nil
+
+local TranslatorCleanup = nil
+local ImageWindowCleanup = nil
+local ImageReloadCurrent = nil
+
+local WindUI = loadstring(game:HttpGet(
+    "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"
+))()
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+local CONFIG_FOLDER = "LiquidGlassHub"
+
+local LUSTRE_ICON_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/XLM.png"
+
+local function loadLustreIcon()
+    -- 仅使用 WindUI 内置图标，不下载或写入本地图片文件。
+    return "solar:widget-5-bold-duotone"
+end
+
+local LUSTRE_ICON = loadLustreIcon()
+
+local TemporaryImageSequence = 0
+
+local function deleteTemporaryImage(fileName)
+    if type(fileName) == "string" and fileName ~= "" and type(delfile) == "function" then
+        pcall(delfile, fileName)
+    end
+end
+
+local function downloadTemporaryImage(imageUrl, prefix)
+    if type(imageUrl) ~= "string" or imageUrl == "" then
+        return "", ""
+    end
+    local assetLoader = getcustomasset or getsynasset
+    if type(assetLoader) ~= "function"
+        or type(writefile) ~= "function"
+        or type(delfile) ~= "function" then
+        -- 当前环境没有可清理的自定义资源能力时，不把已知无法直显的云端 URL 当成成功。
+        return "", "", false
+    end
+
+    local requestFunctions = {}
+    local function addRequestFunction(candidate)
+        if type(candidate) == "function" then
+            requestFunctions[#requestFunctions + 1] = candidate
+        end
+    end
+    addRequestFunction(rawget(_G, "request"))
+    addRequestFunction(rawget(_G, "http_request"))
+    local synTable = rawget(_G, "syn")
+    if type(synTable) == "table" then
+        addRequestFunction(synTable.request)
+    end
+    local httpTable = rawget(_G, "http")
+    if type(httpTable) == "table" then
+        addRequestFunction(httpTable.request)
+    end
+
+    local body
+    local contentType = ""
+    for _, requestFunction in ipairs(requestFunctions) do
+        local ok, response = pcall(function()
+            return requestFunction({
+                Url = imageUrl,
+                Method = "GET",
+                Headers = { ["Accept"] = "image/*" },
+            })
+        end)
+        if ok and type(response) == "table" then
+            local responseBody = response.Body or response.body
+            if type(responseBody) == "string" and responseBody ~= "" then
+                body = responseBody
+                local responseHeaders = response.Headers or response.headers
+                if type(responseHeaders) == "table" then
+                    contentType = tostring(responseHeaders["Content-Type"]
+                        or responseHeaders["content-type"] or "")
+                end
+                break
+            end
+        end
+    end
+    if not body then
+        local ok, responseBody = pcall(function()
+            return game:HttpGet(imageUrl)
+        end)
+        if ok and type(responseBody) == "string" and responseBody ~= "" then
+            body = responseBody
+        end
+    end
+    if not body then
+        return "", "", false
+    end
+
+    local extension = ".jpg"
+    local lowerUrl = imageUrl:lower()
+    local lowerContentType = contentType:lower()
+    if lowerContentType:find("png", 1, true) or lowerUrl:find(".png", 1, true) then
+        extension = ".png"
+    elseif lowerContentType:find("webp", 1, true) or lowerUrl:find(".webp", 1, true) then
+        extension = ".webp"
+    elseif lowerContentType:find("gif", 1, true) or lowerUrl:find(".gif", 1, true) then
+        extension = ".gif"
+    elseif lowerContentType:find("jpeg", 1, true) or lowerUrl:find(".jpeg", 1, true) then
+        extension = ".jpeg"
+    elseif body:sub(1, 8) == string.char(137, 80, 78, 71, 13, 10, 26, 10) then
+        extension = ".png"
+    end
+    TemporaryImageSequence = TemporaryImageSequence + 1
+    local timestamp = (os and os.time and os.time()) or 0
+    local fileName = (prefix or "XLHub_Image_")
+        .. tostring(timestamp) .. "_" .. tostring(TemporaryImageSequence) .. extension
+    local wrote = pcall(function()
+        writefile(fileName, body)
+    end)
+    if not wrote then
+        return "", "", false
+    end
+    local assetOk, assetId = pcall(assetLoader, fileName)
+    if assetOk and type(assetId) == "string" and assetId ~= "" then
+        return assetId, fileName, true
+    end
+    deleteTemporaryImage(fileName)
+    return "", "", false
+end
+
+
+WindUI:AddTheme({
+    Name = "LiquidGold",
+
+    Accent = Color3.fromHex("#FFD700"),
+    Background = Color3.fromHex("#090909"),
+    BackgroundTransparency = 0.4,
+    Dialog = Color3.fromHex("#181818"),
+    Outline = Color3.fromHex("#333333"),
+    Text = Color3.fromHex("#FFFFFF"),
+    Placeholder = Color3.fromHex("#AAAAAA"),
+    Button = Color3.fromHex("#3A2F00"),
+    Icon = Color3.fromHex("#FFD700"),
+    Hover = Color3.fromHex("#2A2A2A"),
+    White = Color3.fromHex("#FFFFFF"),
+
+    AcrylicMain = Color3.fromHex("#090909"),
+    AcrylicNoise = 0.88,
+    WindowBackground = Color3.fromHex("#090909"),
+    WindowShadow = Color3.fromHex("#000000"),
+    WindowSearchBarBackground = Color3.fromHex("#181818"),
+    SearchBarBorder = Color3.fromHex("#333333"),
+    SearchBarBorderTransparency = 0.35,
+    WindowTopbarButtonIcon = Color3.fromHex("#FFD700"),
+    WindowTopbarTitle = Color3.fromHex("#FFFFFF"),
+    WindowTopbarAuthor = Color3.fromHex("#AAAAAA"),
+    WindowTopbarIcon = Color3.fromHex("#FFD700"),
+
+    PanelBackground = Color3.fromHex("#FFFFFF"),
+    PanelBackgroundTransparency = 0.2,
+    LabelBackground = Color3.fromHex("#FFFFFF"),
+    LabelBackgroundTransparency = 0.2,
+    TabBackground = Color3.fromHex("#FFFFFF"),
+    TabBackgroundHover = Color3.fromHex("#F4F8FC"),
+    TabBackgroundHoverTransparency = 0.05,
+    TabBackgroundActive = Color3.fromHex("#FFFFFF"),
+    TabBackgroundActiveTransparency = 0.05,
+    TabBorder = Color3.fromHex("#D7E5EE"),
+    TabBorderTransparency = 0.35,
+    TabTitle = Color3.fromHex("#1B2733"),
+    TabIcon = Color3.fromHex("#2D9CDB"),
+    TabTextTransparency = 0,
+    TabIconTransparency = 0,
+    ElementBackground = Color3.fromHex("#FFFFFF"),
+    ElementBackgroundTransparency = 0.2,
+    ElementTitle = Color3.fromHex("#1B2733"),
+    ElementDesc = Color3.fromHex("#6B7785"),
+    DescTextTransparency = 0,
+    ElementIcon = Color3.fromHex("#FFD700"),
+
+    DropdownTabBackground = Color3.fromHex("#FFFFFF"),
+    DropdownTabBorder = Color3.fromHex("#D7E5EE"),
+    DropdownBackground = Color3.fromHex("#FFFFFF"),
+    Toggle = Color3.fromHex("#FFD700"),
+    ToggleBar = Color3.fromHex("#FFFFFF"),
+    ToggleTransparency = 0,
+    Checkbox = Color3.fromHex("#FFD700"),
+    CheckboxIcon = Color3.fromHex("#FFFFFF"),
+    CheckboxBorder = Color3.fromHex("#665500"),
+    CheckboxBorderTransparency = 0.25,
+    Primary = Color3.fromHex("#FFD700"),
+
+    Slider = Color3.fromHex("#FFD700"),
+    SliderThumb = Color3.fromHex("#FFFFFF"),
+    SliderIcon = Color3.fromHex("#FFFFFF"),
+
+    DialogBackground = Color3.fromHex("#181818"),
+    DialogBackgroundTransparency = 0.05,
+    DialogTitle = Color3.fromHex("#FFFFFF"),
+    DialogContent = Color3.fromHex("#AAAAAA"),
+    DialogIcon = Color3.fromHex("#FFD700"),
+
+    PopupBackground = Color3.fromHex("#181818"),
+    PopupBackgroundTransparency = 0.05,
+    PopupTitle = Color3.fromHex("#FFFFFF"),
+    PopupContent = Color3.fromHex("#AAAAAA"),
+    PopupIcon = Color3.fromHex("#FFD700"),
+
+    Notification = Color3.fromHex("#181818"),
+    Notification2 = Color3.fromHex("#2A2A2A"),
+    Notification2Transparency = 0.05,
+    NotificationTitle = Color3.fromHex("#FFFFFF"),
+    NotificationTitleTransparency = 0,
+    NotificationContent = Color3.fromHex("#AAAAAA"),
+    NotificationContentTransparency = 0,
+    NotificationDuration = Color3.fromHex("#FFD700"),
+    NotificationDurationTransparency = 0,
+
+    ProgressBar = Color3.fromHex("#FFD700"),
+    ProgressBarText = Color3.fromHex("#FFFFFF"),
+    ProgressBarTrack = Color3.fromHex("#333333"),
+    ProgressBarTrackTransparency = 0.25,
+
+    SectionBoxBackground = Color3.fromHex("#181818"),
+    SectionBoxTransparency = 0.2,
+    SectionBoxBackgroundTransparency = 0.2,
+    SectionBoxBorder = Color3.fromHex("#333333"),
+    SectionBoxBorderTransparency = 0.25,
+    SectionExpandIcon = Color3.fromHex("#FFD700"),
+    SectionExpandIconTransparency = 0,
+
+    Tooltip = Color3.fromHex("#181818"),
+    TooltipText = Color3.fromHex("#FFFFFF"),
+    TooltipSmall = Color3.fromHex("#181818"),
+    TooltipSmallText = Color3.fromHex("#FFFFFF"),
+    TooltipDark = Color3.fromHex("#181818"),
+    TooltipDarkText = Color3.fromHex("#FFFFFF"),
+    TooltipLight = Color3.fromHex("#2A2A2A"),
+    TooltipLightText = Color3.fromHex("#FFFFFF"),
+
+    ViewportBackground = Color3.fromHex("#090909"),
+    ViewportBackgroundTransparency = 0,
+})
+
+local ServerScripts = {
+    {
+        Name = "最强战场",
+        Icon = "solar:bolt-bold-duotone",
+        Scripts = {
+            {Name = "执行自动农场", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"},
+            {Name = "TSB 脚本 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"},
+            {Name = "TSB 脚本 2", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"},
+        },
+    },
+    {
+        Name = "学乱",
+        Icon = "solar:book-bold-duotone",
+        Scripts = {
+            {Name = "学乱 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"},
+            {Name = "学乱 3", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"},
+        },
+    },
+}
+
+local function SafeExecute(scriptName, url)
+    WindUI:Notify({
+        Title = "正在加载",
+        Content = "正在获取 " .. scriptName .. "，请稍候...",
+        Duration = 3,
+    })
+
+    task.spawn(function()
+        local ok, err = pcall(function()
+            local source = game:HttpGet(url)
+            local chunk = loadstring(source)
+            assert(type(chunk) == "function", "远程内容无法编译")
+            chunk()
+        end)
+
+        if ok then
+            WindUI:Notify({
+                Title = "执行成功",
+                Content = scriptName .. " 已成功运行",
+                Duration = 4,
+            })
+        else
+            WindUI:Notify({
+                Title = "执行失败",
+                Content = scriptName .. "：" .. tostring(err),
+                Duration = 6,
+            })
+            warn("[" .. scriptName .. "] " .. tostring(err))
+        end
+    end)
+end
+
+WindUI.TransparencyValue = 0.35
+
+local Window = WindUI:CreateWindow({
+    Title = "XL Hub",
+    Icon = LUSTRE_ICON,
+    Author = "Modern UI",
+    Theme = "Light",
+    Folder = CONFIG_FOLDER,
+    Transparent = true,
+    Acrylic = true,
+    NewElements = true,
+    Size = UDim2.fromOffset(560, 430),
+    MinSize = Vector2.new(420, 300),
+    MaxSize = Vector2.new(900, 650),
+    Resizable = true,
+    AutoScale = true,
+    SideBarWidth = 180,
+    HideSearchBar = false,
+    ScrollBarEnabled = true,
+    OpenButton = {
+        Title = "XL",
+        Icon = LUSTRE_ICON,
+        CornerRadius = UDim.new(1, 0),
+        StrokeThickness = 4,
+        Enabled = true,
+        Draggable = true,
+        OnlyMobile = true,
+        Scale = 0.85,
+        Color = ColorSequence.new(
+            Color3.fromRGB(255, 215, 0),
+            Color3.fromRGB(255, 215, 0)
+        ),
+    },
+    Topbar = {
+        Height = 40,
+        ButtonsType = "Mac",
+    },
+})
+
+Window:EditOpenButton({
+    Icon = LUSTRE_ICON,
+    Title = "XL Hub",
+})
+
+-- 小窗口保持可拖动，仅恢复少量透明背景；边框渐变和玻璃效果继续关闭，不影响主窗口。
+do
+    local FloatingButton = Window.OpenButtonMain and Window.OpenButtonMain.Button
+    if FloatingButton then
+        FloatingButton.BackgroundTransparency = 0.85
+
+        local FloatingStroke = FloatingButton:FindFirstChildOfClass("UIStroke")
+        if FloatingStroke then
+            FloatingStroke.Transparency = 0.88
+            local FloatingGradient = FloatingStroke:FindFirstChildOfClass("UIGradient")
+            if FloatingGradient then
+                FloatingGradient.Enabled = false
+            end
+        end
+
+        local FloatingTextButton = FloatingButton:FindFirstChild("TextButton")
+        if FloatingTextButton then
+            FloatingTextButton.BackgroundTransparency = 0.85
+            FloatingTextButton.MouseEnter:Connect(function()
+                FloatingTextButton.BackgroundTransparency = 0.85
+            end)
+            FloatingTextButton.MouseLeave:Connect(function()
+                FloatingTextButton.BackgroundTransparency = 0.85
+            end)
+        end
+    end
+end
+
+local VersionTag = Window:Tag({
+    Title = "Beta",
+    Icon = "solar:star-bold-duotone",
+    Color = Color3.fromHex("#FFD700"),
+    Border = true,
+})
+
+--==================================================
+-- 主题设置
+--==================================================
+-- 关闭自动主题循环，窗口固定使用 WindUI 内置 Light 白色主题。
+
+local HomeTab = Window:Tab({
+    Title = "首页",
+    Icon = "solar:home-2-bold-duotone",
+})
+
+HomeTab:Section({
+    Title = "首页",
+})
+
+HomeTab:Paragraph({
+    Title = "欢迎使用",
+    Desc = "该脚本仍处于测试阶段，会有很多不稳定因素 会收集更多的脚本并加入",
+})
+
+--==================================================
+-- 首页二次元图片浏览器：小窗口、API 请求、刷新与分类切换
+--==================================================
+-- SFW 二次元图片源列表：不接入露骨或 R18 内容。
+local IMAGE_SOURCES = {
+    {
+        Name = "猫娘图片",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/catgirl",
+    },
+    {
+        Name = "二次元图片",
+        Parser = "Waifu",
+        Url = "https://api.waifu.im/images?IncludedTags=waifu&IsNsfw=False",
+    },
+    {
+        Name = "Neko 图片",
+        Parser = "NekosBest",
+        Url = "https://nekos.best/api/v2/neko",
+    },
+    {
+        Name = "PurrBot 猫娘",
+        Parser = "PurrBot",
+        Url = "https://api.purrbot.site/v2/img/sfw/neko/img",
+    },
+    {
+        Name = "PurrBot 狐娘",
+        Parser = "PurrBot",
+        Url = "https://api.purrbot.site/v2/img/sfw/kitsune/img",
+    },
+    {
+        Name = "PurrBot 狼娘",
+        Parser = "PurrBot",
+        Url = "https://api.purrbot.site/v2/img/sfw/okami/img",
+    },
+    {
+        Name = "PurrBot 千纸鹤娘",
+        Parser = "PurrBot",
+        Url = "https://api.purrbot.site/v2/img/sfw/senko/img",
+    },
+    {
+        Name = "PurrBot 白发娘",
+        Parser = "PurrBot",
+        Url = "https://api.purrbot.site/v2/img/sfw/shiro/img",
+    },
+    -- 新增：女性动漫图片接口（均为 SFW 分类）
+    {
+        Name = "Nekosia 狐娘",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/foxgirl",
+    },
+    {
+        Name = "Nekosia 狼娘",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/wolfgirl",
+    },
+    {
+        Name = "Nekosia 女生",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/girl",
+    },
+    {
+        Name = "Nekosia 女仆",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/maid",
+    },
+    {
+        Name = "Nekosia VTuber",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/vtuber",
+    },
+    {
+        Name = "NekosBest 女生",
+        Parser = "NekosBest",
+        Url = "https://nekos.best/api/v2/waifu",
+    },
+    {
+        Name = "NekosBest 狐娘",
+        Parser = "NekosBest",
+        Url = "https://nekos.best/api/v2/kitsune",
+    },
+}
+
+local currentImageSourceIndex = 1
+local imageSourceNames = {}
+for _, source in ipairs(IMAGE_SOURCES) do
+    imageSourceNames[#imageSourceNames + 1] = source.Name
+end
+
+HomeTab:Dropdown({
+    Title = "图片来源",
+    Desc = "手动选择图片源，不会自动轮换；选择后会刷新当前窗口",
+    Icon = "solar:gallery-wide-bold-duotone",
+    Values = imageSourceNames,
+    Value = imageSourceNames[1],
+    Callback = function(value)
+        local selected = type(value) == "table" and value[1] or value
+        for index, source in ipairs(IMAGE_SOURCES) do
+            if source.Name == selected then
+                currentImageSourceIndex = index
+                break
+            end
+        end
+        if ImageReloadCurrent then
+            task.spawn(ImageReloadCurrent)
+        end
+    end,
+})
+
+local function getImageParent()
+    if type(gethui) == "function" then
+        local ok, result = pcall(gethui)
+        if ok and result then
+            return result
+        end
+    end
+
+    local ok, coreGui = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    if ok and coreGui then
+        return coreGui
+    end
+
+    return LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+end
+
+local function setImageStatus(label, text, color)
+    if label and label.Parent then
+        label.Text = tostring(text or "")
+        if color then
+            label.TextColor3 = color
+        end
+    end
+end
+
+local function createImageButton(parent, text, position, size)
+    local button = Instance.new("TextButton")
+    button.Parent = parent
+    button.BackgroundColor3 = Color3.fromRGB(58, 47, 0)
+    button.BackgroundTransparency = 0.05
+    button.BorderSizePixel = 0
+    button.Position = position
+    button.Size = size
+    button.Font = Enum.Font.SourceSansSemibold
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 14
+    button.AutoButtonColor = true
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = button
+
+    return button
+end
+
+local function addResizeHandle(parent, connect, minWidth, minHeight, maxWidth, maxHeight, onResize)
+    local handle = Instance.new("TextButton")
+    handle.Name = "ResizeHandle"
+    handle.Parent = parent
+    handle.AnchorPoint = Vector2.new(1, 1)
+    handle.Position = UDim2.fromScale(1, 1)
+    handle.Size = UDim2.fromOffset(24, 24)
+    handle.BackgroundTransparency = 1
+    handle.BorderSizePixel = 0
+    handle.Font = Enum.Font.SourceSansBold
+    handle.Text = "↘"
+    handle.TextColor3 = Color3.fromRGB(255, 215, 0)
+    handle.TextSize = 18
+    handle.ZIndex = 20
+    handle.AutoButtonColor = false
+
+    local resizing = false
+    local dragStart
+    local startWidth
+    local startHeight
+
+    connect(handle.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            resizing = true
+            dragStart = input.Position
+            startWidth = parent.AbsoluteSize.X
+            startHeight = parent.AbsoluteSize.Y
+            connect(input.Changed, function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    resizing = false
+                end
+            end)
+        end
+    end)
+
+    connect(UserInputService.InputChanged, function(input)
+        if resizing and dragStart and startWidth and startHeight
+            and (input.UserInputType == Enum.UserInputType.MouseMovement
+                or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            local width = math.max(minWidth, math.min(maxWidth, startWidth + delta.X))
+            local height = math.max(minHeight, math.min(maxHeight, startHeight + delta.Y))
+            onResize(width, height)
+        end
+    end)
+
+    return handle
+end
+
+local function OpenImageWindow()
+    if ImageWindowCleanup then
+        local ok = pcall(ImageWindowCleanup, false)
+        if not ok then
+            ImageWindowCleanup = nil
+        end
+    end
+
+    local parent = getImageParent()
+    if not parent then
+        WindUI:Notify({
+            Title = "图片窗口",
+            Content = "找不到可用的界面容器",
+            Duration = 4,
+        })
+        return
+    end
+
+    local connections = {}
+    local destroyed = false
+    local currentImageUrl = ""
+    local currentImageAsset = ""
+    local loadSerial = 0
+
+    local function connect(signal, callback)
+        local ok, connection = pcall(function()
+            return signal:Connect(callback)
+        end)
+        if ok and connection then
+            connections[#connections + 1] = connection
+            return connection
+        end
+        return nil
+    end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "XLHubImageWindow"
+    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = parent
+
+    local main = Instance.new("Frame")
+    main.Name = "ImagePanel"
+    main.Parent = screenGui
+    main.AnchorPoint = Vector2.new(0.5, 0.5)
+    main.Position = UDim2.fromScale(0.5, 0.5)
+    main.Size = UDim2.fromOffset(300, 260)
+    main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    main.BackgroundTransparency = 0.08
+    main.BorderSizePixel = 0
+    main.Active = true
+
+    local mainCorner = Instance.new("UICorner")
+    mainCorner.CornerRadius = UDim.new(0, 10)
+    mainCorner.Parent = main
+
+    local mainStroke = Instance.new("UIStroke")
+    mainStroke.Color = Color3.fromRGB(255, 215, 0)
+    mainStroke.Thickness = 1.5
+    mainStroke.Transparency = 0.15
+    mainStroke.Parent = main
+
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Parent = main
+    titleBar.BackgroundColor3 = Color3.fromRGB(38, 32, 0)
+    titleBar.BackgroundTransparency = 0.1
+    titleBar.BorderSizePixel = 0
+    titleBar.Size = UDim2.new(1, 0, 0, 30)
+    titleBar.Active = true
+
+    local title = Instance.new("TextLabel")
+    title.Parent = titleBar
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.fromOffset(10, 0)
+    title.Size = UDim2.new(1, -42, 1, 0)
+    title.Font = Enum.Font.SourceSansSemibold
+    title.Text = "猫娘"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 15
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local closeButton = Instance.new("TextButton")
+    closeButton.Parent = titleBar
+    closeButton.BackgroundTransparency = 1
+    closeButton.Position = UDim2.new(1, -30, 0, 1)
+    closeButton.Size = UDim2.fromOffset(28, 28)
+    closeButton.Font = Enum.Font.SourceSansBold
+    closeButton.Text = "×"
+    closeButton.TextColor3 = Color3.fromRGB(255, 220, 220)
+    closeButton.TextSize = 24
+
+    local imageFrame = Instance.new("ImageLabel")
+    imageFrame.Name = "Image"
+    imageFrame.Parent = main
+    imageFrame.Position = UDim2.fromOffset(8, 38)
+    imageFrame.Size = UDim2.fromOffset(284, 155)
+    imageFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    imageFrame.BorderSizePixel = 0
+
+    imageFrame.ZIndex = 2
+
+    local cover = Instance.new("ImageLabel")
+    cover.Name = "Cover"
+    cover.Parent = main
+    cover.Position = imageFrame.Position
+    cover.Size = imageFrame.Size
+    cover.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    cover.BorderSizePixel = 0
+    cover.Image = ""
+    cover.ScaleType = Enum.ScaleType.Crop
+    cover.ZIndex = 3
+
+    local coverText = Instance.new("TextLabel")
+    coverText.Parent = cover
+    coverText.BackgroundTransparency = 1
+    coverText.Size = UDim2.fromScale(1, 1)
+    coverText.Font = Enum.Font.SourceSans
+    coverText.Text = "正在请求图片..."
+    coverText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    coverText.TextSize = 16
+    coverText.ZIndex = 4
+
+    local nextButton = createImageButton(main, "下一张", UDim2.fromOffset(8, 200), UDim2.fromOffset(88, 28))
+    local sourceButton = createImageButton(main, "换类型", UDim2.fromOffset(106, 200), UDim2.fromOffset(88, 28))
+    local pauseButton = createImageButton(main, "刷新", UDim2.fromOffset(204, 200), UDim2.fromOffset(88, 28))
+
+    local status = Instance.new("TextLabel")
+    status.Parent = main
+    status.BackgroundTransparency = 1
+    status.Position = UDim2.fromOffset(8, 232)
+    status.Size = UDim2.new(1, -16, 0, 22)
+    status.Font = Enum.Font.SourceSans
+    status.Text = "等待请求..."
+    status.TextColor3 = Color3.fromRGB(190, 190, 190)
+    status.TextSize = 13
+    status.TextXAlignment = Enum.TextXAlignment.Left
+    status.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local function updateImageLayout()
+        local width = math.max(260, main.AbsoluteSize.X)
+        local height = math.max(220, main.AbsoluteSize.Y)
+        local imageHeight = math.max(80, height - 105)
+        local buttonWidth = math.max(60, math.floor((width - 36) / 3))
+        imageFrame.Position = UDim2.fromOffset(8, 38)
+        imageFrame.Size = UDim2.new(1, -16, 0, imageHeight)
+        cover.Position = imageFrame.Position
+        cover.Size = imageFrame.Size
+        nextButton.Size = UDim2.fromOffset(buttonWidth, 28)
+        sourceButton.Size = UDim2.fromOffset(buttonWidth, 28)
+        pauseButton.Size = UDim2.fromOffset(buttonWidth, 28)
+        nextButton.Position = UDim2.new(0, 8, 1, -60)
+        sourceButton.Position = UDim2.new(0, 18 + buttonWidth, 1, -60)
+        pauseButton.Position = UDim2.new(0, 28 + buttonWidth * 2, 1, -60)
+        status.Position = UDim2.new(0, 8, 1, -28)
+        status.Size = UDim2.new(1, -16, 0, 22)
+    end
+
+    addResizeHandle(main, connect, 260, 220, 720, 620, function(width, height)
+        main.Size = UDim2.fromOffset(width, height)
+        updateImageLayout()
+    end)
+    updateImageLayout()
+
+    -- 标题栏拖动：兼容鼠标和触摸拖动。
+    local dragging = false
+    local dragStart
+    local startPosition
+    local dragInput
+
+    connect(titleBar.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = main.Position
+            dragInput = input
+            connect(input.Changed, function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    connect(titleBar.InputChanged, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    connect(UserInputService.InputChanged, function(input)
+        if input == dragInput and dragging and dragStart and startPosition then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    local function cleanupImageWindow()
+        if destroyed then
+            return
+        end
+        destroyed = true
+        for _, connection in ipairs(connections) do
+            pcall(function()
+                connection:Disconnect()
+            end)
+        end
+        connections = {}
+        deleteTemporaryImage(currentImageAsset)
+        currentImageAsset = ""
+        pcall(function()
+            screenGui:Destroy()
+        end)
+        if ImageWindowCleanup == cleanupImageWindow then
+            ImageWindowCleanup = nil
+        end
+    end
+
+    ImageWindowCleanup = cleanupImageWindow
+
+    local function cleanImageUrl(value)
+        if type(value) ~= "string" then
+            return ""
+        end
+        value = value:gsub("^%s+", ""):gsub("%s+$", "")
+        if value:sub(1, 2) == "//" then
+            value = "https:" .. value
+        end
+        if value:match("^https?://") then
+            return value
+        end
+        return ""
+    end
+
+    local function parseImageResponse(source, body)
+        local decodedOk, decoded = pcall(function()
+            return HttpService:JSONDecode(body)
+        end)
+        if not decodedOk or type(decoded) ~= "table" then
+            error(source.Name .. " 返回的不是有效 JSON")
+        end
+
+        local imageUrl = ""
+        if source.Parser == "Nekosia" then
+            if decoded.success ~= true or tonumber(decoded.status) ~= 200 then
+                error(source.Name .. " 返回错误：" .. tostring(decoded.message or decoded.status))
+            end
+            imageUrl = decoded.image
+                and decoded.image.compressed
+                and decoded.image.compressed.url
+        elseif source.Parser == "Waifu" then
+            local first = decoded.items and decoded.items[1]
+            imageUrl = first and first.url
+        elseif source.Parser == "NekosBest" then
+            local first = decoded.results and decoded.results[1]
+            imageUrl = first and first.url
+        elseif source.Parser == "PurrBot" then
+            if decoded.error == true or tonumber(decoded["response-code"]) ~= 200 then
+                error(source.Name .. " 返回错误：" .. tostring(decoded.error or decoded["response-code"]))
+            end
+            imageUrl = decoded.link
+        end
+
+        imageUrl = cleanImageUrl(imageUrl)
+        if imageUrl == "" then
+            error(source.Name .. " 未返回有效的图片地址")
+        end
+        return imageUrl
+    end
+
+    local function requestSourceBody(source)
+        local requestFunctions = {}
+        local function addRequestFunction(candidate)
+            if type(candidate) == "function" then
+                requestFunctions[#requestFunctions + 1] = candidate
+            end
+        end
+
+        addRequestFunction(rawget(_G, "request"))
+        addRequestFunction(rawget(_G, "http_request"))
+
+        local synTable = rawget(_G, "syn")
+        if type(synTable) == "table" then
+            addRequestFunction(synTable.request)
+        end
+
+        local httpTable = rawget(_G, "http")
+        if type(httpTable) == "table" then
+            addRequestFunction(httpTable.request)
+        end
+
+        local requestHeaders = {
+            ["Accept"] = "application/json",
+            ["User-Agent"] = "XLHub/1.0 (NekosBest-compatible client)",
+        }
+        for _, requestFunction in ipairs(requestFunctions) do
+            local requestOk, response = pcall(function()
+                return requestFunction({
+                    Url = source.Url,
+                    Method = "GET",
+                    Headers = requestHeaders,
+                })
+            end)
+            if requestOk and type(response) == "table" then
+                local body = response.Body or response.body
+                if type(body) == "string" and body ~= "" then
+                    return body
+                end
+            end
+        end
+
+        local body = game:HttpGet(source.Url)
+        if type(body) ~= "string" or body == "" then
+            error(source.Name .. " 返回为空")
+        end
+        return body
+    end
+
+    local function requestImageFromSelectedSource()
+        local source = IMAGE_SOURCES[currentImageSourceIndex]
+        if not source then
+            error("没有选择有效的图片源")
+        end
+        local body = requestSourceBody(source)
+        return parseImageResponse(source, body), source.Name
+    end
+
+    local function loadImageAsset(imageUrl)
+        return downloadTemporaryImage(imageUrl, "XLHub_Catgirl_")
+    end
+
+    local function loadImage()
+        if destroyed then
+            return
+        end
+        loadSerial = loadSerial + 1
+        local requestSerial = loadSerial
+        deleteTemporaryImage(currentImageAsset)
+        currentImageAsset = ""
+        currentImageUrl = ""
+
+        cover.Visible = true
+        cover.Image = ""
+        coverText.Text = "正在请求图片..."
+        setImageStatus(status, "正在连接图片源...", Color3.fromRGB(255, 215, 0))
+        nextButton.Text = "请求中"
+
+        task.spawn(function()
+            local ok, result, sourceName = pcall(requestImageFromSelectedSource)
+
+            if destroyed or requestSerial ~= loadSerial then
+                return
+            end
+
+            nextButton.Text = "下一张"
+            if not ok or type(result) ~= "string" or result == "" then
+                coverText.Text = "图片请求失败"
+                setImageStatus(status, "请求失败：" .. tostring(result), Color3.fromRGB(255, 120, 120))
+                return
+            end
+
+            currentImageUrl = result
+            coverText.Text = "图片下载中..."
+            local displayImage, newImageAsset, downloadOk = loadImageAsset(currentImageUrl)
+            if destroyed or requestSerial ~= loadSerial then
+                deleteTemporaryImage(newImageAsset)
+                return
+            end
+            if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
+                coverText.Text = "图片下载失败"
+                setImageStatus(status, "无法创建临时图片资源", Color3.fromRGB(255, 120, 120))
+                return
+            end
+            currentImageAsset = newImageAsset or ""
+            imageFrame.Image = displayImage
+            imageFrame.ScaleType = Enum.ScaleType.Fit
+            imageFrame.ImageTransparency = 0
+            imageFrame.Visible = true
+            imageFrame.ZIndex = 4
+            cover.Visible = false
+            setImageStatus(status, sourceName .. "已显示", Color3.fromRGB(180, 255, 180))
+        end)
+    end
+
+    connect(closeButton.MouseButton1Click, cleanupImageWindow)
+    connect(nextButton.MouseButton1Click, function()
+        loadImage()
+    end)
+    sourceButton.Text = "刷新当前"
+    connect(sourceButton.MouseButton1Click, function()
+        loadImage()
+    end)
+    connect(pauseButton.MouseButton1Click, function()
+        loadImage()
+    end)
+    ImageReloadCurrent = loadImage
+    loadImage()
+end
+
+HomeTab:Button({
+    Title = "猫娘二次元图片",
+    Desc = "打开猫娘和二次元图片",
+    Icon = "solar:gallery-bold-duotone",
+    Callback = OpenImageWindow,
+})
+
+--==================================================
+-- Lolicon API：独立密码解锁区（解锁后请求 R18）
+--==================================================
+local LOLICON_UNLOCK_PASSWORD = "XQVIP666"
+local LOLICON_UNLOCK_FILE = "XLHub_Lolicon_Unlocked.dat"
+local LOLICON_UNLOCK_MARKER = "XLHUB_LOLICON_UNLOCKED_V1"
+local loliconUnlocked = false
+local LoliconWindowCleanups = {}
+local LoliconWindowSequence = 0
+
+local function closeAllLoliconWindows()
+    local pending = {}
+    for _, cleanup in pairs(LoliconWindowCleanups) do
+        pending[#pending + 1] = cleanup
+    end
+    for _, cleanup in ipairs(pending) do
+        pcall(cleanup)
+    end
+    LoliconWindowCleanups = {}
+end
+
+local function hasLocalLoliconUnlock()
+    if type(isfile) ~= "function" or type(readfile) ~= "function" then
+        return false
+    end
+    local ok, value = pcall(readfile, LOLICON_UNLOCK_FILE)
+    return ok and value == LOLICON_UNLOCK_MARKER
+end
+
+local function saveLocalLoliconUnlock()
+    if type(writefile) == "function" then
+        pcall(writefile, LOLICON_UNLOCK_FILE, LOLICON_UNLOCK_MARKER)
+    end
+end
+
+local function clearLocalLoliconUnlock()
+    loliconUnlocked = false
+    if type(delfile) == "function" and type(isfile) == "function" then
+        pcall(function()
+            if isfile(LOLICON_UNLOCK_FILE) then
+                delfile(LOLICON_UNLOCK_FILE)
+            end
+        end)
+    end
+end
+
+loliconUnlocked = hasLocalLoliconUnlock()
+
+local function requestLoliconImage()
+    local url = "https://api.lolicon.app/setu/v2"
+        .. "?r18=1&num=1&size=small&proxy=i.pixiv.re&excludeAI=true"
+    local body
+    local requestFunctions = {}
+    local function addRequestFunction(candidate)
+        if type(candidate) == "function" then
+            requestFunctions[#requestFunctions + 1] = candidate
+        end
+    end
+    addRequestFunction(rawget(_G, "request"))
+    addRequestFunction(rawget(_G, "http_request"))
+    local synTable = rawget(_G, "syn")
+    if type(synTable) == "table" then
+        addRequestFunction(synTable.request)
+    end
+    local httpTable = rawget(_G, "http")
+    if type(httpTable) == "table" then
+        addRequestFunction(httpTable.request)
+    end
+    for _, requestFunction in ipairs(requestFunctions) do
+        local ok, response = pcall(function()
+            return requestFunction({
+                Url = url,
+                Method = "GET",
+                Headers = { ["Accept"] = "application/json" },
+            })
+        end)
+        if ok and type(response) == "table" then
+            local responseBody = response.Body or response.body
+            if type(responseBody) == "string" and responseBody ~= "" then
+                body = responseBody
+                break
+            end
+        end
+    end
+    if not body then
+        body = game:HttpGet(url)
+    end
+    local decoded = HttpService:JSONDecode(body)
+    if type(decoded) ~= "table" then
+        error("Lolicon 返回不是有效 JSON")
+    end
+    if decoded.error and decoded.error ~= "" then
+        error("Lolicon：" .. tostring(decoded.error))
+    end
+
+    local item = decoded.data and decoded.data[1]
+    local urls = item and item.urls
+    local imageUrl = urls and (urls.small or urls.thumb or urls.regular or urls.original or urls.mini)
+    if type(imageUrl) ~= "string" or imageUrl == "" then
+        error("Lolicon 没有返回可用图片地址")
+    end
+    return imageUrl, item
+end
+
+local function loadLoliconAsset(imageUrl)
+    return downloadTemporaryImage(imageUrl, "XLHub")
+end
+
+local function OpenLoliconWindow(windowTitle, requestFunction, assetFunction)
+    windowTitle = windowTitle or "R18"
+    requestFunction = requestFunction or requestLoliconImage
+    assetFunction = assetFunction or loadLoliconAsset
+
+    if not loliconUnlocked then
+        WindUI:Notify({
+            Title = "需要解锁",
+            Content = "请先输入正确的 Lolicon 解锁密码",
+            Duration = 4,
+        })
+        return
+    end
+    local parent = getImageParent()
+    if not parent then
+        WindUI:Notify({Title = "Lolicon", Content = "找不到可用的界面容器", Duration = 4})
+        return
+    end
+
+    LoliconWindowSequence = LoliconWindowSequence + 1
+    local windowId = LoliconWindowSequence
+    local connections = {}
+    local destroyed = false
+    local assetFile = ""
+    local loadSerial = 0
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "XLHubLoliconWindow_" .. tostring(windowId)
+    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = parent
+
+    local main = Instance.new("Frame")
+    main.Name = "LoliconPanel"
+    main.Parent = screenGui
+    main.AnchorPoint = Vector2.new(0.5, 0.5)
+    main.Position = UDim2.fromScale(0.5, 0.5)
+    main.Size = UDim2.fromOffset(360, 300)
+    main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    main.BackgroundTransparency = 0.06
+    main.BorderSizePixel = 0
+    main.Active = true
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = main
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 215, 0)
+    stroke.Thickness = 1.5
+    stroke.Parent = main
+
+    local title = Instance.new("TextLabel")
+    title.Parent = main
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.fromOffset(12, 6)
+    title.Size = UDim2.new(1, -52, 0, 26)
+    title.Text = windowTitle
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 16
+    title.Font = Enum.Font.SourceSansSemibold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Active = true
+    title.ZIndex = 2
+
+    local close = Instance.new("TextButton")
+    close.Parent = main
+    close.BackgroundTransparency = 1
+    close.Position = UDim2.new(1, -38, 0, 4)
+    close.Size = UDim2.fromOffset(32, 30)
+    close.Text = "×"
+    close.TextColor3 = Color3.fromRGB(255, 220, 220)
+    close.TextSize = 24
+    close.Font = Enum.Font.SourceSansBold
+    close.ZIndex = 3
+
+    local image = Instance.new("ImageLabel")
+    image.Parent = main
+    image.Position = UDim2.fromOffset(10, 40)
+    image.Size = UDim2.new(1, -20, 0, 205)
+    image.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    image.BorderSizePixel = 0
+    image.ScaleType = Enum.ScaleType.Fit
+
+    local status = Instance.new("TextLabel")
+    status.Parent = main
+    status.BackgroundTransparency = 1
+    status.Position = UDim2.fromOffset(10, 252)
+    status.Size = UDim2.new(1, -125, 0, 30)
+    status.Text = "准备请求..."
+    status.TextColor3 = Color3.fromRGB(190, 190, 190)
+    status.TextSize = 13
+    status.Font = Enum.Font.SourceSans
+    status.TextXAlignment = Enum.TextXAlignment.Left
+    status.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local refresh = Instance.new("TextButton")
+    refresh.Parent = main
+    refresh.Position = UDim2.new(1, -108, 1, -43)
+    refresh.Size = UDim2.fromOffset(98, 30)
+    refresh.Text = "下一张"
+    refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+    refresh.TextSize = 14
+    refresh.Font = Enum.Font.SourceSansSemibold
+    refresh.BackgroundColor3 = Color3.fromRGB(58, 47, 0)
+    refresh.BorderSizePixel = 0
+    local refreshCorner = Instance.new("UICorner")
+    refreshCorner.CornerRadius = UDim.new(0, 6)
+    refreshCorner.Parent = refresh
+
+    local function connect(signal, callback)
+        local ok, connection = pcall(function()
+            return signal:Connect(callback)
+        end)
+        if ok and connection then
+            connections[#connections + 1] = connection
+        end
+        return connection
+    end
+
+    -- Lolicon 窗口拖动：只绑定标题文字区域，避免拖动时误触发图片或按钮。
+    local dragging = false
+    local dragStart
+    local startPosition
+    local dragInput
+
+    connect(title.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = main.Position
+            dragInput = input
+            connect(input.Changed, function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    dragInput = nil
+                end
+            end)
+        end
+    end)
+
+    connect(title.InputChanged, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    connect(UserInputService.InputChanged, function(input)
+        if dragging and dragInput and input == dragInput and dragStart and startPosition then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    local function updateLoliconLayout()
+        local width = math.max(300, main.AbsoluteSize.X)
+        local height = math.max(260, main.AbsoluteSize.Y)
+        local imageHeight = math.max(100, height - 95)
+        image.Position = UDim2.fromOffset(10, 40)
+        image.Size = UDim2.new(1, -20, 0, imageHeight)
+        status.Position = UDim2.new(0, 10, 1, -38)
+        status.Size = UDim2.new(1, -125, 0, 30)
+        refresh.Position = UDim2.new(1, -108, 1, -43)
+    end
+
+    addResizeHandle(main, connect, 300, 260, 760, 700, function(width, height)
+        main.Size = UDim2.fromOffset(width, height)
+        updateLoliconLayout()
+    end)
+    updateLoliconLayout()
+
+    local function cleanup()
+        if destroyed then
+            return
+        end
+        destroyed = true
+        for _, connection in ipairs(connections) do
+            pcall(function() connection:Disconnect() end)
+        end
+        deleteTemporaryImage(assetFile)
+        assetFile = ""
+        pcall(function() screenGui:Destroy() end)
+        if LoliconWindowCleanups[windowId] == cleanup then
+            LoliconWindowCleanups[windowId] = nil
+        end
+    end
+    LoliconWindowCleanups[windowId] = cleanup
+
+    local function load()
+        if destroyed then
+            return
+        end
+        loadSerial = loadSerial + 1
+        local requestSerial = loadSerial
+        deleteTemporaryImage(assetFile)
+        assetFile = ""
+        refresh.Text = "请求中"
+        status.Text = "正在请求 Lolicon..."
+        task.spawn(function()
+            local ok, imageUrl, item = pcall(requestFunction)
+            if destroyed or requestSerial ~= loadSerial then
+                return
+            end
+            if not ok or type(imageUrl) ~= "string" or imageUrl == "" then
+                refresh.Text = "下一张"
+                status.Text = "请求失败：" .. tostring(imageUrl)
+                status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                return
+            end
+            local displayImage, newAssetFile, downloadOk = assetFunction(imageUrl)
+            if destroyed or requestSerial ~= loadSerial then
+                deleteTemporaryImage(newAssetFile)
+                return
+            end
+            assetFile = newAssetFile or ""
+            if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
+                refresh.Text = "下一张"
+                status.Text = "图片下载失败"
+                status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                return
+            end
+            image.Image = displayImage
+            image.Visible = true
+            refresh.Text = "下一张"
+            status.Text = "已显示：" .. tostring(item and (item.author or item.title) or windowTitle)
+            status.TextColor3 = Color3.fromRGB(180, 255, 180)
+        end)
+    end
+
+    connect(close.Activated, cleanup)
+    connect(refresh.Activated, load)
+    load()
+end
+
+HomeTab:Input({
+    Title = "Lolicon 解锁密码",
+    Desc = "输入正确密码后解锁 Lolicon R18 图片接口",
+    Icon = "solar:lock-keyhole-bold-duotone",
+    InputIcon = "solar:lock-keyhole-bold-duotone",
+    Placeholder = "输入解锁密码",
+    ClearTextOnFocus = false,
+    Callback = function(value)
+        local entered = tostring(value or "")
+        if entered:gsub("^%s+", ""):gsub("%s+$", "") == "" then
+            return
+        end
+        if entered == LOLICON_UNLOCK_PASSWORD then
+            loliconUnlocked = true
+            saveLocalLoliconUnlock()
+            WindUI:Notify({Title = "解锁成功", Content = "授权已保存，请手动打开 Lolicon 窗口", Duration = 3})
+        else
+            clearLocalLoliconUnlock()
+            WindUI:Notify({Title = "密码错误", Content = "Lolicon 接口仍处于锁定状态", Duration = 3})
+        end
+    end,
+})
+
+HomeTab:Button({
+    Title = "打开🔞图片",
+    Desc = "解锁后打开独立窗口",
+    Icon = "solar:gallery-wide-bold-duotone",
+    Callback = OpenLoliconWindow,
+})
+
+HomeTab:Button({
+    Title = "清除  本地授权",
+    Desc = "删除本地授权标记下次执行需要重新输入密码",
+    Icon = "solar:lock-keyhole-minimalistic-bold-duotone",
+    Callback = function()
+        clearLocalLoliconUnlock()
+        closeAllLoliconWindows()
+        WindUI:Notify({Title = "授权已清除", Content = "下次使用需要重新输入密码", Duration = 3})
+    end,
+})
+
+local GeneralTab = Window:Tab({
+    Title = "通用",
+    Icon = "solar:widget-5-bold-duotone",
+})
+
+local GeneralState = {
+    SpeedEnabled = false,
+    SpeedValue = 32,
+    InfiniteJumpEnabled = false,
+    JumpPowerValue = 50,
+    CompatibilityEnabled = false,
+    JumpConnection = nil,
+    CharacterConnection = nil,
+    OriginalWalkSpeed = nil,
+    OriginalJumpPower = nil,
+    OriginalUseJumpPower = nil,
+}
+
+local function getLocalHumanoid()
+    local character = LocalPlayer and LocalPlayer.Character
+    return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function applyGeneralMovement()
+    local humanoid = getLocalHumanoid()
+    if not humanoid then
+        return
+    end
+
+    if GeneralState.OriginalWalkSpeed == nil then
+        GeneralState.OriginalWalkSpeed = humanoid.WalkSpeed
+    end
+    if GeneralState.OriginalJumpPower == nil then
+        GeneralState.OriginalJumpPower = humanoid.JumpPower
+    end
+    if GeneralState.OriginalUseJumpPower == nil then
+        GeneralState.OriginalUseJumpPower = humanoid.UseJumpPower
+    end
+
+    if GeneralState.SpeedEnabled then
+        humanoid.WalkSpeed = GeneralState.SpeedValue
+    elseif GeneralState.OriginalWalkSpeed ~= nil then
+        humanoid.WalkSpeed = GeneralState.OriginalWalkSpeed
+    end
+
+    if GeneralState.InfiniteJumpEnabled then
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = GeneralState.JumpPowerValue
+    else
+        humanoid.JumpPower = GeneralState.OriginalJumpPower
+        humanoid.UseJumpPower = GeneralState.OriginalUseJumpPower
+    end
+end
+
+local function setInfiniteJumpEnabled(enabled)
+    GeneralState.InfiniteJumpEnabled = enabled
+    if GeneralState.JumpConnection then
+        GeneralState.JumpConnection:Disconnect()
+        GeneralState.JumpConnection = nil
+    end
+
+    if enabled then
+        GeneralState.JumpConnection = UserInputService.JumpRequest:Connect(function()
+            local humanoid = getLocalHumanoid()
+            if humanoid and humanoid.Health > 0 then
+                humanoid.JumpPower = GeneralState.JumpPowerValue
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+    end
+
+    applyGeneralMovement()
+end
+
+local function setCompatibilityProtectionEnabled(enabled)
+    GeneralState.CompatibilityEnabled = enabled == true
+    -- 不再为兼容保护额外创建连接，统一由下方唯一的 CharacterAdded 连接处理。
+    applyGeneralMovement()
+end
+
+GeneralTab:Section({
+    Title = "速度与跳跃",
+})
+
+GeneralTab:Toggle({
+    Title = "速度增强",
+    Desc = "开启后持续应用移动速度，关闭后自动恢复",
+    Icon = "solar:bolt-bold-duotone",
+    Value = false,
+    Callback = function(value)
+        GeneralState.SpeedEnabled = value
+        applyGeneralMovement()
+    end,
+})
+
+GeneralTab:Slider({
+    Title = "移动速度",
+    Desc = "调整 WalkSpeed 数值",
+    Icon = "solar:running-bold-duotone",
+    Step = 1,
+    Value = {
+        Min = 16,
+        Max = 500,
+        Default = 32,
+    },
+    Callback = function(value)
+        GeneralState.SpeedValue = tonumber(value) or 32
+        applyGeneralMovement()
+    end,
+})
+
+GeneralTab:Toggle({
+    Title = "无限跳跃",
+    Desc = "允许在空中继续触发跳跃，关闭后自动恢复",
+    Icon = "solar:arrow-up-bold-duotone",
+    Value = false,
+    Callback = setInfiniteJumpEnabled,
+})
+
+GeneralTab:Slider({
+    Title = "跳跃高度",
+    Desc = "调整 JumpPower 数值",
+    Icon = "solar:arrow-up-bold-duotone",
+    Step = 1,
+    Value = {
+        Min = 25,
+        Max = 250,
+        Default = 50,
+    },
+    Callback = function(value)
+        GeneralState.JumpPowerValue = tonumber(value) or 50
+        applyGeneralMovement()
+    end,
+})
+
+GeneralTab:Toggle({
+    Title = "基础兼容保护",
+    Desc = "重生后恢复本地速度和跳跃设置，不修改远程调用",
+    Icon = "solar:shield-check-bold-duotone",
+    Value = false,
+    Callback = setCompatibilityProtectionEnabled,
+})
+
+
+if GeneralState.CharacterConnection then
+    GeneralState.CharacterConnection:Disconnect()
+end
+
+GeneralState.CharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
+    GeneralState.OriginalWalkSpeed = nil
+    GeneralState.OriginalJumpPower = nil
+    GeneralState.OriginalUseJumpPower = nil
+
+    task.spawn(function()
+        local humanoid = character:WaitForChild("Humanoid", 5)
+        if humanoid and character.Parent and (
+            GeneralState.CompatibilityEnabled
+            or GeneralState.SpeedEnabled
+            or GeneralState.InfiniteJumpEnabled
+        ) then
+            task.wait(0.15)
+            if character.Parent then
+                applyGeneralMovement()
+            end
+        end
+    end)
+
+end)
+
+GeneralTab:Section({
+    Title = "外部脚本",
+})
+
+GeneralTab:Button({
+    Title = "多方向吸附",
+    Desc = "点击直接执行外部脚本",
+    Icon = "solar:bolt-bold-duotone",
+    Callback = function()
+        SafeExecute("多方向吸附", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84")
+    end,
+})
+
+
+--==================================================
+-- 实时汉化系统（内存泄露与变量命名 Bug 修复）
+--==================================================
+local HanHuaTab = Window:Tab({
+    Title = "汉化",
+    Icon = "solar:translation-bold-duotone",
+})
+
+do
+    -- 使用固定命名空间；重复执行脚本时先停止旧实例，避免旧连接和队列继续驻留。
+    local MY_NAMESPACE = "EnhancedTranslator"
+    local previousEngine = _G[MY_NAMESPACE]
+    if previousEngine and type(previousEngine.stop) == "function" then
+        pcall(previousEngine.stop)
+    end
+
+    local Engine = {
+        textData = {},
+        scannedElements = setmetatable({}, {__mode = "k"}),
+        monitoredElements = setmetatable({}, {__mode = "k"}),
+        lastSeenText = setmetatable({}, {__mode = "k"}),
+        applyingElements = setmetatable({}, {__mode = "k"}),
+        ignoreNextText = setmetatable({}, {__mode = "k"}),
+        monitorRecords = {},
+        monitorRecordByElement = setmetatable({}, {__mode = "k"}),
+        containerConnections = setmetatable({}, {__mode = "k"}),
+        monitorConnections = {},
+        translateQueue = {},
+        queueHead = 1,
+        queuedSet = {},
+        isRunning = false,
+        extractCount = 0,
+        translateCount = 0,
+        localizeCount = 0,
+        textDataCount = 0,
+    }
+    _G[MY_NAMESPACE] = Engine
+
+    local RUNTIME = {
+        translationAPI = "Google",
+        translationsPerSecond = 20,
+        batchSize = 5,
+        minTextLength = 2,
+        maxTextLength = 100,
+        maxTextCache = 2000,
+        filterOfficial = true,
+    }
+
+    local function isTextElement(element)
+        return element and (
+            element:IsA("TextLabel")
+            or element:IsA("TextButton")
+            or element:IsA("TextBox")
+        )
+    end
+
+    local function shouldFilterText(text)
+        if not text or text:gsub("%s+", "") == "" then
+            return true
+        end
+        if text:match("^[%p%s]+$") then
+            return true
+        end
+        if #text < RUNTIME.minTextLength or #text > RUNTIME.maxTextLength then
+            return true
+        end
+        return false
+    end
+
+    local function isOfficialChatOrInventory(element)
+        if not element or not RUNTIME.filterOfficial then
+            return false
+        end
+
+        local fullName = ""
+        pcall(function()
+            fullName = element:GetFullName():lower()
+        end)
+        if fullName:find("chat")
+            or fullName:find("textchat")
+            or fullName:find("defaultchatsystem")
+            or fullName:find("backpack")
+            or fullName:find("inventory")
+            or fullName:find("tool")
+            or fullName:find("item") then
+            return true
+        end
+
+        local parent = element.Parent
+        while parent do
+            local parentName = tostring(parent.Name):lower()
+            if parentName:find("chat")
+                or parentName:find("backpack")
+                or parentName:find("inventory")
+                or parentName:find("tool")
+                or parentName:find("item") then
+                return true
+            end
+            parent = parent.Parent
+        end
+        return false
+    end
+
+    local function translateWithGoogle(orig)
+        local url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q="
+            .. HttpService:UrlEncode(orig)
+        local body
+        for retry = 1, 3 do
+            local ok, result = pcall(function()
+                return game:HttpGet(url)
+            end)
+            if ok and type(result) == "string" and result ~= "" then
+                body = result
+                break
+            end
+            if retry < 3 then
+                task.wait(0.1 * retry)
+            end
+        end
+        if not body then
+            return ""
+        end
+
+        local parsedOk, parsed = pcall(function()
+            return HttpService:JSONDecode(body)
+        end)
+        if not parsedOk or type(parsed) ~= "table" or type(parsed[1]) ~= "table" then
+            return ""
+        end
+
+        local parts = {}
+        for _, segment in ipairs(parsed[1]) do
+            if type(segment) == "table" and segment[1] then
+                parts[#parts + 1] = tostring(segment[1])
+            end
+        end
+        return table.concat(parts)
+    end
+
+    local function translateWithMyMemory(text)
+        local url = "https://api.mymemory.translated.net/get?q="
+            .. HttpService:UrlEncode(text) .. "&langpair=en|zh"
+        local body
+        for retry = 1, 2 do
+            local ok, result = pcall(game.HttpGet, game, url)
+            if ok and type(result) == "string" and result ~= "" then
+                body = result
+                break
+            end
+            if retry < 2 then
+                task.wait(0.1)
+            end
+        end
+        if not body then
+            return ""
+        end
+
+        local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+        if ok and type(decoded) == "table" and decoded.responseData then
+            return tostring(decoded.responseData.translatedText or "")
+        end
+        return ""
+    end
+
+    local function pruneTranslationCache()
+        if Engine.textDataCount < RUNTIME.maxTextCache then
+            return
+        end
+
+        local oldestTextId
+        local oldestTime = math.huge
+        for textId, record in pairs(Engine.textData) do
+            local hasLiveElement = false
+            if record.elements then
+                for element in pairs(record.elements) do
+                    if element and element.Parent then
+                        hasLiveElement = true
+                        break
+                    end
+                end
+            end
+            local lastUsed = tonumber(record.lastUsed) or 0
+            if not hasLiveElement and lastUsed < oldestTime then
+                oldestTextId = key
+                oldestTime = lastUsed
+            end
+        end
+
+        -- 如果所有缓存仍有关联控件，仍淘汰最旧项，保证缓存有硬上限。
+        if not oldestTextId then
+            for textId, record in pairs(Engine.textData) do
+                local lastUsed = tonumber(record.lastUsed) or 0
+                if lastUsed < oldestTime then
+                    oldestTextId = key
+                    oldestTime = lastUsed
+                end
+            end
+        end
+
+        if oldestTextId then
+            Engine.textData[oldestTextId] = nil
+            Engine.textDataCount = math.max(0, Engine.textDataCount - 1)
+        end
+    end
+
+    local function translateText(orig)
+        if not orig or orig == "" then
+            return ""
+        end
+
+        local record = Engine.textData[orig]
+        if record then
+            record.lastUsed = os.clock()
+        end
+        if record and record.translated then
+            return record.translation or ""
+        end
+        if not record then
+            pruneTranslationCache()
+            record = {
+                source = orig,
+                translation = "",
+                translated = false,
+                lastUsed = os.clock(),
+                elements = setmetatable({}, {__mode = "k"}),
+            }
+            Engine.textData[orig] = record
+            Engine.textDataCount = Engine.textDataCount + 1
+        end
+
+        local translation = ""
+        if RUNTIME.translationAPI == "Google" then
+            translation = translateWithGoogle(orig)
+            if translation == "" then
+                translation = translateWithMyMemory(orig)
+            end
+        else
+            translation = translateWithMyMemory(orig)
+            if translation == "" then
+                translation = translateWithGoogle(orig)
+            end
+        end
+
+        if translation ~= "" and translation ~= orig then
+            record.translation = translation
+            Engine.translateCount = Engine.translateCount + 1
+        else
+            -- 与原逻辑一致：失败或无需翻译时标记为已处理，避免每次扫描重复请求。
+            record.translation = orig
+        end
+        record.translated = true
+        return record.translation
+    end
+
+    local function enqueueText(text)
+        if not text or shouldFilterText(text) then
+            return
+        end
+        local record = Engine.textData[text]
+        if record then
+            record.lastUsed = os.clock()
+        end
+        if record and record.translated then
+            return
+        end
+        if Engine.queuedSet[text] then
+            return
+        end
+        Engine.translateQueue[#Engine.translateQueue + 1] = text
+        Engine.queuedSet[text] = true
+    end
+
+    local function gethui_enhanced()
+        local guis = {}
+        local seen = {}
+        local function addGui(gui)
+            if gui and not seen[gui] then
+                seen[gui] = true
+                guis[#guis + 1] = gui
+            end
+        end
+
+        if type(gethui) == "function" then
+            local ok, result = pcall(gethui)
+            if ok then
+                addGui(result)
+            end
+        end
+
+        local aliases = {"get_hui", "get_container", "get_roblox_gui", "_x92a", "get_gui"}
+        for _, alias in ipairs(aliases) do
+            if type(_G[alias]) == "function" then
+                local ok, result = pcall(_G[alias])
+                if ok then
+                    addGui(result)
+                end
+            end
+        end
+
+        local ok, coreGui = pcall(function()
+            return game:GetService("CoreGui")
+        end)
+        if ok then
+            addGui(coreGui)
+        end
+
+        if LocalPlayer then
+            addGui(LocalPlayer:FindFirstChildOfClass("PlayerGui"))
+        end
+        return guis
+    end
+
+    local function localizeElement(element, record)
+        if not element or not record or not record.translation
+            or record.translation == "" or record.translation == record.source then
+            return
+        end
+        if Engine.applyingElements[element] then
+            return
+        end
+
+        local ok, currentText = pcall(function()
+            return tostring(element.Text)
+        end)
+        if not ok or currentText == record.translation then
+            return
+        end
+
+        Engine.applyingElements[element] = true
+        Engine.ignoreNextText[element] = record.translation
+        local changed = pcall(function()
+            element.Text = record.translation
+        end)
+        Engine.applyingElements[element] = nil
+        if changed then
+            Engine.lastSeenText[element] = record.translation
+            Engine.localizeCount = Engine.localizeCount + 1
+        end
+    end
+
+    local function applyKnownText(text)
+        local record = Engine.textData[text]
+        if not record or not record.elements or not record.translated then
+            return
+        end
+        for element in pairs(record.elements) do
+            local ok = pcall(function()
+                local currentText = tostring(element.Text)
+                if currentText == text then
+                    localizeElement(element, record)
+                end
+            end)
+            if not ok then
+                record.elements[element] = nil
+            end
+        end
+    end
+
+    local function extractElementText(element)
+        if not isTextElement(element) or not element.Parent then
+            return
+        end
+        if Engine.applyingElements[element] then
+            return
+        end
+        if isOfficialChatOrInventory(element) then
+            Engine.scannedElements[element] = true
+            return
+        end
+
+        local ok, value = pcall(function()
+            return element.Text
+        end)
+        if not ok or value == nil then
+            return
+        end
+        local text = tostring(value)
+        if Engine.ignoreNextText[element] == text then
+            Engine.ignoreNextText[element] = nil
+            Engine.lastSeenText[element] = text
+            return
+        end
+        if shouldFilterText(text) then
+            Engine.scannedElements[element] = true
+            Engine.lastSeenText[element] = text
+            return
+        end
+
+        if Engine.lastSeenText[element] == text then
+            local existing = Engine.textData[text]
+            if existing then
+                existing.elements = existing.elements or setmetatable({}, {__mode = "k"})
+                existing.elements[element] = true
+                localizeElement(element, existing)
+            end
+            return
+        end
+        Engine.lastSeenText[element] = text
+        Engine.scannedElements[element] = true
+
+        local record = Engine.textData[text]
+        if not record then
+            pruneTranslationCache()
+            record = {
+                source = text,
+                translation = "",
+                translated = false,
+                lastUsed = os.clock(),
+                elements = setmetatable({}, {__mode = "k"}),
+            }
+            Engine.textData[text] = record
+            Engine.textDataCount = Engine.textDataCount + 1
+            Engine.extractCount = Engine.extractCount + 1
+        end
+        record.elements[element] = true
+        if not record.translated then
+            enqueueText(text)
+        else
+            localizeElement(element, record)
+        end
+    end
+
+    local function disconnectMonitor(record)
+        if not record or not record.active then
+            return
+        end
+        record.active = false
+
+        for _, connection in pairs({record.text, record.destroy}) do
+            pcall(function()
+                if connection then
+                    connection:Disconnect()
+                end
+            end)
+        end
+
+        local element = record.element
+        if element then
+            Engine.monitorRecordByElement[element] = nil
+            Engine.monitoredElements[element] = nil
+            Engine.scannedElements[element] = nil
+            Engine.lastSeenText[element] = nil
+            Engine.applyingElements[element] = nil
+            Engine.ignoreNextText[element] = nil
+        end
+
+        local index = record.index
+        local lastIndex = #Engine.monitorRecords
+        if index and index <= lastIndex then
+            local lastRecord = Engine.monitorRecords[lastIndex]
+            Engine.monitorRecords[index] = lastRecord
+            if lastRecord and lastRecord ~= record then
+                lastRecord.index = index
+            end
+            Engine.monitorRecords[lastIndex] = nil
+        end
+
+        -- 清掉连接对象和控件引用，避免连接回调闭包反向固定 GUI 实例。
+        record.text = nil
+        record.destroy = nil
+        record.element = nil
+        record.index = nil
+    end
+
+    local function setupElementMonitor(element)
+        if not isTextElement(element) or Engine.monitoredElements[element] then
+            return
+        end
+        if isOfficialChatOrInventory(element) then
+            Engine.monitoredElements[element] = true
+            return
+        end
+
+        local record = {
+            element = element,
+            active = true,
+            text = nil,
+            destroy = nil,
+            index = nil,
+        }
+        local ok, textConnection = pcall(function()
+            return element:GetPropertyChangedSignal("Text"):Connect(function()
+                local currentElement = record.element
+                if not record.active or not Engine.isRunning or not currentElement or not currentElement.Parent then
+                    return
+                end
+                extractElementText(currentElement)
+                local currentText = tostring(currentElement.Text or "")
+                local textRecord = Engine.textData[currentText]
+                if textRecord then
+                    localizeElement(currentElement, textRecord)
+                end
+            end)
+        end)
+        if not ok or not textConnection then
+            return
+        end
+        record.text = textConnection
+
+        pcall(function()
+            record.destroy = element.Destroying:Connect(function()
+                disconnectMonitor(record)
+            end)
+        end)
+
+        Engine.monitoredElements[element] = true
+        Engine.monitorRecordByElement[element] = record
+        record.index = #Engine.monitorRecords + 1
+        Engine.monitorRecords[record.index] = record
+
+    end
+
+    local function scanAllGuiElements(force)
+        force = force == true
+        for _, container in ipairs(gethui_enhanced()) do
+            if (not force and not Engine.isRunning) or not container then
+                return
+            end
+
+            local descendants = {}
+            pcall(function()
+                descendants = container:GetDescendants()
+            end)
+            for index, desc in ipairs(descendants) do
+                if not force and not Engine.isRunning then
+                    return
+                end
+                if isTextElement(desc) then
+                    extractElementText(desc)
+                    setupElementMonitor(desc)
+                end
+                if index % 100 == 0 then
+                    task.wait()
+                end
+            end
+
+            if not Engine.containerConnections[container] then
+                pcall(function()
+                    local connection = container.DescendantAdded:Connect(function(desc)
+                        if not Engine.isRunning or not isTextElement(desc) then
+                            return
+                        end
+                        task.defer(function()
+                            if Engine.isRunning and desc.Parent then
+                                extractElementText(desc)
+                                setupElementMonitor(desc)
+                            end
+                        end)
+                    end)
+                    Engine.containerConnections[container] = connection
+                    Engine.monitorConnections[#Engine.monitorConnections + 1] = connection
+                end)
+            end
+        end
+    end
+
+    local function compactQueue()
+        if Engine.queueHead <= 128 or Engine.queueHead <= (#Engine.translateQueue / 2) then
+            return
+        end
+        local compacted = {}
+        for index = Engine.queueHead, #Engine.translateQueue do
+            compacted[#compacted + 1] = Engine.translateQueue[index]
+        end
+        Engine.translateQueue = compacted
+        Engine.queueHead = 1
+    end
+
+    local function processTranslationQueue()
+        while Engine.isRunning do
+            local processed = 0
+            local batchLimit = math.max(1, math.floor(tonumber(RUNTIME.batchSize) or 5))
+            local rate = math.max(1, tonumber(RUNTIME.translationsPerSecond) or 20)
+            while Engine.isRunning and processed < batchLimit do
+                local item = Engine.translateQueue[Engine.queueHead]
+                if not item then
+                    break
+                end
+                Engine.translateQueue[Engine.queueHead] = nil
+                Engine.queueHead = Engine.queueHead + 1
+                Engine.queuedSet[item] = nil
+                translateText(item)
+                applyKnownText(item)
+                compactQueue()
+                processed = processed + 1
+                task.wait(1 / rate)
+            end
+            if processed == 0 then
+                Engine.queueHead = 1
+                task.wait(0.2)
+            end
+        end
+    end
+
+    local function manualRefresh()
+        Engine.scannedElements = setmetatable({}, {__mode = "k"})
+        Engine.lastSeenText = setmetatable({}, {__mode = "k"})
+        if Engine.isRunning then
+            task.spawn(scanAllGuiElements)
+        end
+    end
+
+    local function resetCache()
+        Engine.textData = {}
+        Engine.scannedElements = setmetatable({}, {__mode = "k"})
+        Engine.lastSeenText = setmetatable({}, {__mode = "k"})
+        Engine.translateQueue = {}
+        Engine.queueHead = 1
+        Engine.queuedSet = {}
+        Engine.extractCount = 0
+        Engine.translateCount = 0
+        Engine.localizeCount = 0
+        Engine.textDataCount = 0
+    end
+
+    local function startLocalization()
+        if Engine.isRunning then
+            return
+        end
+        Engine.isRunning = true
+        task.spawn(scanAllGuiElements)
+        task.spawn(processTranslationQueue)
+    end
+
+    local function stopLocalization()
+        if not Engine.isRunning then
+            return
+        end
+        Engine.isRunning = false
+        while #Engine.monitorRecords > 0 do
+            disconnectMonitor(Engine.monitorRecords[#Engine.monitorRecords])
+        end
+        for _, connection in ipairs(Engine.monitorConnections) do
+            pcall(function()
+                if connection then
+                    connection:Disconnect()
+                end
+            end)
+        end
+        Engine.monitorConnections = {}
+        Engine.monitoredElements = setmetatable({}, {__mode = "k"})
+        Engine.monitorRecordByElement = setmetatable({}, {__mode = "k"})
+        Engine.containerConnections = setmetatable({}, {__mode = "k"})
+        Engine.ignoreNextText = setmetatable({}, {__mode = "k"})
+        Engine.translateQueue = {}
+        Engine.queueHead = 1
+        Engine.queuedSet = {}
+    end
+
+    Engine.stop = stopLocalization
+    TranslatorCleanup = stopLocalization
+    _G.__XLHubCleanup = function()
+        pcall(stopLocalization)
+        if GeneralState and GeneralState.CharacterConnection then
+            pcall(function() GeneralState.CharacterConnection:Disconnect() end)
+        end
+    end
+
+    HanHuaTab:Toggle({
+        Title = "启用实时汉化",
+        Icon = "solar:translation-bold-duotone",
+        Value = false,
+        Desc = "实时自动翻译 TextLabel/TextButton/TextBox（含动态内容）",
+        Callback = function(value)
+            if value then
+                startLocalization()
+            else
+                stopLocalization()
+            end
+        end,
+    })
+    HanHuaTab:Dropdown({
+        Title = "翻译接口",
+        Icon = "solar:global-bold-duotone",
+        Value = "Google",
+        Values = {"Google", "MyMemory"},
+        Callback = function(value)
+            RUNTIME.translationAPI = value
+        end,
+    })
+    HanHuaTab:Slider({
+        Title = "翻译速度",
+        Desc = "每秒处理的翻译请求数",
+        Icon = "solar:bolt-bold-duotone",
+        Step = 1,
+        Value = {Min = 5, Max = 60, Default = 20},
+        Callback = function(value)
+            RUNTIME.translationsPerSecond = tonumber(value) or 20
+        end,
+    })
+    HanHuaTab:Slider({
+        Title = "批量翻译数",
+        Desc = "控制队列单次处理窗口，避免并发请求堆积",
+        Icon = "solar:list-check-bold-duotone",
+        Step = 1,
+        Value = {Min = 1, Max = 15, Default = 5},
+        Callback = function(value)
+            RUNTIME.batchSize = tonumber(value) or 5
+        end,
+    })
+    HanHuaTab:Button({
+        Title = "手动刷新翻译",
+        Icon = "solar:refresh-bold-duotone",
+        Callback = function()
+            manualRefresh()
+            WindUI:Notify({Title = "实时汉化", Content = "正在重新扫描并翻译 UI…", Duration = 3})
+        end,
+    })
+    HanHuaTab:Button({
+        Title = "重置翻译缓存",
+        Icon = "solar:trash-bin-trash-bold-duotone",
+        Callback = function()
+            resetCache()
+            WindUI:Notify({Title = "实时汉化", Content = "翻译缓存已清空，重新启动汉化即可重建", Duration = 3})
+        end,
+    })
+    HanHuaTab:Toggle({
+        Title = "过滤聊天 & 背包",
+        Icon = "solar:filter-bold-duotone",
+        Value = true,
+        Desc = "避免翻译聊天框和背包中的文本",
+        Callback = function(value)
+            RUNTIME.filterOfficial = value == true
+        end,
+    })
+end
+
+--==================================================
+-- 传送标签
+--==================================================
+local TeleportTab = Window:Tab({
+    Title = "传送",
+    Icon = "solar:round-transfer-diagonal-bold-duotone",
+})
+
+local selectedTeleportPlayer = nil
+local TeleportState = {
+    PlayerAddedConnection = nil,
+    PlayerRemovingConnection = nil,
+}
+
+local function getTeleportPlayerNames()
+    local values = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        table.insert(values, player.Name)
+    end
+    table.sort(values)
+    return values
+end
+
+local function resolveTeleportPlayer(value)
+    local playerName = value
+    if type(value) == "table" then
+        playerName = value[1]
+    end
+    if type(playerName) ~= "string" or playerName == "" then
+        return nil
+    end
+    return Players:FindFirstChild(playerName)
+end
+
+TeleportTab:Section({
+    Title = "玩家传送",
+})
+
+local teleportPlayerDropdown = TeleportTab:Dropdown({
+    Title = "玩家列表",
+    Desc = "自动获取当前服务器玩家",
+    Icon = "solar:users-group-rounded-bold-duotone",
+    Values = getTeleportPlayerNames(),
+    Callback = function(value)
+        selectedTeleportPlayer = resolveTeleportPlayer(value)
+    end,
+})
+
+local function refreshTeleportPlayers()
+    pcall(function()
+        teleportPlayerDropdown:Refresh(getTeleportPlayerNames())
+    end)
+end
+
+TeleportState.PlayerAddedConnection = Players.PlayerAdded:Connect(refreshTeleportPlayers)
+TeleportState.PlayerRemovingConnection = Players.PlayerRemoving:Connect(function(player)
+    if selectedTeleportPlayer == player then
+        selectedTeleportPlayer = nil
+    end
+    refreshTeleportPlayers()
+end)
+
+TeleportTab:Button({
+    Title = "传送到玩家身边",
+    Desc = "传送到已选择玩家身边",
+    Icon = "solar:plain-3-bold-duotone",
+    Callback = function()
+        if not selectedTeleportPlayer then
+            WindUI:Notify({Title = "传送失败", Content = "请先在玩家列表中选择一个玩家！", Duration = 3})
+            return
+        end
+
+        local localPlayer = Players.LocalPlayer
+        if not selectedTeleportPlayer.Parent then
+            WindUI:Notify({Title = "传送失败", Content = "目标玩家已退出游戏！", Duration = 3})
+            selectedTeleportPlayer = nil
+            refreshTeleportPlayers()
+            return
+        end
+
+        if selectedTeleportPlayer == localPlayer then
+            WindUI:Notify({Title = "传送失败", Content = "不能传送到自己！", Duration = 3})
+            return
+        end
+
+        local targetChar = selectedTeleportPlayer.Character
+        if not targetChar or not targetChar.Parent then
+            WindUI:Notify({Title = "传送失败", Content = "目标玩家尚未加载角色！", Duration = 3})
+            return
+        end
+
+        local targetHRP = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:WaitForChild("HumanoidRootPart", 2)
+        if not targetHRP then
+            WindUI:Notify({Title = "传送失败", Content = "无法获取目标玩家位置！", Duration = 3})
+            return
+        end
+
+        local myChar = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+        local myHRP = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:WaitForChild("HumanoidRootPart", 2))
+        if not myHRP then
+            WindUI:Notify({Title = "传送失败", Content = "无法获取你的位置！", Duration = 3})
+            return
+        end
+
+        local offset = Vector3.new(0, 0, 3)
+        myHRP.CFrame = targetHRP.CFrame + targetHRP.CFrame:VectorToWorldSpace(offset)
+
+        WindUI:Notify({Title = "传送成功", Content = "已传送到玩家：" .. selectedTeleportPlayer.Name, Duration = 3})
+    end,
+})
+
+--==================================================
+-- 绘制标签：新增 PlayerRemoving 离开退出销毁
+--==================================================
+
+local DrawingTab = Window:Tab({
+    Title = "绘制",
+    Icon = "solar:eye-bold-duotone",
+})
+
+local FETab = Window:Tab({
+    Title = "FE",
+    Icon = "solar:code-bold-duotone",
+})
+
+local FREE_CAM_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%9D%90%E6%A0%87%E4%BC%A0%E9%80%81%E8%A7%86%E8%A7%92"
+local freeCamLoading = false
+
+FETab:Section({
+    Title = "自由摄像头",
+})
+
+FETab:Button({
+    Title = "自由摄像头",
+    Desc = "加载自由摄像头；已加载时不会重复创建界面和连接",
+    Icon = "solar:camera-bold-duotone",
+    Callback = function()
+        local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if freeCamLoading or (_G.__XLHubFreeCamLoaded and playerGui and playerGui:FindFirstChild("FreeCamGui")) then
+            WindUI:Notify({
+                Title = "自由摄像头",
+                Content = "自由摄像头已经加载",
+                Duration = 3,
+            })
+            return
+        end
+
+        freeCamLoading = true
+        _G.__XLHubFreeCamLoaded = true
+        WindUI:Notify({
+            Title = "正在加载",
+            Content = "正在获取自由摄像头，请稍候...",
+            Duration = 3,
+        })
+
+        task.spawn(function()
+            local ok, err = pcall(function()
+                local source = game:HttpGet(FREE_CAM_URL)
+                local chunk = loadstring(source)
+                assert(type(chunk) == "function", "自由摄像头脚本无法编译")
+                chunk()
+            end)
+            freeCamLoading = false
+            if ok then
+                WindUI:Notify({
+                    Title = "自由摄像头",
+                    Content = "加载成功",
+                    Duration = 4,
+                })
+            else
+                _G.__XLHubFreeCamLoaded = nil
+                WindUI:Notify({
+                    Title = "自由摄像头加载失败",
+                    Content = tostring(err),
+                    Duration = 6,
+                })
+                warn("[自由摄像头] " .. tostring(err))
+            end
+        end)
+    end,
+})
+
+FETab:Section({
+    Title = "外部脚本",
+})
+
+FETab:Button({
+    Title = "掐死npc",
+    Desc = "点击执行 NPC 脚本",
+    Icon = "solar:skull-bold-duotone",
+    Callback = function()
+        SafeExecute(
+            "掐死npc",
+            "https://raw.githubusercontent.com/GUI-Offical/FileTest/refs/heads/main/Grab%20R6.txt"
+        )
+    end,
+})
+
+FETab:Button({
+    Title = "磁铁吸附",
+    Desc = "执行移动方块和磁铁吸附脚本",
+    Icon = "solar:magnet-bold-duotone",
+    Callback = function()
+        SafeExecute(
+            "磁铁吸附",
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E7%A3%81%E9%93%81%E5%90%B8%E9%99%84.txt"
+        )
+    end,
+})
+
+FETab:Button({
+    Title = "高级吸附",
+    Desc = "获取经典念力工具",
+    Icon = "solar:hand-stars-bold-duotone",
+    Callback = function()
+        SafeExecute(
+            "高级吸附",
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E9%AB%98%E7%BA%A7%E5%90%B8%E9%99%84.txt"
+        )
+    end,
+})
+
+FETab:Button({
+    Title = "C00",
+    Desc = "点击使用禁忌之力",
+    Icon = "solar:bolt-bold-duotone",
+    Callback = function()
+        SafeExecute(
+            "禁忌之力",
+            "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E7%A6%81%E5%BF%8C%E4%B9%8B%E5%8A%9B.txt"
+        )
+    end,
+})
+
+local DrawingState = {
+    Boxes = {Enabled = false, Update = nil, Objects = {}},
+    Chams = {Enabled = false, Update = nil, Objects = {}, Color = Color3.fromRGB(255, 255, 255)},
+    Names = {Enabled = false, Update = nil, Objects = {}},
+    Health = {Enabled = false, Update = nil, Objects = {}},
+    Skeleton = {Enabled = false, Update = nil, Objects = {}},
+    Tracers = {Enabled = false, Update = nil, Objects = {}},
+    RenderConnection = nil,
+    PlayerRemovingConnection = nil,
+    LastUpdate = 0,
+    FrameInterval = 1 / 30,
+}
+
+local DrawingCategories = {
+    DrawingState.Boxes,
+    DrawingState.Chams,
+    DrawingState.Names,
+    DrawingState.Health,
+    DrawingState.Skeleton,
+    DrawingState.Tracers,
+}
+
+local function drawingSupported()
+    return type(Drawing) == "table" and type(Drawing.new) == "function"
+end
+
+local function drawingNotify(title, content)
+    WindUI:Notify({Title = title, Content = content, Duration = 3})
+end
+
+local function removeDrawing(object)
+    if not object then return end
+    pcall(function()
+        if type(object.Remove) == "function" then
+            object:Remove()
+        else
+            object:Destroy()
+        end
+    end)
+end
+
+local function newDrawing(className)
+    if not drawingSupported() then return nil end
+    local ok, object = pcall(function()
+        return Drawing.new(className)
+    end)
+    return ok and object or nil
+end
+
+local function getDrawingCamera()
+    return workspace.CurrentCamera
+end
+
+-- 玩家离线清理（解决 ESP 内存泄露与残留）
+local function cleanupDrawingPlayer(player)
+    for _, category in ipairs(DrawingCategories) do
+        local obj = category.Objects[player]
+        if obj then
+            if type(obj) == "table" then
+                for _, subObj in pairs(obj) do
+                    removeDrawing(subObj)
+                end
+            else
+                removeDrawing(obj)
+            end
+            category.Objects[player] = nil
+        end
+    end
+end
+
+local ScreenBoundsCache = setmetatable({}, {__mode = "k"})
+
+local function getScreenBounds(character)
+    local camera = getDrawingCamera()
+    if not camera or not character or not character.Parent then
+        return nil
+    end
+
+    local cached = ScreenBoundsCache[character]
+    if cached and cached.stamp == DrawingState.LastUpdate then
+        if cached.visible then
+            return cached.min2D, cached.max2D
+        end
+        return nil
+    end
+
+    -- GetBoundingBox 比逐个 GetDescendants 遍历 BasePart 更轻量，且保留原有八点投影逻辑。
+    local ok, boxCFrame, boxSize = pcall(function()
+        return character:GetBoundingBox()
+    end)
+    if not ok or not boxCFrame or not boxSize then
+        return nil
+    end
+
+    local half = boxSize * 0.5
+    local points = {
+        boxCFrame:PointToWorldSpace(Vector3.new(-half.X, -half.Y, -half.Z)),
+        boxCFrame:PointToWorldSpace(Vector3.new(-half.X, half.Y, -half.Z)),
+        boxCFrame:PointToWorldSpace(Vector3.new(half.X, -half.Y, -half.Z)),
+        boxCFrame:PointToWorldSpace(Vector3.new(half.X, half.Y, -half.Z)),
+        boxCFrame:PointToWorldSpace(Vector3.new(-half.X, -half.Y, half.Z)),
+        boxCFrame:PointToWorldSpace(Vector3.new(-half.X, half.Y, half.Z)),
+        boxCFrame:PointToWorldSpace(Vector3.new(half.X, -half.Y, half.Z)),
+        boxCFrame:PointToWorldSpace(Vector3.new(half.X, half.Y, half.Z)),
+    }
+
+    local min2D = Vector2.new(math.huge, math.huge)
+    local max2D = Vector2.new(-math.huge, -math.huge)
+    local visible = false
+    for _, point in ipairs(points) do
+        local screen, onScreen = camera:WorldToViewportPoint(point)
+        if onScreen and screen.Z > 0 then
+            visible = true
+            min2D = Vector2.new(math.min(min2D.X, screen.X), math.min(min2D.Y, screen.Y))
+            max2D = Vector2.new(math.max(max2D.X, screen.X), math.max(max2D.Y, screen.Y))
+        end
+    end
+
+    if not visible then
+        ScreenBoundsCache[character] = {stamp = DrawingState.LastUpdate, visible = false}
+        return nil
+    end
+    ScreenBoundsCache[character] = {
+        stamp = DrawingState.LastUpdate,
+        visible = true,
+        min2D = min2D,
+        max2D = max2D,
+    }
+    return min2D, max2D
+end
+
+local function hideDrawingObject(object)
+    if not object then
+        return
+    end
+    if type(object) == "table" then
+        for _, child in pairs(object) do
+            hideDrawingObject(child)
+        end
+        return
+    end
+    local disabled = pcall(function()
+        object.Enabled = false
+    end)
+    if not disabled then
+        pcall(function()
+            object.Visible = false
+        end)
+    end
+end
+
+local function removeDrawingObject(object)
+    if not object then
+        return
+    end
+    if type(object) == "table" then
+        for _, child in pairs(object) do
+            removeDrawingObject(child)
+        end
+    else
+        removeDrawing(object)
+    end
+end
+
+local function pruneDrawingObjects(category, players)
+    local activePlayers = {}
+    for _, player in ipairs(players) do
+        activePlayers[player] = true
+    end
+    for player, object in pairs(category.Objects) do
+        if not activePlayers[player] then
+            removeDrawingObject(object)
+            category.Objects[player] = nil
+        elseif not player.Character then
+            hideDrawingObject(object)
+        end
+    end
+end
+
+local function refreshDrawingLoop()
+    local hasEnabledFeature = false
+    for _, category in ipairs(DrawingCategories) do
+        if category.Enabled and category.Update then
+            hasEnabledFeature = true
+            break
+        end
+    end
+
+    if hasEnabledFeature and not DrawingState.PlayerRemovingConnection then
+        DrawingState.PlayerRemovingConnection = Players.PlayerRemoving:Connect(cleanupDrawingPlayer)
+    elseif not hasEnabledFeature and DrawingState.PlayerRemovingConnection then
+        DrawingState.PlayerRemovingConnection:Disconnect()
+        DrawingState.PlayerRemovingConnection = nil
+    end
+
+    if hasEnabledFeature and not DrawingState.RenderConnection then
+        DrawingState.RenderConnection = RunService.RenderStepped:Connect(function()
+            local now = os.clock()
+            if now - DrawingState.LastUpdate < DrawingState.FrameInterval then
+                return
+            end
+            DrawingState.LastUpdate = now
+            local players = Players:GetPlayers()
+            for _, category in ipairs(DrawingCategories) do
+                if category.Enabled and category.Update then
+                    pcall(category.Update, players)
+                end
+            end
+        end)
+    elseif not hasEnabledFeature and DrawingState.RenderConnection then
+        DrawingState.RenderConnection:Disconnect()
+        DrawingState.RenderConnection = nil
+    end
+end
+
+local function clearBoxes()
+    DrawingState.Boxes.Update = nil
+    for _, objects in pairs(DrawingState.Boxes.Objects) do
+        removeDrawing(objects.box)
+        removeDrawing(objects.outline)
+    end
+    DrawingState.Boxes.Objects = {}
+    refreshDrawingLoop()
+end
+
+local function setBoxesEnabled(enabled)
+    DrawingState.Boxes.Enabled = enabled
+    clearBoxes()
+    if not enabled then
+        drawingNotify("方框透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Boxes.Enabled = false
+        drawingNotify("方框透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    DrawingState.Boxes.Update = function(players)
+        pruneDrawingObjects(DrawingState.Boxes, players)
+        for _, player in ipairs(players) do
+            if player ~= LocalPlayer and player.Character then
+                local min2D, max2D = getScreenBounds(player.Character)
+                local objects = DrawingState.Boxes.Objects[player]
+                if not objects then
+                    objects = {box = newDrawing("Square"), outline = newDrawing("Square")}
+                    if objects.box then
+                        objects.box.Color = Color3.fromRGB(255, 255, 255)
+                        objects.box.Thickness = 1
+                        objects.box.Filled = false
+                    end
+                    if objects.outline then
+                        objects.outline.Color = Color3.fromRGB(0, 0, 0)
+                        objects.outline.Thickness = 3
+                        objects.outline.Filled = false
+                    end
+                    DrawingState.Boxes.Objects[player] = objects
+                end
+
+                if objects.box and objects.outline and min2D and max2D then
+                    local size = max2D - min2D
+                    objects.box.Position = min2D
+                    objects.box.Size = size
+                    objects.box.Visible = true
+                    objects.outline.Position = min2D
+                    objects.outline.Size = size
+                    objects.outline.Visible = true
+                elseif objects.box and objects.outline then
+                    objects.box.Visible = false
+                    objects.outline.Visible = false
+                end
+            end
+        end
+    end
+    refreshDrawingLoop()
+    drawingNotify("方框透视", "已开启")
+end
+
+local function clearChams()
+    DrawingState.Chams.Update = nil
+    for _, highlight in pairs(DrawingState.Chams.Objects) do
+        pcall(function() highlight:Destroy() end)
+    end
+    DrawingState.Chams.Objects = {}
+    refreshDrawingLoop()
+end
+
+local function setChamsEnabled(enabled)
+    DrawingState.Chams.Enabled = enabled
+    clearChams()
+    if not enabled then
+        drawingNotify("人物透视", "已关闭")
+        return
+    end
+
+    DrawingState.Chams.Update = function(players)
+        pruneDrawingObjects(DrawingState.Chams, players)
+        for _, player in ipairs(players) do
+            if player ~= LocalPlayer and player.Character then
+                local highlight = DrawingState.Chams.Objects[player]
+                if not highlight or not highlight.Parent then
+                    highlight = Instance.new("Highlight")
+                    highlight.Name = "WindUI_Chams"
+                    highlight.FillTransparency = 0.78
+                    highlight.OutlineTransparency = 0
+                    highlight.OutlineColor = Color3.fromRGB(0, 0, 0)
+                    highlight.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+                    DrawingState.Chams.Objects[player] = highlight
+                end
+                highlight.Adornee = player.Character
+                highlight.Enabled = true
+                highlight.FillColor = DrawingState.Chams.Color
+            end
+        end
+    end
+    refreshDrawingLoop()
+    drawingNotify("人物透视", "已开启")
+end
+
+local function clearNames()
+    DrawingState.Names.Update = nil
+    for _, text in pairs(DrawingState.Names.Objects) do
+        removeDrawing(text)
+    end
+    DrawingState.Names.Objects = {}
+    refreshDrawingLoop()
+end
+
+local function setNamesEnabled(enabled)
+    DrawingState.Names.Enabled = enabled
+    clearNames()
+    if not enabled then
+        drawingNotify("名字透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Names.Enabled = false
+        drawingNotify("名字透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    DrawingState.Names.Update = function(players)
+        pruneDrawingObjects(DrawingState.Names, players)
+        local camera = getDrawingCamera()
+        if not camera then return end
+        for _, player in ipairs(players) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+                local text = DrawingState.Names.Objects[player]
+                if not text then
+                    text = newDrawing("Text")
+                    if text then
+                        text.Size = 13
+                        text.Center = true
+                        text.Outline = true
+                        text.Font = 2
+                        text.Color = Color3.fromRGB(255, 255, 255)
+                        DrawingState.Names.Objects[player] = text
+                    end
+                end
+                if text then
+                    local position, onScreen = camera:WorldToViewportPoint(player.Character.Head.Position + Vector3.new(0, 1.8, 0))
+                    text.Position = Vector2.new(position.X, position.Y)
+                    text.Text = player.Name
+                    text.Visible = onScreen and position.Z > 0
+                end
+            else
+                hideDrawingObject(DrawingState.Names.Objects[player])
+            end
+        end
+    end
+    refreshDrawingLoop()
+    drawingNotify("名字透视", "已开启")
+end
+
+local function clearHealth()
+    DrawingState.Health.Update = nil
+    for _, objects in pairs(DrawingState.Health.Objects) do
+        removeDrawing(objects.bar)
+        removeDrawing(objects.outline)
+    end
+    DrawingState.Health.Objects = {}
+    refreshDrawingLoop()
+end
+
+local function setHealthEnabled(enabled)
+    DrawingState.Health.Enabled = enabled
+    clearHealth()
+    if not enabled then
+        drawingNotify("血量条透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Health.Enabled = false
+        drawingNotify("血量条透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    DrawingState.Health.Update = function(players)
+        pruneDrawingObjects(DrawingState.Health, players)
+        for _, player in ipairs(players) do
+            local character = player.Character
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if player ~= LocalPlayer and character and humanoid then
+                local min2D, max2D = getScreenBounds(character)
+                local objects = DrawingState.Health.Objects[player]
+                if not objects then
+                    objects = {bar = newDrawing("Square"), outline = newDrawing("Square")}
+                    if objects.bar then
+                        objects.bar.Color = Color3.fromRGB(0, 255, 0)
+                        objects.bar.Filled = true
+                    end
+                    if objects.outline then
+                        objects.outline.Color = Color3.fromRGB(0, 0, 0)
+                        objects.outline.Filled = true
+                    end
+                    DrawingState.Health.Objects[player] = objects
+                end
+                if objects.bar and objects.outline and min2D and max2D then
+                    local height = max2D.Y - min2D.Y
+                    local ratio = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+                    local barHeight = height * ratio
+                    objects.outline.Size = Vector2.new(4, height + 2)
+                    objects.outline.Position = Vector2.new(min2D.X - 6, min2D.Y - 1)
+                    objects.outline.Visible = true
+                    objects.bar.Size = Vector2.new(2, barHeight)
+                    objects.bar.Position = Vector2.new(min2D.X - 5, max2D.Y - barHeight)
+                    objects.bar.Color = Color3.fromRGB(255 * (1 - ratio), 255 * ratio, 0)
+                    objects.bar.Visible = true
+                elseif objects.bar and objects.outline then
+                    objects.bar.Visible = false
+                    objects.outline.Visible = false
+                end
+            end
+        end
+    end
+    refreshDrawingLoop()
+    drawingNotify("血量条透视", "已开启")
+end
+
+local function clearSkeleton()
+    DrawingState.Skeleton.Update = nil
+    for _, skeleton in pairs(DrawingState.Skeleton.Objects) do
+        for _, line in pairs(skeleton) do
+            removeDrawing(line)
+        end
+    end
+    DrawingState.Skeleton.Objects = {}
+    refreshDrawingLoop()
+end
+
+local function setSkeletonEnabled(enabled)
+    DrawingState.Skeleton.Enabled = enabled
+    clearSkeleton()
+    if not enabled then
+        drawingNotify("骨骼透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Skeleton.Enabled = false
+        drawingNotify("骨骼透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    local function makeLine()
+        local line = newDrawing("Line")
+        if line then
+            line.Color = Color3.fromRGB(255, 255, 255)
+            line.Thickness = 1
+        end
+        return line
+    end
+
+    DrawingState.Skeleton.Update = function(players)
+        pruneDrawingObjects(DrawingState.Skeleton, players)
+        local camera = getDrawingCamera()
+        if not camera then return end
+        for _, player in ipairs(players) do
+            if player ~= LocalPlayer and player.Character then
+                local character = player.Character
+                local parts = {
+                    head = character:FindFirstChild("Head"),
+                    upper = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"),
+                    lower = character:FindFirstChild("LowerTorso") or character:FindFirstChild("HumanoidRootPart"),
+                    left_arm = character:FindFirstChild("LeftUpperArm") or character:FindFirstChild("Left Arm"),
+                    right_arm = character:FindFirstChild("RightUpperArm") or character:FindFirstChild("Right Arm"),
+                    left_leg = character:FindFirstChild("LeftUpperLeg") or character:FindFirstChild("Left Leg"),
+                    right_leg = character:FindFirstChild("RightUpperLeg") or character:FindFirstChild("Right Leg"),
+                }
+                local skeleton = DrawingState.Skeleton.Objects[player]
+                if not skeleton then
+                    skeleton = {
+                        head = makeLine(), torso = makeLine(), left_arm = makeLine(),
+                        right_arm = makeLine(), left_leg = makeLine(), right_leg = makeLine(),
+                    }
+                    DrawingState.Skeleton.Objects[player] = skeleton
+                end
+
+                local valid = true
+                local screen = {}
+                for name, part in pairs(parts) do
+                    if not part then
+                        valid = false
+                        break
+                    end
+                    local position, onScreen = camera:WorldToViewportPoint(part.Position)
+                    screen[name] = {Position = Vector2.new(position.X, position.Y), Visible = onScreen and position.Z > 0}
+                    if not screen[name].Visible then valid = false end
+                end
+
+                if valid then
+                    local pairsToDraw = {
+                        {"head", "upper"}, {"upper", "lower"}, {"upper", "left_arm"},
+                        {"upper", "right_arm"}, {"lower", "left_leg"}, {"lower", "right_leg"},
+                    }
+                    local names = {"head", "torso", "left_arm", "right_arm", "left_leg", "right_leg"}
+                    for index, pair in ipairs(pairsToDraw) do
+                        local line = skeleton[names[index]]
+                        if line then
+                            line.From = screen[pair[1]].Position
+                            line.To = screen[pair[2]].Position
+                            line.Visible = true
+                        end
+                    end
+                else
+                    for _, line in pairs(skeleton) do
+                        if line then line.Visible = false end
+                    end
+                end
+            end
+        end
+    end
+    refreshDrawingLoop()
+    drawingNotify("骨骼透视", "已开启")
+end
+
+local function clearTracers()
+    DrawingState.Tracers.Update = nil
+    for _, line in pairs(DrawingState.Tracers.Objects) do
+        removeDrawing(line)
+    end
+    DrawingState.Tracers.Objects = {}
+    refreshDrawingLoop()
+end
+
+local function setTracersEnabled(enabled)
+    DrawingState.Tracers.Enabled = enabled
+    clearTracers()
+    if not enabled then
+        drawingNotify("射线透视", "已关闭")
+        return
+    end
+    if not drawingSupported() then
+        DrawingState.Tracers.Enabled = false
+        drawingNotify("射线透视", "当前执行器不支持 Drawing")
+        return
+    end
+
+    DrawingState.Tracers.Update = function(players)
+        pruneDrawingObjects(DrawingState.Tracers, players)
+        local camera = getDrawingCamera()
+        if not camera then return end
+        for _, player in ipairs(players) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local line = DrawingState.Tracers.Objects[player]
+                if not line then
+                    line = newDrawing("Line")
+                    if line then
+                        line.Color = Color3.fromRGB(255, 255, 255)
+                        line.Thickness = 1
+                        DrawingState.Tracers.Objects[player] = line
+                    end
+                end
+                if line then
+                    local position, onScreen = camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+                    line.From = Vector2.new(camera.ViewportSize.X / 2, 0)
+                    line.To = Vector2.new(position.X, position.Y)
+                    line.Visible = onScreen and position.Z > 0
+                end
+            else
+                hideDrawingObject(DrawingState.Tracers.Objects[player])
+            end
+        end
+    end
+    refreshDrawingLoop()
+    drawingNotify("射线透视", "已开启")
+end
+
+DrawingTab:Section({Title = "玩家绘制"})
+DrawingTab:Toggle({
+    Title = "方框透视", Desc = "显示玩家方框", Icon = "solar:box-bold-duotone", Value = false,
+    Callback = setBoxesEnabled,
+})
+DrawingTab:Toggle({
+    Title = "人物透视", Desc = "高亮显示玩家模型", Icon = "solar:layers-bold-duotone", Value = false,
+    Callback = setChamsEnabled,
+})
+DrawingTab:Colorpicker({
+    Title = "透视颜色", Desc = "设置人物透视颜色", Icon = "solar:palette-bold-duotone",
+    Value = DrawingState.Chams.Color,
+    Callback = function(value)
+        DrawingState.Chams.Color = value
+        for _, highlight in pairs(DrawingState.Chams.Objects) do
+            if highlight and highlight:IsA("Highlight") then
+                highlight.FillColor = value
+            end
+        end
+    end,
+})
+DrawingTab:Toggle({
+    Title = "名字透视", Desc = "显示玩家名称", Icon = "solar:user-bold-duotone", Value = false,
+    Callback = setNamesEnabled,
+})
+DrawingTab:Toggle({
+    Title = "血量条透视", Desc = "显示玩家血量", Icon = "solar:heart-pulse-bold-duotone", Value = false,
+    Callback = setHealthEnabled,
+})
+DrawingTab:Toggle({
+    Title = "骨骼透视", Desc = "显示玩家骨骼线条", Icon = "solar:accessibility-bold-duotone", Value = false,
+    Callback = setSkeletonEnabled,
+})
+DrawingTab:Toggle({
+    Title = "射线透视", Desc = "从屏幕顶部指向玩家", Icon = "solar:radar-2-bold-duotone", Value = false,
+    Callback = setTracersEnabled,
+})
+
+for _, server in ipairs(ServerScripts) do
+    local tab = Window:Tab({
+        Title = server.Name,
+        Icon = server.Icon,
+    })
+
+    local scriptSection = tab:Section({
+        Title = "脚本列表",
+    })
+
+    for _, scriptInfo in ipairs(server.Scripts) do
+        tab:Button({
+            Title = scriptInfo.Name,
+            Desc = "点击直接执行",
+            Icon = "solar:bolt-bold-duotone",
+            Callback = function()
+                SafeExecute(scriptInfo.Name, scriptInfo.Url)
+            end,
+        })
+    end
+end
+
+local SettingTab = Window:Tab({
+    Title = "设置",
+    Icon = "solar:settings-bold-duotone",
+})
+
+SettingTab:Section({
+    Title = "主题切换",
+})
+
+local themeNames = {}
+for themeName in pairs(WindUI:GetThemes()) do
+    table.insert(themeNames, themeName)
+end
+table.sort(themeNames)
+
+local themeDropdown = SettingTab:Dropdown({
+    Title = "选择主题",
+    Desc = "默认使用白色 Light 主题，可手动选择其他主题；不会自动循环切换",
+    Icon = "solar:palette-bold-duotone",
+    Values = themeNames,
+    Value = WindUI:GetCurrentTheme(),
+    Callback = function(selected)
+        local themeName = type(selected) == "table" and selected[1] or selected
+        if type(themeName) ~= "string" or themeName == "" then
+            return
+        end
+
+        local appliedTheme = WindUI:SetTheme(themeName)
+        if appliedTheme then
+            WindUI:Notify({
+                Title = "主题已切换",
+                Content = "当前主题：" .. themeName,
+                Duration = 3,
+            })
+        end
+    end,
+})
+
+SettingTab:Section({
+    Title = "PC 端按键绑定",
+})
+
+local pcToggleKeybind = SettingTab:Keybind({
+    Title = "自定义开关按键",
+    Desc = "按下绑定键切换 XL Hub 的显示状态",
+    Icon = "solar:keyboard-bold-duotone",
+    Value = "RightShift",
+    Flag = "PCWindowToggleKey",
+    Callback = function(keyName)
+        local keyCode = typeof(keyName) == "EnumItem" and keyName or Enum.KeyCode[keyName]
+        if keyCode then
+            Window:SetToggleKey(keyCode)
+        end
+    end,
+})
+
+
+--==================================================
+-- WindUI 官方配置管理器：保存并自动读取主题、按键等控件配置
+--==================================================
+local ConfigManager = Window.ConfigManager
+local ConfigName = "default"
+local ConfigFile = nil
+
+local function getWindUIConfig()
+    if not ConfigManager then
+        return nil
+    end
+
+    if not ConfigFile then
+        ConfigFile = ConfigManager:CreateConfig(ConfigName)
+        if ConfigFile then
+            ConfigFile:Register("ThemeSelection", themeDropdown)
+            ConfigFile:Register("PCWindowToggleKey", pcToggleKeybind)
+        end
+    end
+
+    return ConfigFile
+end
+
+local function saveWindUIConfig()
+    local config = getWindUIConfig()
+    if not config then
+        return false
+    end
+
+    local ok, result = pcall(function()
+        return config:Save()
+    end)
+    return ok and result == true
+end
+
+local function loadWindUIConfig()
+    local config = getWindUIConfig()
+    if not config then
+        return false
+    end
+
+    local ok, result = pcall(function()
+        return config:Load()
+    end)
+    return ok and result ~= nil
+end
+
+if ConfigManager then
+    ConfigManager:Init(Window)
+    getWindUIConfig()
+
+    SettingTab:Section({
+        Title = "配置保存",
+    })
+
+    SettingTab:Button({
+        Title = "保存主题和控件配置",
+        Desc = "保存当前主题、PC 按键和已注册控件；下次启动会自动读取",
+        Icon = "solar:diskette-bold-duotone",
+        Callback = function()
+            if saveWindUIConfig() then
+                WindUI:Notify({
+                    Title = "配置已保存",
+                    Content = "主题和控件配置已保存到 default",
+                    Duration = 3,
+                })
+            else
+                WindUI:Notify({
+                    Title = "保存失败",
+                    Content = "WindUI ConfigManager 不可用或配置保存失败",
+                    Duration = 4,
+                })
+            end
+        end,
+    })
+
+    SettingTab:Button({
+        Title = "立即读取已保存配置",
+        Desc = "手动恢复上次保存的主题和控件配置",
+        Icon = "solar:folder-open-bold-duotone",
+        Callback = function()
+            if loadWindUIConfig() then
+                WindUI:Notify({
+                    Title = "配置已读取",
+                    Content = "已恢复 default 配置",
+                    Duration = 3,
+                })
+            else
+                WindUI:Notify({
+                    Title = "读取失败",
+                    Content = "暂未找到可读取的配置文件",
+                    Duration = 4,
+                })
+            end
+        end,
+    })
+
+    task.defer(function()
+        if loadWindUIConfig() then
+            WindUI:Notify({
+                Title = "配置已自动读取",
+                Content = "已恢复上次保存的主题和控件设置",
+                Duration = 3,
+            })
+        end
+    end)
+
+    Window:OnClose(function()
+        saveWindUIConfig()
+    end)
+
+    Window:OnDestroy(function()
+        saveWindUIConfig()
+    end)
+else
+    SettingTab:Paragraph({
+        Title = "配置管理器不可用",
+        Desc = "当前 WindUI 版本未提供 ConfigManager，无法保存主题配置",
+        Icon = "solar:danger-triangle-bold-duotone",
+    })
+end
+
+_G.__XLHubCleanup = function()
+    if ImageWindowCleanup then
+        pcall(ImageWindowCleanup)
+        ImageWindowCleanup = nil
+    end
+    ImageReloadCurrent = nil
+
+    if TranslatorCleanup then
+        pcall(TranslatorCleanup)
+    end
+
+    if GeneralState and GeneralState.CharacterConnection then
+        pcall(function() GeneralState.CharacterConnection:Disconnect() end)
+        GeneralState.CharacterConnection = nil
+    end
+
+    if TeleportState then
+        for _, connectionName in ipairs({"PlayerAddedConnection", "PlayerRemovingConnection"}) do
+            local connection = TeleportState[connectionName]
+            if connection then
+                pcall(function() connection:Disconnect() end)
+                TeleportState[connectionName] = nil
+            end
+        end
+    end
+
+    if DrawingState then
+        if DrawingState.RenderConnection then
+            pcall(function() DrawingState.RenderConnection:Disconnect() end)
+            DrawingState.RenderConnection = nil
+        end
+        if DrawingState.PlayerRemovingConnection then
+            pcall(function() DrawingState.PlayerRemovingConnection:Disconnect() end)
+            DrawingState.PlayerRemovingConnection = nil
+        end
+        for _, category in ipairs(DrawingCategories) do
+            category.Enabled = false
+            category.Update = nil
+            for player, object in pairs(category.Objects) do
+                removeDrawingObject(object)
+                category.Objects[player] = nil
+            end
+        end
+    end
+
+    pcall(function()
+        if Window and Window.Destroy then
+            Window:Destroy()
+        end
+    end)
+end
+
