@@ -7,7 +7,6 @@ _G.__XLHubCleanup = nil
 local TranslatorCleanup = nil
 local ImageWindowCleanup = nil
 local ImageReloadCurrent = nil
-local ImageAssetFile = nil
 
 local WindUI = loadstring(game:HttpGet(
     "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"
@@ -22,26 +21,118 @@ local LocalPlayer = Players.LocalPlayer
 local CONFIG_FOLDER = "LiquidGlassHub"
 
 local LUSTRE_ICON_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/XLM.png"
-local LUSTRE_ICON_FILE = "XL_Hub_Icon.png"
 
 local function loadLustreIcon()
-    local assetLoader = getcustomasset or getsynasset
-    if assetLoader and writefile and isfile then
-        pcall(function()
-            if not isfile(LUSTRE_ICON_FILE) then
-                writefile(LUSTRE_ICON_FILE, game:HttpGet(LUSTRE_ICON_URL))
-            end
-        end)
-        local ok, asset = pcall(assetLoader, LUSTRE_ICON_FILE)
-        if ok and type(asset) == "string" and asset ~= "" then
-            return asset
-        end
-    end
-
+    -- 仅使用 WindUI 内置图标，不下载或写入本地图片文件。
     return "solar:widget-5-bold-duotone"
 end
 
 local LUSTRE_ICON = loadLustreIcon()
+
+local TemporaryImageSequence = 0
+
+local function deleteTemporaryImage(fileName)
+    if type(fileName) == "string" and fileName ~= "" and type(delfile) == "function" then
+        pcall(delfile, fileName)
+    end
+end
+
+local function downloadTemporaryImage(imageUrl, prefix)
+    if type(imageUrl) ~= "string" or imageUrl == "" then
+        return "", ""
+    end
+    local assetLoader = getcustomasset or getsynasset
+    if type(assetLoader) ~= "function"
+        or type(writefile) ~= "function"
+        or type(delfile) ~= "function" then
+        -- 当前环境没有可清理的自定义资源能力时，不把已知无法直显的云端 URL 当成成功。
+        return "", "", false
+    end
+
+    local requestFunctions = {}
+    local function addRequestFunction(candidate)
+        if type(candidate) == "function" then
+            requestFunctions[#requestFunctions + 1] = candidate
+        end
+    end
+    addRequestFunction(rawget(_G, "request"))
+    addRequestFunction(rawget(_G, "http_request"))
+    local synTable = rawget(_G, "syn")
+    if type(synTable) == "table" then
+        addRequestFunction(synTable.request)
+    end
+    local httpTable = rawget(_G, "http")
+    if type(httpTable) == "table" then
+        addRequestFunction(httpTable.request)
+    end
+
+    local body
+    local contentType = ""
+    for _, requestFunction in ipairs(requestFunctions) do
+        local ok, response = pcall(function()
+            return requestFunction({
+                Url = imageUrl,
+                Method = "GET",
+                Headers = { ["Accept"] = "image/*" },
+            })
+        end)
+        if ok and type(response) == "table" then
+            local responseBody = response.Body or response.body
+            if type(responseBody) == "string" and responseBody ~= "" then
+                body = responseBody
+                local responseHeaders = response.Headers or response.headers
+                if type(responseHeaders) == "table" then
+                    contentType = tostring(responseHeaders["Content-Type"]
+                        or responseHeaders["content-type"] or "")
+                end
+                break
+            end
+        end
+    end
+    if not body then
+        local ok, responseBody = pcall(function()
+            return game:HttpGet(imageUrl)
+        end)
+        if ok and type(responseBody) == "string" and responseBody ~= "" then
+            body = responseBody
+        end
+    end
+    if not body then
+        return "", "", false
+    end
+
+    local extension = ".jpg"
+    local lowerUrl = imageUrl:lower()
+    local lowerContentType = contentType:lower()
+    if lowerContentType:find("png", 1, true) or lowerUrl:find(".png", 1, true) then
+        extension = ".png"
+    elseif lowerContentType:find("webp", 1, true) or lowerUrl:find(".webp", 1, true) then
+        extension = ".webp"
+    elseif lowerContentType:find("gif", 1, true) or lowerUrl:find(".gif", 1, true) then
+        extension = ".gif"
+    elseif lowerContentType:find("jpeg", 1, true) or lowerUrl:find(".jpeg", 1, true) then
+        extension = ".jpeg"
+    elseif body:sub(1, 8) == string.char(137, 80, 78, 71, 13, 10, 26, 10) then
+        extension = ".png"
+    end
+    TemporaryImageSequence = TemporaryImageSequence + 1
+    local timestamp = (os and os.time and os.time()) or 0
+    local fileName = (prefix or "XLHub_Image_")
+        .. tostring(timestamp) .. "_" .. tostring(TemporaryImageSequence) .. extension
+    local wrote = pcall(function()
+        writefile(fileName, body)
+    end)
+    if not wrote then
+        return "", "", false
+    end
+    local assetOk, assetId = pcall(assetLoader, fileName)
+    if assetOk and type(assetId) == "string" and assetId ~= "" then
+        return assetId, fileName, true
+    end
+    deleteTemporaryImage(fileName)
+    return "", "", false
+end
+
 
 WindUI:AddTheme({
     Name = "LiquidGold",
@@ -351,6 +442,42 @@ local IMAGE_SOURCES = {
         Parser = "PurrBot",
         Url = "https://api.purrbot.site/v2/img/sfw/shiro/img",
     },
+    -- 新增：女性动漫图片接口（均为 SFW 分类）
+    {
+        Name = "Nekosia 狐娘",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/foxgirl",
+    },
+    {
+        Name = "Nekosia 狼娘",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/wolfgirl",
+    },
+    {
+        Name = "Nekosia 女生",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/girl",
+    },
+    {
+        Name = "Nekosia 女仆",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/maid",
+    },
+    {
+        Name = "Nekosia VTuber",
+        Parser = "Nekosia",
+        Url = "https://api.nekosia.cat/api/v1/images/vtuber",
+    },
+    {
+        Name = "NekosBest 女生",
+        Parser = "NekosBest",
+        Url = "https://nekos.best/api/v2/waifu",
+    },
+    {
+        Name = "NekosBest 狐娘",
+        Parser = "NekosBest",
+        Url = "https://nekos.best/api/v2/kitsune",
+    },
 }
 
 local currentImageSourceIndex = 1
@@ -499,6 +626,7 @@ local function OpenImageWindow()
     local destroyed = false
     local currentImageUrl = ""
     local currentImageAsset = ""
+    local loadSerial = 0
 
     local function connect(signal, callback)
         local ok, connection = pcall(function()
@@ -692,10 +820,8 @@ local function OpenImageWindow()
             end)
         end
         connections = {}
-        if currentImageAsset ~= "" and type(delfile) == "function" then
-            pcall(delfile, currentImageAsset)
-            currentImageAsset = ""
-        end
+        deleteTemporaryImage(currentImageAsset)
+        currentImageAsset = ""
         pcall(function()
             screenGui:Destroy()
         end)
@@ -814,86 +940,18 @@ local function OpenImageWindow()
     end
 
     local function loadImageAsset(imageUrl)
-        local assetLoader = getcustomasset or getsynasset
-        if type(assetLoader) ~= "function" or type(writefile) ~= "function" then
-            return imageUrl
-        end
-
-        if currentImageAsset ~= "" and type(delfile) == "function" then
-            pcall(delfile, currentImageAsset)
-            currentImageAsset = ""
-        end
-
-        local extension = imageUrl:lower():match("%.png") and ".png" or ".jpg"
-        local fileName = "XLHub_Catgirl_" .. tostring(math.random(100000, 999999)) .. extension
-        local body = nil
-        local requestFunctions = {}
-        local function addRequestFunction(candidate)
-            if type(candidate) == "function" then
-                requestFunctions[#requestFunctions + 1] = candidate
-            end
-        end
-
-        addRequestFunction(rawget(_G, "request"))
-        addRequestFunction(rawget(_G, "http_request"))
-        local synTable = rawget(_G, "syn")
-        if type(synTable) == "table" then
-            addRequestFunction(synTable.request)
-        end
-
-        for _, requestFunction in ipairs(requestFunctions) do
-            local requestOk, response = pcall(function()
-                return requestFunction({
-                    Url = imageUrl,
-                    Method = "GET",
-                    Headers = { ["Accept"] = "image/*" },
-                })
-            end)
-            if requestOk and type(response) == "table" then
-                local responseBody = response.Body or response.body
-                if type(responseBody) == "string" and responseBody ~= "" then
-                    body = responseBody
-                    break
-                end
-            end
-        end
-
-        if not body then
-            local httpOk, responseBody = pcall(function()
-                return game:HttpGet(imageUrl)
-            end)
-            if httpOk and type(responseBody) == "string" and responseBody ~= "" then
-                body = responseBody
-            end
-        end
-
-        if not body then
-            return imageUrl
-        end
-
-        local writeOk = pcall(function()
-            writefile(fileName, body)
-        end)
-        if not writeOk then
-            return imageUrl
-        end
-
-        local assetOk, assetId = pcall(assetLoader, fileName)
-        if assetOk and type(assetId) == "string" and assetId ~= "" then
-            currentImageAsset = fileName
-            ImageAssetFile = fileName
-            return assetId
-        end
-        if type(delfile) == "function" then
-            pcall(delfile, fileName)
-        end
-        return imageUrl
+        return downloadTemporaryImage(imageUrl, "XLHub_Catgirl_")
     end
 
     local function loadImage()
         if destroyed then
             return
         end
+        loadSerial = loadSerial + 1
+        local requestSerial = loadSerial
+        deleteTemporaryImage(currentImageAsset)
+        currentImageAsset = ""
+        currentImageUrl = ""
 
         cover.Visible = true
         cover.Image = ""
@@ -904,7 +962,7 @@ local function OpenImageWindow()
         task.spawn(function()
             local ok, result, sourceName = pcall(requestImageFromSelectedSource)
 
-            if destroyed then
+            if destroyed or requestSerial ~= loadSerial then
                 return
             end
 
@@ -916,8 +974,18 @@ local function OpenImageWindow()
             end
 
             currentImageUrl = result
-            coverText.Text = "图片加载中..."
-            local displayImage = loadImageAsset(currentImageUrl)
+            coverText.Text = "图片下载中..."
+            local displayImage, newImageAsset, downloadOk = loadImageAsset(currentImageUrl)
+            if destroyed or requestSerial ~= loadSerial then
+                deleteTemporaryImage(newImageAsset)
+                return
+            end
+            if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
+                coverText.Text = "图片下载失败"
+                setImageStatus(status, "无法创建临时图片资源", Color3.fromRGB(255, 120, 120))
+                return
+            end
+            currentImageAsset = newImageAsset or ""
             imageFrame.Image = displayImage
             imageFrame.ScaleType = Enum.ScaleType.Fit
             imageFrame.ImageTransparency = 0
@@ -945,9 +1013,398 @@ end
 
 HomeTab:Button({
     Title = "猫娘二次元图片",
-    Desc = "打开猫娘和二次元图片窗口，可切换类型和刷新",
+    Desc = "打开猫娘和二次元图片",
     Icon = "solar:gallery-bold-duotone",
     Callback = OpenImageWindow,
+})
+
+--==================================================
+-- Lolicon API：独立密码解锁区（解锁后请求 R18）
+--==================================================
+local LOLICON_UNLOCK_PASSWORD = "XQVIP666"
+local LOLICON_UNLOCK_FILE = "XLHub_Lolicon_Unlocked.dat"
+local LOLICON_UNLOCK_MARKER = "XLHUB_LOLICON_UNLOCKED_V1"
+local loliconUnlocked = false
+local LoliconWindowCleanups = {}
+local LoliconWindowSequence = 0
+
+local function closeAllLoliconWindows()
+    local pending = {}
+    for _, cleanup in pairs(LoliconWindowCleanups) do
+        pending[#pending + 1] = cleanup
+    end
+    for _, cleanup in ipairs(pending) do
+        pcall(cleanup)
+    end
+    LoliconWindowCleanups = {}
+end
+
+local function hasLocalLoliconUnlock()
+    if type(isfile) ~= "function" or type(readfile) ~= "function" then
+        return false
+    end
+    local ok, value = pcall(readfile, LOLICON_UNLOCK_FILE)
+    return ok and value == LOLICON_UNLOCK_MARKER
+end
+
+local function saveLocalLoliconUnlock()
+    if type(writefile) == "function" then
+        pcall(writefile, LOLICON_UNLOCK_FILE, LOLICON_UNLOCK_MARKER)
+    end
+end
+
+local function clearLocalLoliconUnlock()
+    loliconUnlocked = false
+    if type(delfile) == "function" and type(isfile) == "function" then
+        pcall(function()
+            if isfile(LOLICON_UNLOCK_FILE) then
+                delfile(LOLICON_UNLOCK_FILE)
+            end
+        end)
+    end
+end
+
+loliconUnlocked = hasLocalLoliconUnlock()
+
+local function requestLoliconImage()
+    local url = "https://api.lolicon.app/setu/v2"
+        .. "?r18=1&num=1&size=small&proxy=i.pixiv.re&excludeAI=true"
+    local body
+    local requestFunctions = {}
+    local function addRequestFunction(candidate)
+        if type(candidate) == "function" then
+            requestFunctions[#requestFunctions + 1] = candidate
+        end
+    end
+    addRequestFunction(rawget(_G, "request"))
+    addRequestFunction(rawget(_G, "http_request"))
+    local synTable = rawget(_G, "syn")
+    if type(synTable) == "table" then
+        addRequestFunction(synTable.request)
+    end
+    local httpTable = rawget(_G, "http")
+    if type(httpTable) == "table" then
+        addRequestFunction(httpTable.request)
+    end
+    for _, requestFunction in ipairs(requestFunctions) do
+        local ok, response = pcall(function()
+            return requestFunction({
+                Url = url,
+                Method = "GET",
+                Headers = { ["Accept"] = "application/json" },
+            })
+        end)
+        if ok and type(response) == "table" then
+            local responseBody = response.Body or response.body
+            if type(responseBody) == "string" and responseBody ~= "" then
+                body = responseBody
+                break
+            end
+        end
+    end
+    if not body then
+        body = game:HttpGet(url)
+    end
+    local decoded = HttpService:JSONDecode(body)
+    if type(decoded) ~= "table" then
+        error("Lolicon 返回不是有效 JSON")
+    end
+    if decoded.error and decoded.error ~= "" then
+        error("Lolicon：" .. tostring(decoded.error))
+    end
+
+    local item = decoded.data and decoded.data[1]
+    local urls = item and item.urls
+    local imageUrl = urls and (urls.small or urls.thumb or urls.regular or urls.original or urls.mini)
+    if type(imageUrl) ~= "string" or imageUrl == "" then
+        error("Lolicon 没有返回可用图片地址")
+    end
+    return imageUrl, item
+end
+
+local function loadLoliconAsset(imageUrl)
+    return downloadTemporaryImage(imageUrl, "XLHub")
+end
+
+local function OpenLoliconWindow(windowTitle, requestFunction, assetFunction)
+    windowTitle = windowTitle or "R18"
+    requestFunction = requestFunction or requestLoliconImage
+    assetFunction = assetFunction or loadLoliconAsset
+
+    if not loliconUnlocked then
+        WindUI:Notify({
+            Title = "需要解锁",
+            Content = "请先输入正确的 Lolicon 解锁密码",
+            Duration = 4,
+        })
+        return
+    end
+    local parent = getImageParent()
+    if not parent then
+        WindUI:Notify({Title = "Lolicon", Content = "找不到可用的界面容器", Duration = 4})
+        return
+    end
+
+    LoliconWindowSequence = LoliconWindowSequence + 1
+    local windowId = LoliconWindowSequence
+    local connections = {}
+    local destroyed = false
+    local assetFile = ""
+    local loadSerial = 0
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "XLHubLoliconWindow_" .. tostring(windowId)
+    screenGui.ResetOnSpawn = false
+    screenGui.IgnoreGuiInset = true
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = parent
+
+    local main = Instance.new("Frame")
+    main.Name = "LoliconPanel"
+    main.Parent = screenGui
+    main.AnchorPoint = Vector2.new(0.5, 0.5)
+    main.Position = UDim2.fromScale(0.5, 0.5)
+    main.Size = UDim2.fromOffset(360, 300)
+    main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    main.BackgroundTransparency = 0.06
+    main.BorderSizePixel = 0
+    main.Active = true
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = main
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 215, 0)
+    stroke.Thickness = 1.5
+    stroke.Parent = main
+
+    local title = Instance.new("TextLabel")
+    title.Parent = main
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.fromOffset(12, 6)
+    title.Size = UDim2.new(1, -52, 0, 26)
+    title.Text = windowTitle
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 16
+    title.Font = Enum.Font.SourceSansSemibold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Active = true
+    title.ZIndex = 2
+
+    local close = Instance.new("TextButton")
+    close.Parent = main
+    close.BackgroundTransparency = 1
+    close.Position = UDim2.new(1, -38, 0, 4)
+    close.Size = UDim2.fromOffset(32, 30)
+    close.Text = "×"
+    close.TextColor3 = Color3.fromRGB(255, 220, 220)
+    close.TextSize = 24
+    close.Font = Enum.Font.SourceSansBold
+    close.ZIndex = 3
+
+    local image = Instance.new("ImageLabel")
+    image.Parent = main
+    image.Position = UDim2.fromOffset(10, 40)
+    image.Size = UDim2.new(1, -20, 0, 205)
+    image.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    image.BorderSizePixel = 0
+    image.ScaleType = Enum.ScaleType.Fit
+
+    local status = Instance.new("TextLabel")
+    status.Parent = main
+    status.BackgroundTransparency = 1
+    status.Position = UDim2.fromOffset(10, 252)
+    status.Size = UDim2.new(1, -125, 0, 30)
+    status.Text = "准备请求..."
+    status.TextColor3 = Color3.fromRGB(190, 190, 190)
+    status.TextSize = 13
+    status.Font = Enum.Font.SourceSans
+    status.TextXAlignment = Enum.TextXAlignment.Left
+    status.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local refresh = Instance.new("TextButton")
+    refresh.Parent = main
+    refresh.Position = UDim2.new(1, -108, 1, -43)
+    refresh.Size = UDim2.fromOffset(98, 30)
+    refresh.Text = "下一张"
+    refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+    refresh.TextSize = 14
+    refresh.Font = Enum.Font.SourceSansSemibold
+    refresh.BackgroundColor3 = Color3.fromRGB(58, 47, 0)
+    refresh.BorderSizePixel = 0
+    local refreshCorner = Instance.new("UICorner")
+    refreshCorner.CornerRadius = UDim.new(0, 6)
+    refreshCorner.Parent = refresh
+
+    local function connect(signal, callback)
+        local ok, connection = pcall(function()
+            return signal:Connect(callback)
+        end)
+        if ok and connection then
+            connections[#connections + 1] = connection
+        end
+        return connection
+    end
+
+    -- Lolicon 窗口拖动：只绑定标题文字区域，避免拖动时误触发图片或按钮。
+    local dragging = false
+    local dragStart
+    local startPosition
+    local dragInput
+
+    connect(title.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = main.Position
+            dragInput = input
+            connect(input.Changed, function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    dragInput = nil
+                end
+            end)
+        end
+    end)
+
+    connect(title.InputChanged, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    connect(UserInputService.InputChanged, function(input)
+        if dragging and dragInput and input == dragInput and dragStart and startPosition then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    local function updateLoliconLayout()
+        local width = math.max(300, main.AbsoluteSize.X)
+        local height = math.max(260, main.AbsoluteSize.Y)
+        local imageHeight = math.max(100, height - 95)
+        image.Position = UDim2.fromOffset(10, 40)
+        image.Size = UDim2.new(1, -20, 0, imageHeight)
+        status.Position = UDim2.new(0, 10, 1, -38)
+        status.Size = UDim2.new(1, -125, 0, 30)
+        refresh.Position = UDim2.new(1, -108, 1, -43)
+    end
+
+    addResizeHandle(main, connect, 300, 260, 760, 700, function(width, height)
+        main.Size = UDim2.fromOffset(width, height)
+        updateLoliconLayout()
+    end)
+    updateLoliconLayout()
+
+    local function cleanup()
+        if destroyed then
+            return
+        end
+        destroyed = true
+        for _, connection in ipairs(connections) do
+            pcall(function() connection:Disconnect() end)
+        end
+        deleteTemporaryImage(assetFile)
+        assetFile = ""
+        pcall(function() screenGui:Destroy() end)
+        if LoliconWindowCleanups[windowId] == cleanup then
+            LoliconWindowCleanups[windowId] = nil
+        end
+    end
+    LoliconWindowCleanups[windowId] = cleanup
+
+    local function load()
+        if destroyed then
+            return
+        end
+        loadSerial = loadSerial + 1
+        local requestSerial = loadSerial
+        deleteTemporaryImage(assetFile)
+        assetFile = ""
+        refresh.Text = "请求中"
+        status.Text = "正在请求 Lolicon..."
+        task.spawn(function()
+            local ok, imageUrl, item = pcall(requestFunction)
+            if destroyed or requestSerial ~= loadSerial then
+                return
+            end
+            if not ok or type(imageUrl) ~= "string" or imageUrl == "" then
+                refresh.Text = "下一张"
+                status.Text = "请求失败：" .. tostring(imageUrl)
+                status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                return
+            end
+            local displayImage, newAssetFile, downloadOk = assetFunction(imageUrl)
+            if destroyed or requestSerial ~= loadSerial then
+                deleteTemporaryImage(newAssetFile)
+                return
+            end
+            assetFile = newAssetFile or ""
+            if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
+                refresh.Text = "下一张"
+                status.Text = "图片下载失败"
+                status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                return
+            end
+            image.Image = displayImage
+            image.Visible = true
+            refresh.Text = "下一张"
+            status.Text = "已显示：" .. tostring(item and (item.author or item.title) or windowTitle)
+            status.TextColor3 = Color3.fromRGB(180, 255, 180)
+        end)
+    end
+
+    connect(close.Activated, cleanup)
+    connect(refresh.Activated, load)
+    load()
+end
+
+HomeTab:Input({
+    Title = "Lolicon 解锁密码",
+    Desc = "输入正确密码后解锁 Lolicon R18 图片接口",
+    Icon = "solar:lock-keyhole-bold-duotone",
+    InputIcon = "solar:lock-keyhole-bold-duotone",
+    Placeholder = "输入解锁密码",
+    ClearTextOnFocus = false,
+    Callback = function(value)
+        local entered = tostring(value or "")
+        if entered:gsub("^%s+", ""):gsub("%s+$", "") == "" then
+            return
+        end
+        if entered == LOLICON_UNLOCK_PASSWORD then
+            loliconUnlocked = true
+            saveLocalLoliconUnlock()
+            WindUI:Notify({Title = "解锁成功", Content = "授权已保存，请手动打开 Lolicon 窗口", Duration = 3})
+        else
+            clearLocalLoliconUnlock()
+            WindUI:Notify({Title = "密码错误", Content = "Lolicon 接口仍处于锁定状态", Duration = 3})
+        end
+    end,
+})
+
+HomeTab:Button({
+    Title = "打开🔞图片",
+    Desc = "解锁后打开独立窗口",
+    Icon = "solar:gallery-wide-bold-duotone",
+    Callback = OpenLoliconWindow,
+})
+
+HomeTab:Button({
+    Title = "清除  本地授权",
+    Desc = "删除本地授权标记下次执行需要重新输入密码",
+    Icon = "solar:lock-keyhole-minimalistic-bold-duotone",
+    Callback = function()
+        clearLocalLoliconUnlock()
+        closeAllLoliconWindows()
+        WindUI:Notify({Title = "授权已清除", Content = "下次使用需要重新输入密码", Duration = 3})
+    end,
 })
 
 local GeneralTab = Window:Tab({
@@ -2084,10 +2541,8 @@ FETab:Button({
 
 FETab:Button({
     Title = "C00",
-    Desc = "该功能已锁定",
-    Icon = "solar:lock-keyhole-bold-duotone",
-    Locked = true,
-    LockedTitle = "无法使用该力量",
+    Desc = "点击使用禁忌之力",
+    Icon = "solar:bolt-bold-duotone",
     Callback = function()
         SafeExecute(
             "禁忌之力",
