@@ -1,1824 +1,2389 @@
-local PreviousCleanup = rawget(_G, "__XLHubCleanup")
-if type(PreviousCleanup) == "function" then
-    pcall(PreviousCleanup)
-end
-_G.__XLHubCleanup = nil
-local SidebarTransparencyCleanup = nil
-local UIBackgroundCleanup = nil
-local UIBackgroundTask = nil
-local ImageWindowCleanup = nil
-local ImageReloadCurrent = nil
-local WindUI = loadstring(game:HttpGet(
-    "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"
-))()
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
-local CONFIG_FOLDER = "LiquidGlassHub"
-local LUSTRE_ICON_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/XLM.png"
-local function loadLustreIcon()
-    return "solar:widget-5-bold-duotone"
-end
-local LUSTRE_ICON = loadLustreIcon()
-local UI_BACKGROUND_SOURCES = {
-    {
-        Id = "city",
-        Name = "二次元城市",
-        Extension = ".jpg",
-        ContentType = "image/jpeg",
-        Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/%E4%BA%8C%E6%AC%A1%E5%85%83-%E5%8A%A8%E6%BC%AB-%E5%9F%8E%E5%B8%82.jpg",
-    },
-    {
-        Id = "anime_girl",
-        Name = "动漫少女",
-        Extension = ".jpg",
-        ContentType = "image/jpeg",
-        Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/%E5%8A%A8%E6%BC%AB%E5%B0%91%E5%A5%B3.jpg",
-    },
-    {
-        Id = "re_zero",
-        Name = "线条画",
-        Extension = ".jpg",
-        ContentType = "image/jpeg",
-        Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/%E4%BB%8E%E9%9B%B6%E5%BC%80%E5%A7%8B%E7%9A%84%E5%BC%82%E4%B8%96%E7%95%8C%E7%94%9F%E6%B4%BB-%E5%8A%A8%E6%BC%AB%E5%B0%91%E5%A5%B3.jpg",
-    },
-    {
-        Id = "kawaii_cat_girl",
-        Name = "Kawaii 猫娘",
-        Extension = ".png",
-        ContentType = "image/png",
-        Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/kawaii-cat-girl-5120x2880-26545.png",
-    },
-}
-local IMAGE_CACHE_FOLDER = "XLHub_ImageCache"
-local TemporaryImageSequence = 0
-local function addRequestCandidate(list, candidate)
-    if type(candidate) == "function" then
-        list[#list + 1] = candidate
+local function safeStartup()
+    local PreviousCleanup = rawget(_G, "__XLHubCleanup")
+    if type(PreviousCleanup) == "function" then
+        pcall(PreviousCleanup)
     end
-end
-local function getRequestCandidates()
-    local candidates = {}
-    addRequestCandidate(candidates, rawget(_G, "request"))
-    addRequestCandidate(candidates, rawget(_G, "http_request"))
-    local synTable = rawget(_G, "syn")
-    if type(synTable) == "table" then
-        addRequestCandidate(candidates, synTable.request)
+    _G.__XLHubCleanup = nil
+
+    local BootToken = tostring(os.clock()) .. ":" .. tostring(math.random(100000, 999999))
+    _G.__XLHubBootToken = BootToken
+    local StartupAlive = true
+    local SidebarTransparencyCleanup = nil
+    local UIBackgroundCleanup = nil
+    local ImageWindowCleanup = nil
+    local ImageReloadCurrent = nil
+
+    -- -------- 全局错误捕获 ----------
+    local function globalErrorHandler(err)
+        warn("[XL Hub] 启动过程发生错误: " .. tostring(err))
+        warn(debug.traceback())
     end
-    local httpTable = rawget(_G, "http")
-    if type(httpTable) == "table" then
-        addRequestCandidate(candidates, httpTable.request)
-    end
-    return candidates
-end
-local function requestHttpBody(url, accept)
-    if type(url) ~= "string" or url == "" then
-        error("图片地址为空")
-    end
-    local errors = {}
-    local headers = {
-        ["Accept"] = accept or "application/json",
-        ["User-Agent"] = "XLHub/2.0 WindUI image client",
-    }
-    for _, requestFunction in ipairs(getRequestCandidates()) do
-        local ok, response = pcall(function()
-            return requestFunction({
-                Url = url,
-                Method = "GET",
-                Headers = headers,
-            })
+
+    local ok, startupErr = xpcall(function()
+        -- ========== 1. WindUI 加载 ==========
+        local WindUI
+        local WindUIOk, WindUIError = pcall(function()
+            local url = "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"
+            local done = false
+            local source
+            local fetchError
+            task.spawn(function()
+                local ok, result = pcall(function()
+                    local candidates = {}
+                    local function addCandidate(value)
+                        if type(value) == "function" then candidates[#candidates + 1] = value end
+                    end
+                    addCandidate(rawget(_G, "request"))
+                    addCandidate(rawget(_G, "http_request"))
+                    local synTable = rawget(_G, "syn")
+                    if type(synTable) == "table" then addCandidate(synTable.request) end
+                    local httpTable = rawget(_G, "http")
+                    if type(httpTable) == "table" then addCandidate(httpTable.request) end
+                    for _, requestFunction in ipairs(candidates) do
+                        local requestOk, response = pcall(function()
+                            return requestFunction({Url = url, Method = "GET", Headers = {['User-Agent'] = "XLHub/2.0"}, Timeout = 10})
+                        end)
+                        if requestOk and type(response) == "table" then
+                            local body = response.Body or response.body
+                            if type(body) == "string" and body ~= "" then return body end
+                        elseif requestOk and type(response) == "string" and response ~= "" then
+                            return response
+                        end
+                    end
+                    -- 后备：使用 game:HttpGet（可能阻塞但能提高兼容性）
+                    if game then
+                        return game:HttpGet(url)
+                    end
+                    error("所有请求函数均失败")
+                end)
+                if ok and type(result) == "string" and result ~= "" then
+                    source = result
+                else
+                    fetchError = result
+                end
+                done = true
+            end)
+            local deadline = os.clock() + 12
+            while not done and os.clock() < deadline do task.wait(0.05) end
+            if not done then error("WindUI 请求超时") end
+            if type(source) ~= "string" or source == "" then error(tostring(fetchError or "WindUI 返回为空")) end
+            local chunk = loadstring(source)
+            assert(type(chunk) == "function", "WindUI 源码无法编译")
+            WindUI = chunk()
         end)
-        if ok then
-            if type(response) == "string" and response ~= "" then
-                return response
+        if not WindUIOk or type(WindUI) ~= "table" then
+            warn("[XL Hub] WindUI 启动失败：" .. tostring(WindUIError))
+            StartupAlive = false
+            return
+        end
+
+        -- ========== 2. 工具函数 ==========
+        local HttpService = game:GetService("HttpService")
+        local Players = game:GetService("Players")
+        local UserInputService = game:GetService("UserInputService")
+        local LocalPlayer = Players.LocalPlayer
+        local CONFIG_FOLDER = "LiquidGlassHub"
+        local LUSTRE_ICON_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/XLM.png"
+
+        local function loadLustreIcon()
+            return "solar:widget-5-bold-duotone"
+        end
+        local LUSTRE_ICON = loadLustreIcon()
+
+        local UI_BACKGROUND_SOURCES = {
+            {
+                Id = "city",
+                Name = "二次元城市",
+                Extension = ".jpg",
+                ContentType = "image/jpeg",
+                Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/%E4%BA%8C%E6%AC%A1%E5%85%83-%E5%8A%A8%E6%BC%AB-%E5%9F%8E%E5%B8%82.jpg",
+            },
+            {
+                Id = "anime_girl",
+                Name = "动漫少女",
+                Extension = ".jpg",
+                ContentType = "image/jpeg",
+                Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/%E5%8A%A8%E6%BC%AB%E5%B0%91%E5%A5%B3.jpg",
+            },
+            {
+                Id = "re_zero",
+                Name = "线条画",
+                Extension = ".jpg",
+                ContentType = "image/jpeg",
+                Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/%E4%BB%8E%E9%9B%B6%E5%BC%80%E5%A7%8B%E7%9A%84%E5%BC%82%E4%B8%96%E7%95%8C%E7%94%9F%E6%B4%BB-%E5%8A%A8%E6%BC%AB%E5%B0%91%E5%A5%B3.jpg",
+            },
+            {
+                Id = "kawaii_cat_girl",
+                Name = "Kawaii 猫娘",
+                Extension = ".png",
+                ContentType = "image/png",
+                Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/kawaii-cat-girl-5120x2880-26545.png",
+            },
+        }
+
+        local IMAGE_CACHE_FOLDER = "XLHub_ImageCache"
+        local TemporaryImageSequence = 0
+
+        local function addRequestCandidate(list, candidate)
+            if type(candidate) == "function" then
+                list[#list + 1] = candidate
             end
-            if type(response) == "table" then
-                local body = response.Body or response.body
-                if type(body) == "string" and body ~= "" then
+        end
+
+        local function getRequestCandidates()
+            local candidates = {}
+            addRequestCandidate(candidates, rawget(_G, "request"))
+            addRequestCandidate(candidates, rawget(_G, "http_request"))
+            local synTable = rawget(_G, "syn")
+            if type(synTable) == "table" then
+                addRequestCandidate(candidates, synTable.request)
+            end
+            local httpTable = rawget(_G, "http")
+            if type(httpTable) == "table" then
+                addRequestCandidate(candidates, httpTable.request)
+            end
+            return candidates
+        end
+
+        -- requestHttpBody 恢复 game:HttpGet 作为最后后备
+        local function requestHttpBody(url, accept)
+            if type(url) ~= "string" or url == "" then
+                error("请求地址为空")
+            end
+            local errors = {}
+            local headers = {
+                ["Accept"] = accept or "application/json",
+                ["User-Agent"] = "XLHub/2.0 WindUI image client",
+            }
+            -- 尝试候选函数
+            for _, requestFunction in ipairs(getRequestCandidates()) do
+                local ok, response = pcall(function()
+                    return requestFunction({
+                        Url = url,
+                        Method = "GET",
+                        Headers = headers,
+                        Timeout = 10,
+                    })
+                end)
+                if ok then
+                    if type(response) == "string" and response ~= "" then
+                        return response
+                    end
+                    if type(response) == "table" then
+                        local body = response.Body or response.body
+                        if type(body) == "string" and body ~= "" then
+                            return body
+                        end
+                        errors[#errors + 1] = "执行器返回空 Body"
+                    else
+                        errors[#errors + 1] = "执行器返回格式不是字符串或响应表"
+                    end
+                else
+                    errors[#errors + 1] = tostring(response)
+                end
+            end
+            -- 最后尝试 game:HttpGet（可能阻塞，但作为兼容性保底）
+            if game then
+                local ok, body = pcall(function()
+                    return game:HttpGet(url)
+                end)
+                if ok and type(body) == "string" and body ~= "" then
                     return body
                 end
-                errors[#errors + 1] = "执行器返回空 Body"
-            else
-                errors[#errors + 1] = "执行器返回格式不是字符串或响应表"
+                errors[#errors + 1] = ok and "game:HttpGet 返回空" or tostring(body)
             end
-        else
-            errors[#errors + 1] = tostring(response)
+            error("所有请求方式均失败：" .. table.concat(errors, " | "))
         end
-    end
-    if game then
-        local ok, body = pcall(function()
-            return game:HttpGet(url)
-        end)
-        if ok and type(body) == "string" and body ~= "" then
-            return body
+
+        -- 防止请求函数卡住界面：超时后将控制权还给窗口并显示错误
+        local function requestHttpBodyWithTimeout(url, accept, timeoutSeconds)
+            timeoutSeconds = tonumber(timeoutSeconds) or 15
+            local finished = false
+            local requestOk = false
+            local result
+
+            task.spawn(function()
+                requestOk, result = pcall(function()
+                    return requestHttpBody(url, accept)
+                end)
+                finished = true
+            end)
+
+            local deadline = os.clock() + timeoutSeconds
+            while not finished and os.clock() < deadline do
+                task.wait(0.05)
+            end
+
+            if not finished then
+                error("请求超时（" .. tostring(timeoutSeconds) .. " 秒）")
+            end
+            if not requestOk then
+                error(tostring(result))
+            end
+            return result
         end
-        errors[#errors + 1] = ok and "game:HttpGet 返回空内容" or tostring(body)
-    else
-        errors[#errors + 1] = "当前环境没有 game 对象"
-    end
-    error("请求失败：" .. table.concat(errors, " | "))
-end
-local function ensureImageCacheFolder()
-    if type(makefolder) ~= "function" then
-        return false
-    end
-    if type(isfolder) == "function" then
-        local ok, exists = pcall(isfolder, IMAGE_CACHE_FOLDER)
-        if ok and exists then
-            return true
+
+        local function ensureImageCacheFolder()
+            if type(makefolder) ~= "function" then
+                return false
+            end
+            if type(isfolder) == "function" then
+                local ok, exists = pcall(isfolder, IMAGE_CACHE_FOLDER)
+                if ok and exists then
+                    return true
+                end
+            end
+            local ok = pcall(makefolder, IMAGE_CACHE_FOLDER)
+            if ok then
+                return true
+            end
+            return type(isfolder) ~= "function"
         end
-    end
-    local ok = pcall(makefolder, IMAGE_CACHE_FOLDER)
-    if ok then
-        return true
-    end
-    return type(isfolder) ~= "function"
-end
-local function deleteTemporaryImage(fileName)
-    if type(fileName) == "string" and fileName ~= "" and type(delfile) == "function" then
-        pcall(delfile, fileName)
-    end
-end
-local function detectImageExtension(url, body)
-    local lowerUrl = tostring(url or ""):lower()
-    if lowerUrl:find(".png", 1, true) then
-        return ".png"
-    elseif lowerUrl:find(".webp", 1, true) then
-        return ".webp"
-    elseif lowerUrl:find(".gif", 1, true) then
-        return ".gif"
-    elseif lowerUrl:find(".jpeg", 1, true) then
-        return ".jpeg"
-    end
-    if type(body) == "string" then
-        if body:sub(1, 8) == string.char(137, 80, 78, 71, 13, 10, 26, 10) then
-            return ".png"
-        elseif body:sub(1, 4) == "RIFF" and body:sub(9, 12) == "WEBP" then
-            return ".webp"
-        elseif body:sub(1, 6) == "GIF87a" or body:sub(1, 6) == "GIF89a" then
-            return ".gif"
-        elseif body:sub(1, 2) == string.char(255, 216) then
+
+        local function deleteTemporaryImage(fileName)
+            if type(fileName) == "string" and fileName ~= "" and type(delfile) == "function" then
+                pcall(delfile, fileName)
+            end
+        end
+
+        local function detectImageExtension(url, body)
+            local lowerUrl = tostring(url or ""):lower()
+            if lowerUrl:find(".png", 1, true) then
+                return ".png"
+            elseif lowerUrl:find(".webp", 1, true) then
+                return ".webp"
+            elseif lowerUrl:find(".gif", 1, true) then
+                return ".gif"
+            elseif lowerUrl:find(".jpeg", 1, true) then
+                return ".jpeg"
+            end
+            if type(body) == "string" then
+                if body:sub(1, 8) == string.char(137, 80, 78, 71, 13, 10, 26, 10) then
+                    return ".png"
+                elseif body:sub(1, 4) == "RIFF" and body:sub(9, 12) == "WEBP" then
+                    return ".webp"
+                elseif body:sub(1, 6) == "GIF87a" or body:sub(1, 6) == "GIF89a" then
+                    return ".gif"
+                elseif body:sub(1, 2) == string.char(255, 216) then
+                    return ".jpg"
+                end
+            end
             return ".jpg"
         end
-    end
-    return ".jpg"
-end
-local function downloadTemporaryImage(imageUrl, prefix)
-    local assetLoader = getcustomasset or getsynasset
-    if type(assetLoader) ~= "function"
-        or type(writefile) ~= "function"
-        or type(delfile) ~= "function"
-        or not ensureImageCacheFolder() then
-        return "", "", false
-    end
-    local body = requestHttpBody(imageUrl, "image/*")
-    local extension = detectImageExtension(imageUrl, body)
-    TemporaryImageSequence = TemporaryImageSequence + 1
-    local fileName = IMAGE_CACHE_FOLDER .. "/"
-        .. (prefix or "XLHub_CurrentImage_")
-        .. tostring(TemporaryImageSequence) .. extension
-    local writeOk = pcall(function()
-        writefile(fileName, body)
-    end)
-    if not writeOk then
-        return "", "", false
-    end
-    local assetOk, assetId = pcall(assetLoader, fileName)
-    if assetOk and type(assetId) == "string" and assetId ~= "" then
-        return assetId, fileName, true
-    end
-    deleteTemporaryImage(fileName)
-    return "", "", false
-end
-WindUI:AddTheme({
-    Name = "LiquidGold",
-    Accent = Color3.fromHex("#FFD700"),
-    Background = Color3.fromHex("#090909"),
-    BackgroundTransparency = 1,
-    Dialog = Color3.fromHex("#181818"),
-    Outline = Color3.fromHex("#333333"),
-    Text = Color3.fromHex("#FFFFFF"),
-    Placeholder = Color3.fromHex("#AAAAAA"),
-    Button = Color3.fromHex("#3A2F00"),
-    Icon = Color3.fromHex("#FFD700"),
-    Hover = Color3.fromHex("#2A2A2A"),
-    White = Color3.fromHex("#FFFFFF"),
-    AcrylicMain = Color3.fromHex("#090909"),
-    AcrylicNoise = 1,
-    WindowBackground = Color3.fromHex("#090909"),
-    WindowShadow = Color3.fromHex("#000000"),
-    WindowSearchBarBackground = Color3.fromHex("#181818"),
-    SearchBarBorder = Color3.fromHex("#333333"),
-    SearchBarBorderTransparency = 0.35,
-    WindowTopbarButtonIcon = Color3.fromHex("#FFD700"),
-    WindowTopbarTitle = Color3.fromHex("#FFFFFF"),
-    WindowTopbarAuthor = Color3.fromHex("#AAAAAA"),
-    WindowTopbarIcon = Color3.fromHex("#FFD700"),
-    PanelBackground = Color3.fromHex("#FFFFFF"),
-    PanelBackgroundTransparency = 1,
-    LabelBackground = Color3.fromHex("#FFFFFF"),
-    LabelBackgroundTransparency = 1,
-    TabBackground = Color3.fromHex("#FFFFFF"),
-    TabBackgroundHover = Color3.fromHex("#F4F8FC"),
-    TabBackgroundHoverTransparency = 1,
-    TabBackgroundActive = Color3.fromHex("#FFFFFF"),
-    TabBackgroundActiveTransparency = 1,
-    TabBorder = Color3.fromHex("#D7E5EE"),
-    TabBorderTransparency = 0.35,
-    TabTitle = Color3.fromHex("#1B2733"),
-    TabIcon = Color3.fromHex("#2D9CDB"),
-    TabTextTransparency = 0,
-    TabIconTransparency = 0,
-    ElementBackground = Color3.fromHex("#FFFFFF"),
-    ElementBackgroundTransparency = 1,
-    ElementTitle = Color3.fromHex("#1B2733"),
-    ElementDesc = Color3.fromHex("#6B7785"),
-    DescTextTransparency = 0,
-    ElementIcon = Color3.fromHex("#FFD700"),
-    DropdownTabBackground = Color3.fromHex("#151515"),
-    DropdownTabBorder = Color3.fromHex("#333333"),
-    DropdownBackground = Color3.fromHex("#111111"),
-    Toggle = Color3.fromHex("#FFD700"),
-    ToggleBar = Color3.fromHex("#FFFFFF"),
-    ToggleTransparency = 0,
-    Checkbox = Color3.fromHex("#FFD700"),
-    CheckboxIcon = Color3.fromHex("#FFFFFF"),
-    CheckboxBorder = Color3.fromHex("#665500"),
-    CheckboxBorderTransparency = 0.25,
-    Primary = Color3.fromHex("#FFD700"),
-    Slider = Color3.fromHex("#FFD700"),
-    SliderThumb = Color3.fromHex("#FFFFFF"),
-    SliderIcon = Color3.fromHex("#FFFFFF"),
-    DialogBackground = Color3.fromHex("#181818"),
-    DialogBackgroundTransparency = 1,
-    DialogTitle = Color3.fromHex("#FFFFFF"),
-    DialogContent = Color3.fromHex("#AAAAAA"),
-    DialogIcon = Color3.fromHex("#FFD700"),
-    PopupBackground = Color3.fromHex("#181818"),
-    PopupBackgroundTransparency = 1,
-    PopupTitle = Color3.fromHex("#FFFFFF"),
-    PopupContent = Color3.fromHex("#AAAAAA"),
-    PopupIcon = Color3.fromHex("#FFD700"),
-    Notification = Color3.fromHex("#181818"),
-    Notification2 = Color3.fromHex("#2A2A2A"),
-    Notification2Transparency = 0.05,
-    NotificationTitle = Color3.fromHex("#FFFFFF"),
-    NotificationTitleTransparency = 0,
-    NotificationContent = Color3.fromHex("#AAAAAA"),
-    NotificationContentTransparency = 0,
-    NotificationDuration = Color3.fromHex("#FFD700"),
-    NotificationDurationTransparency = 0,
-    ProgressBar = Color3.fromHex("#FFD700"),
-    ProgressBarText = Color3.fromHex("#FFFFFF"),
-    ProgressBarTrack = Color3.fromHex("#333333"),
-    ProgressBarTrackTransparency = 0.25,
-    SectionBoxBackground = Color3.fromHex("#181818"),
-    SectionBoxTransparency = 1,
-    SectionBoxBackgroundTransparency = 1,
-    SectionBoxBorder = Color3.fromHex("#333333"),
-    SectionBoxBorderTransparency = 0.25,
-    SectionExpandIcon = Color3.fromHex("#FFD700"),
-    SectionExpandIconTransparency = 0,
-    Tooltip = Color3.fromHex("#181818"),
-    TooltipText = Color3.fromHex("#FFFFFF"),
-    TooltipSmall = Color3.fromHex("#181818"),
-    TooltipSmallText = Color3.fromHex("#FFFFFF"),
-    TooltipDark = Color3.fromHex("#181818"),
-    TooltipDarkText = Color3.fromHex("#FFFFFF"),
-    TooltipLight = Color3.fromHex("#2A2A2A"),
-    TooltipLightText = Color3.fromHex("#FFFFFF"),
-    ViewportBackground = Color3.fromHex("#090909"),
-    ViewportBackgroundTransparency = 0,
-})
-local ServerScripts = {
-    {
-        Name = "最强战场",
-        Icon = "solar:bolt-bold-duotone",
-        Scripts = {
-            {Name = "执行自动农场", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"},
-            {Name = "TSB 脚本 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"},
-            {Name = "TSB 脚本 2", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"},
-        },
-    },
-    {
-        Name = "学乱",
-        Icon = "solar:book-bold-duotone",
-        Scripts = {
-            {Name = "学乱 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"},
-            {Name = "学乱 3", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"},
-        },
-    },
-}
-local function SafeExecute(scriptName, url)
-    WindUI:Notify({
-        Title = "正在加载",
-        Content = "正在获取 " .. scriptName .. "，请稍候...",
-        Duration = 3,
-    })
-    task.spawn(function()
-        local ok, err = pcall(function()
-            local source = game:HttpGet(url)
-            local chunk = loadstring(source)
-            assert(type(chunk) == "function", "远程内容无法编译")
-            chunk()
-        end)
-        if ok then
-            WindUI:Notify({
-                Title = "执行成功",
-                Content = scriptName .. " 已成功运行",
-                Duration = 4,
-            })
-        else
-            WindUI:Notify({
-                Title = "执行失败",
-                Content = scriptName .. "：" .. tostring(err),
-                Duration = 6,
-            })
-            warn("[" .. scriptName .. "] " .. tostring(err))
-        end
-    end)
-end
-WindUI.TransparencyValue = 1
-local Window = WindUI:CreateWindow({
-    Title = "XL Hub",
-    Icon = LUSTRE_ICON,
-    Author = "Modern UI",
-    Theme = "LiquidGold",
-    Folder = CONFIG_FOLDER,
-    Transparent = true,
-    Acrylic = false,
-    Background = "rbxassetid://0",
-    BackgroundImageTransparency = 0,
-    NewElements = true,
-    Size = UDim2.fromOffset(560, 430),
-    MinSize = Vector2.new(420, 300),
-    MaxSize = Vector2.new(900, 650),
-    Resizable = true,
-    AutoScale = true,
-    SideBarWidth = 180,
-    HideSearchBar = false,
-    ScrollBarEnabled = true,
-    OpenButton = {
-        Title = "XL",
-        Icon = LUSTRE_ICON,
-        CornerRadius = UDim.new(1, 0),
-        StrokeThickness = 4,
-        Enabled = true,
-        Draggable = true,
-        OnlyMobile = true,
-        Scale = 0.85,
-        Color = ColorSequence.new(
-            Color3.fromRGB(255, 215, 0),
-            Color3.fromRGB(255, 215, 0)
-        ),
-    },
-    Topbar = {
-        Height = 40,
-        ButtonsType = "Mac",
-    },
-})
-Window:EditOpenButton({
-    Icon = LUSTRE_ICON,
-    Title = "XL Hub",
-})
-local UIBackgroundCache = {}
-local UIBackgroundCurrentIndex = 0
-local UI_BACKGROUND_FILE_PREFIX = "XLHub_UIBackground_v2_"
-local function getUIBackgroundFileName(source)
-    return IMAGE_CACHE_FOLDER .. "/" .. UI_BACKGROUND_FILE_PREFIX .. source.Id .. source.Extension
-end
-local function removeLegacyUIBackgroundCache()
-    if type(delfile) ~= "function" then
-        return
-    end
-    for index = 1, 4 do
-        deleteTemporaryImage(IMAGE_CACHE_FOLDER .. "/XLHub_UIBackground_" .. tostring(index) .. ".jpg")
-    end
-end
-removeLegacyUIBackgroundCache()
-local function isExistingFile(fileName)
-    if type(isfile) ~= "function" then
-        return false
-    end
-    local ok, exists = pcall(isfile, fileName)
-    return ok and exists == true
-end
-local function downloadOneUIBackground(index)
-    local source = UI_BACKGROUND_SOURCES[index]
-    if not source then
-        return false, "背景源不存在"
-    end
-    local assetLoader = getcustomasset or getsynasset
-    if type(assetLoader) ~= "function"
-        or type(writefile) ~= "function"
-        or not ensureImageCacheFolder() then
-        return false, "执行器缺少图片缓存能力"
-    end
-    local fileName = getUIBackgroundFileName(source)
-    local function writeAndRead()
-        if not isExistingFile(fileName) then
-            local body = requestHttpBody(source.Url, source.ContentType or "image/jpeg")
-            local writeOk, writeError = pcall(function()
+
+        local function downloadTemporaryImage(imageUrl, prefix)
+            local assetLoader = getcustomasset or getsynasset
+            if type(assetLoader) ~= "function"
+                or type(writefile) ~= "function"
+                or type(delfile) ~= "function"
+                or not ensureImageCacheFolder() then
+                return "", "", false
+            end
+            local body = requestHttpBodyWithTimeout(imageUrl, "image/*", 20)
+            local extension = detectImageExtension(imageUrl, body)
+            TemporaryImageSequence = TemporaryImageSequence + 1
+            local fileName = IMAGE_CACHE_FOLDER .. "/"
+                .. (prefix or "XLHub_CurrentImage_")
+                .. tostring(TemporaryImageSequence) .. extension
+            local writeOk = pcall(function()
                 writefile(fileName, body)
             end)
             if not writeOk then
-                error(tostring(writeError))
+                return "", "", false
             end
-        end
-        local assetOk, assetId = pcall(assetLoader, fileName)
-        if not assetOk or type(assetId) ~= "string" or assetId == "" then
-            error(assetOk and "缓存图片资源为空" or tostring(assetId))
-        end
-        return assetId
-    end
-    local ok, assetId = pcall(writeAndRead)
-    if not ok then
-        if isExistingFile(fileName) and type(writefile) == "function" then
-            local retryOk, retryAsset = pcall(function()
-                local body = requestHttpBody(source.Url, source.ContentType or "image/jpeg")
-                writefile(fileName, body)
-                local loaded, loadedAsset = pcall(assetLoader, fileName)
-                if not loaded or type(loadedAsset) ~= "string" or loadedAsset == "" then
-                    error(loaded and "重试后的缓存资源为空" or tostring(loadedAsset))
-                end
-                return loadedAsset
-            end)
-            if retryOk then
-                assetId = retryAsset
-                ok = true
-            else
-                return false, tostring(retryAsset)
+            local assetOk, assetId = pcall(assetLoader, fileName)
+            if assetOk and type(assetId) == "string" and assetId ~= "" then
+                return assetId, fileName, true
             end
-        else
-            return false, tostring(assetId)
+            deleteTemporaryImage(fileName)
+            return "", "", false
         end
-    end
-    UIBackgroundCache[index] = {
-        Asset = assetId,
-        File = fileName,
-        Name = source.Name,
-    }
-    return true
-end
-local function applyUIBackground(index)
-    local cached = UIBackgroundCache[index]
-    if not cached then
-        local ok, errorMessage = downloadOneUIBackground(index)
-        if not ok then
-            return false, errorMessage
-        end
-        cached = UIBackgroundCache[index]
-    end
-    local setOk, setError = pcall(function()
-        Window:SetBackgroundImage(cached.Asset)
-        Window:SetBackgroundImageTransparency(0)
-    end)
-    if not setOk then
-        return false, tostring(setError)
-    end
-    UIBackgroundCurrentIndex = index
-    return true
-end
-local function preloadAllUIBackgrounds()
-    for index = 1, #UI_BACKGROUND_SOURCES do
-        local ok, errorMessage = downloadOneUIBackground(index)
-        if not ok then
-            warn("[XL Hub] UI 背景 " .. tostring(index) .. " 预下载失败：" .. tostring(errorMessage))
-        elseif index == 1 and UIBackgroundCurrentIndex == 0 then
-            applyUIBackground(index)
-        end
-    end
-end
-UIBackgroundTask = task.delay(0.5, function()
-    UIBackgroundTask = nil
-    preloadAllUIBackgrounds()
-end)
-UIBackgroundCleanup = function()
-    if UIBackgroundTask and task.cancel then
-        pcall(task.cancel, UIBackgroundTask)
-    end
-    UIBackgroundTask = nil
-    UIBackgroundCleanup = nil
-end
-do
-    local sidebarTransparencyConnections = {}
-    local boundSidebarObjects = setmetatable({}, {__mode = "k"})
-    local function makeSidebarTabBackgroundTransparent(object)
-        if not object or not object:IsA("GuiObject") then
-            return
-        end
-        if object.Name ~= "Frame" and object.Name ~= "Outline" then
-            return
-        end
-        if boundSidebarObjects[object] then
-            return
-        end
-        boundSidebarObjects[object] = true
-        if object:IsA("ImageLabel") or object:IsA("ImageButton") then
-            object.ImageTransparency = 1
-            local imageConnection = object:GetPropertyChangedSignal("ImageTransparency"):Connect(function()
-                if object.Parent then
-                    object.ImageTransparency = 1
-                end
-            end)
-            sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = imageConnection
-        end
-        object.BackgroundTransparency = 1
-        local backgroundConnection = object:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
-            if object.Parent then
-                object.BackgroundTransparency = 1
-            end
+
+        -- ========== 3. 主题注册 ==========
+        local ThemeOk, ThemeError = pcall(function()
+            WindUI:AddTheme({
+                Name = "LiquidGold",
+                Accent = Color3.fromHex("#FFD700"),
+                Background = Color3.fromHex("#090909"),
+                BackgroundTransparency = 1,
+                Dialog = Color3.fromHex("#181818"),
+                Outline = Color3.fromHex("#333333"),
+                Text = Color3.fromHex("#FFFFFF"),
+                Placeholder = Color3.fromHex("#AAAAAA"),
+                Button = Color3.fromHex("#3A2F00"),
+                Icon = Color3.fromHex("#FFD700"),
+                Hover = Color3.fromHex("#2A2A2A"),
+                White = Color3.fromHex("#FFFFFF"),
+                AcrylicMain = Color3.fromHex("#090909"),
+                AcrylicNoise = 1,
+                WindowBackground = Color3.fromHex("#090909"),
+                WindowShadow = Color3.fromHex("#000000"),
+                WindowSearchBarBackground = Color3.fromHex("#181818"),
+                SearchBarBorder = Color3.fromHex("#333333"),
+                SearchBarBorderTransparency = 0.35,
+                WindowTopbarButtonIcon = Color3.fromHex("#FFD700"),
+                WindowTopbarTitle = Color3.fromHex("#FFFFFF"),
+                WindowTopbarAuthor = Color3.fromHex("#AAAAAA"),
+                WindowTopbarIcon = Color3.fromHex("#FFD700"),
+                PanelBackground = Color3.fromHex("#FFFFFF"),
+                PanelBackgroundTransparency = 1,
+                LabelBackground = Color3.fromHex("#FFFFFF"),
+                LabelBackgroundTransparency = 1,
+                TabBackground = Color3.fromHex("#FFFFFF"),
+                TabBackgroundHover = Color3.fromHex("#F4F8FC"),
+                TabBackgroundHoverTransparency = 1,
+                TabBackgroundActive = Color3.fromHex("#FFFFFF"),
+                TabBackgroundActiveTransparency = 1,
+                TabBorder = Color3.fromHex("#D7E5EE"),
+                TabBorderTransparency = 0.35,
+                TabTitle = Color3.fromHex("#1B2733"),
+                TabIcon = Color3.fromHex("#2D9CDB"),
+                TabTextTransparency = 0,
+                TabIconTransparency = 0,
+                ElementBackground = Color3.fromHex("#FFFFFF"),
+                ElementBackgroundTransparency = 1,
+                ElementTitle = Color3.fromHex("#1B2733"),
+                ElementDesc = Color3.fromHex("#6B7785"),
+                DescTextTransparency = 0,
+                ElementIcon = Color3.fromHex("#FFD700"),
+                DropdownTabBackground = Color3.fromHex("#151515"),
+                DropdownTabBorder = Color3.fromHex("#333333"),
+                DropdownBackground = Color3.fromHex("#111111"),
+                Toggle = Color3.fromHex("#FFD700"),
+                ToggleBar = Color3.fromHex("#FFFFFF"),
+                ToggleTransparency = 0,
+                Checkbox = Color3.fromHex("#FFD700"),
+                CheckboxIcon = Color3.fromHex("#FFFFFF"),
+                CheckboxBorder = Color3.fromHex("#665500"),
+                CheckboxBorderTransparency = 0.25,
+                Primary = Color3.fromHex("#FFD700"),
+                Slider = Color3.fromHex("#FFD700"),
+                SliderThumb = Color3.fromHex("#FFFFFF"),
+                SliderIcon = Color3.fromHex("#FFFFFF"),
+                DialogBackground = Color3.fromHex("#181818"),
+                DialogBackgroundTransparency = 1,
+                DialogTitle = Color3.fromHex("#FFFFFF"),
+                DialogContent = Color3.fromHex("#AAAAAA"),
+                DialogIcon = Color3.fromHex("#FFD700"),
+                PopupBackground = Color3.fromHex("#181818"),
+                PopupBackgroundTransparency = 1,
+                PopupTitle = Color3.fromHex("#FFFFFF"),
+                PopupContent = Color3.fromHex("#AAAAAA"),
+                PopupIcon = Color3.fromHex("#FFD700"),
+                Notification = Color3.fromHex("#181818"),
+                Notification2 = Color3.fromHex("#2A2A2A"),
+                Notification2Transparency = 0.05,
+                NotificationTitle = Color3.fromHex("#FFFFFF"),
+                NotificationTitleTransparency = 0,
+                NotificationContent = Color3.fromHex("#AAAAAA"),
+                NotificationContentTransparency = 0,
+                NotificationDuration = Color3.fromHex("#FFD700"),
+                NotificationDurationTransparency = 0,
+                ProgressBar = Color3.fromHex("#FFD700"),
+                ProgressBarText = Color3.fromHex("#FFFFFF"),
+                ProgressBarTrack = Color3.fromHex("#333333"),
+                ProgressBarTrackTransparency = 0.25,
+                SectionBoxBackground = Color3.fromHex("#181818"),
+                SectionBoxTransparency = 1,
+                SectionBoxBackgroundTransparency = 1,
+                SectionBoxBorder = Color3.fromHex("#333333"),
+                SectionBoxBorderTransparency = 0.25,
+                SectionExpandIcon = Color3.fromHex("#FFD700"),
+                SectionExpandIconTransparency = 0,
+                Tooltip = Color3.fromHex("#181818"),
+                TooltipText = Color3.fromHex("#FFFFFF"),
+                TooltipSmall = Color3.fromHex("#181818"),
+                TooltipSmallText = Color3.fromHex("#FFFFFF"),
+                TooltipDark = Color3.fromHex("#181818"),
+                TooltipDarkText = Color3.fromHex("#FFFFFF"),
+                TooltipLight = Color3.fromHex("#2A2A2A"),
+                TooltipLightText = Color3.fromHex("#FFFFFF"),
+                ViewportBackground = Color3.fromHex("#090909"),
+                ViewportBackgroundTransparency = 0,
+            })
         end)
-        sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = backgroundConnection
-    end
-    local function bindSidebarTree(root)
-        makeSidebarTabBackgroundTransparent(root)
-        if root and root.GetDescendants then
-            for _, descendant in ipairs(root:GetDescendants()) do
-                makeSidebarTabBackgroundTransparent(descendant)
-            end
+        if not ThemeOk then
+            warn("[XL Hub] 主题注册失败：" .. tostring(ThemeError))
         end
-    end
-    local sidebar = Window.UIElements and Window.UIElements.SideBarContainer
-    if sidebar then
-        bindSidebarTree(sidebar)
-        local sidebarBindQueued = false
-        local sidebarConnection = sidebar.DescendantAdded:Connect(function()
-            if sidebarBindQueued then return end
-            sidebarBindQueued = true
-            task.defer(function()
-                sidebarBindQueued = false
-                if sidebar.Parent then bindSidebarTree(sidebar) end
-            end)
-        end)
-        sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = sidebarConnection
-        SidebarTransparencyCleanup = function()
-            for _, connection in ipairs(sidebarTransparencyConnections) do
-                pcall(function() connection:Disconnect() end)
-            end
-            sidebarTransparencyConnections = {}
-            boundSidebarObjects = setmetatable({}, {__mode = "k"})
-            SidebarTransparencyCleanup = nil
-        end
-    end
-end
-do
-    local FloatingButton = Window.OpenButtonMain and Window.OpenButtonMain.Button
-    if FloatingButton then
-            FloatingButton.BackgroundTransparency = 1
-        local FloatingStroke = FloatingButton:FindFirstChildOfClass("UIStroke")
-        if FloatingStroke then
-            FloatingStroke.Transparency = 0.88
-            local FloatingGradient = FloatingStroke:FindFirstChildOfClass("UIGradient")
-            if FloatingGradient then
-                FloatingGradient.Enabled = false
-            end
-        end
-        local FloatingTextButton = FloatingButton:FindFirstChild("TextButton")
-        if FloatingTextButton then
-            FloatingTextButton.BackgroundTransparency = 1
-        end
-    end
-end
-local VersionTag = Window:Tag({
-    Title = "Beta",
-    Icon = "solar:star-bold-duotone",
-    Color = Color3.fromHex("#FFD700"),
-    Border = true,
-})
-local HomeTab = Window:Tab({
-    Title = "首页",
-    Icon = "solar:home-2-bold-duotone",
-})
-HomeTab:Section({
-    Title = "首页",
-})
-HomeTab:Paragraph({
-    Title = "欢迎使用",
-    Desc = "该脚本仍处于测试阶段，会有很多不稳定因素 会收集更多的脚本并加入",
-})
-local IMAGE_SOURCES = {
-    {Name = "猫娘图片", Parser = "Nekosia", Url = "https://api.nekosia.cat/api/v1/images/catgirl"},
-    {Name = "二次元图片", Parser = "Waifu", Url = "https://api.waifu.im/images?IncludedTags=waifu&IsNsfw=False"},
-    {Name = "Neko 图片", Parser = "NekosBest", Url = "https://nekos.best/api/v2/neko"},
-    {Name = "PurrBot 猫娘", Parser = "PurrBot", Url = "https://api.purrbot.site/v2/img/sfw/neko/img"},
-    {Name = "PurrBot 狐娘", Parser = "PurrBot", Url = "https://api.purrbot.site/v2/img/sfw/kitsune/img"},
-    {Name = "PurrBot 狼娘", Parser = "PurrBot", Url = "https://api.purrbot.site/v2/img/sfw/okami/img"},
-    {Name = "PurrBot 千纸鹤娘", Parser = "PurrBot", Url = "https://api.purrbot.site/v2/img/sfw/senko/img"},
-    {Name = "PurrBot 白发娘", Parser = "PurrBot", Url = "https://api.purrbot.site/v2/img/sfw/shiro/img"},
-    {Name = "Nekosia 狐娘", Parser = "Nekosia", Url = "https://api.nekosia.cat/api/v1/images/foxgirl"},
-    {Name = "Nekosia 狼娘", Parser = "Nekosia", Url = "https://api.nekosia.cat/api/v1/images/wolfgirl"},
-    {Name = "Nekosia 女生", Parser = "Nekosia", Url = "https://api.nekosia.cat/api/v1/images/girl"},
-    {Name = "Nekosia 女仆", Parser = "Nekosia", Url = "https://api.nekosia.cat/api/v1/images/maid"},
-    {Name = "Nekosia VTuber", Parser = "Nekosia", Url = "https://api.nekosia.cat/api/v1/images/vtuber"},
-    {Name = "NekosBest 女生", Parser = "NekosBest", Url = "https://nekos.best/api/v2/waifu"},
-    {Name = "NekosBest 狐娘", Parser = "NekosBest", Url = "https://nekos.best/api/v2/kitsune"},
-    {Name = "横屏动漫背景", Parser = "Waifu", Url = "https://api.waifu.im/images?IncludedTags=waifu&IsNsfw=False&Orientation=Landscape&PageSize=1&OrderBy=Random"},
-}
-local currentImageSourceIndex = 1
-local imageSourceNames = {}
-for _, source in ipairs(IMAGE_SOURCES) do
-    imageSourceNames[#imageSourceNames + 1] = source.Name
-end
-local function cleanImageUrl(value)
-    if type(value) ~= "string" then
-        return ""
-    end
-    value = value:gsub("^%s+", ""):gsub("%s+$", "")
-    if value:sub(1, 2) == "//" then
-        value = "https:" .. value
-    end
-    return value:match("^https?://") and value or ""
-end
-local function parseImageResponse(source, body)
-    local decodedOk, decoded = pcall(function()
-        return HttpService:JSONDecode(body)
-    end)
-    if not decodedOk or type(decoded) ~= "table" then
-        error(source.Name .. " 返回的不是有效 JSON")
-    end
-    local imageUrl
-    if source.Parser == "Nekosia" then
-        if decoded.success ~= true or tonumber(decoded.status) ~= 200 then
-            error(source.Name .. " 返回错误：" .. tostring(decoded.message or decoded.status))
-        end
-        imageUrl = decoded.image
-            and decoded.image.compressed
-            and decoded.image.compressed.url
-        imageUrl = imageUrl or (decoded.image and decoded.image.original and decoded.image.original.url)
-    elseif source.Parser == "Waifu" then
-        local first = decoded.items and decoded.items[1]
-        imageUrl = first and first.url
-    elseif source.Parser == "NekosBest" then
-        local first = decoded.results and decoded.results[1]
-        imageUrl = first and first.url
-    elseif source.Parser == "PurrBot" then
-        if decoded.error == true or tonumber(decoded["response-code"]) ~= 200 then
-            error(source.Name .. " 返回错误：" .. tostring(decoded.error or decoded["response-code"]))
-        end
-        imageUrl = decoded.link
-    end
-    imageUrl = cleanImageUrl(imageUrl)
-    if imageUrl == "" then
-        error(source.Name .. " 未返回有效图片地址")
-    end
-    return imageUrl
-end
-local function getImageParent()
-    if type(gethui) == "function" then
-        local ok, result = pcall(gethui)
-        if ok and result then
-            return result
-        end
-    end
-    local ok, coreGui = pcall(function()
-        return game:GetService("CoreGui")
-    end)
-    if ok and coreGui then
-        return coreGui
-    end
-    return LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
-end
-local function setImageStatus(label, message, color)
-    if label and label.Parent then
-        label.Text = tostring(message or "")
-        if color then
-            label.TextColor3 = color
-        end
-    end
-end
-local function makeImageButton(parent, text, position, size)
-    local button = Instance.new("TextButton")
-    button.Parent = parent
-    button.BackgroundColor3 = Color3.fromRGB(58, 47, 0)
-    button.BackgroundTransparency = 1
-    button.BorderSizePixel = 0
-    button.Position = position
-    button.Size = size
-    button.Font = Enum.Font.SourceSansSemibold
-    button.Text = text
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.TextSize = 14
-    button.AutoButtonColor = true
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
-    corner.Parent = button
-    return button
-end
-local function OpenImageWindow()
-    if ImageWindowCleanup then
-        pcall(ImageWindowCleanup)
-    end
-    local parent = getImageParent()
-    if not parent then
-        WindUI:Notify({Title = "图片窗口", Content = "找不到可用的界面容器", Duration = 4})
-        return
-    end
-    local connections = {}
-    local destroyed = false
-    local currentAssetFile = ""
-    local currentImageUrl = ""
-    local loadSerial = 0
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "XLHubImageWindow"
-    screenGui.ResetOnSpawn = false
-    screenGui.IgnoreGuiInset = true
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    screenGui.Parent = parent
-    local main = Instance.new("Frame")
-    main.Name = "ImagePanel"
-    main.Parent = screenGui
-    main.AnchorPoint = Vector2.new(0.5, 0.5)
-    main.Position = UDim2.fromScale(0.5, 0.5)
-    main.Size = UDim2.fromOffset(360, 300)
-    main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    main.BackgroundTransparency = 1
-    main.BorderSizePixel = 0
-    main.Active = true
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = main
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(255, 215, 0)
-    stroke.Thickness = 1.5
-    stroke.Parent = main
-    local titleBar = Instance.new("Frame")
-    titleBar.Parent = main
-    titleBar.Size = UDim2.new(1, 0, 0, 32)
-    titleBar.BackgroundColor3 = Color3.fromRGB(38, 32, 0)
-    titleBar.BackgroundTransparency = 1
-    titleBar.BorderSizePixel = 0
-    titleBar.Active = true
-    local title = Instance.new("TextLabel")
-    title.Parent = titleBar
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.fromOffset(10, 0)
-    title.Size = UDim2.new(1, -48, 1, 0)
-    title.Font = Enum.Font.SourceSansSemibold
-    title.Text = "猫娘图片"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 15
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Active = true
-    local close = Instance.new("TextButton")
-    close.Parent = titleBar
-    close.BackgroundTransparency = 1
-    close.Position = UDim2.new(1, -34, 0, 1)
-    close.Size = UDim2.fromOffset(30, 30)
-    close.Font = Enum.Font.SourceSansBold
-    close.Text = "×"
-    close.TextColor3 = Color3.fromRGB(255, 220, 220)
-    close.TextSize = 24
-    local imageFrame = Instance.new("ImageLabel")
-    imageFrame.Parent = main
-    imageFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    imageFrame.BackgroundTransparency = 1
-    imageFrame.BorderSizePixel = 0
-    imageFrame.ScaleType = Enum.ScaleType.Fit
-    imageFrame.Visible = true
-    local cover = Instance.new("Frame")
-    cover.Parent = main
-    cover.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    cover.BackgroundTransparency = 1
-    cover.BorderSizePixel = 0
-    cover.ZIndex = 3
-    local coverText = Instance.new("TextLabel")
-    coverText.Parent = cover
-    coverText.BackgroundTransparency = 1
-    coverText.Size = UDim2.fromScale(1, 1)
-    coverText.Font = Enum.Font.SourceSans
-    coverText.Text = "正在请求图片..."
-    coverText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    coverText.TextSize = 16
-    coverText.ZIndex = 4
-    local nextButton = makeImageButton(main, "下一张", UDim2.new(), UDim2.new())
-    local sourceButton = makeImageButton(main, "刷新当前", UDim2.new(), UDim2.new())
-    local closeButton = makeImageButton(main, "关闭", UDim2.new(), UDim2.new())
-    local status = Instance.new("TextLabel")
-    status.Parent = main
-    status.BackgroundTransparency = 1
-    status.Font = Enum.Font.SourceSans
-    status.Text = "等待请求..."
-    status.TextColor3 = Color3.fromRGB(190, 190, 190)
-    status.TextSize = 13
-    status.TextXAlignment = Enum.TextXAlignment.Left
-    status.TextTruncate = Enum.TextTruncate.AtEnd
-    local function connect(signal, callback)
-        local ok, connection = pcall(function()
-            return signal:Connect(callback)
-        end)
-        if ok and connection then
-            connections[#connections + 1] = connection
-            return connection
-        end
-        return nil
-    end
-    local function updateLayout()
-        local width = math.max(320, main.AbsoluteSize.X)
-        local height = math.max(260, main.AbsoluteSize.Y)
-        local imageHeight = math.max(90, height - 112)
-        main.Visible = true
-        imageFrame.Position = UDim2.fromOffset(8, 40)
-        imageFrame.Size = UDim2.new(1, -16, 0, imageHeight)
-        cover.Position = imageFrame.Position
-        cover.Size = imageFrame.Size
-        local buttonWidth = math.max(70, math.floor((width - 36) / 3))
-        nextButton.Size = UDim2.fromOffset(buttonWidth, 28)
-        sourceButton.Size = UDim2.fromOffset(buttonWidth, 28)
-        closeButton.Size = UDim2.fromOffset(buttonWidth, 28)
-        nextButton.Position = UDim2.new(0, 8, 1, -62)
-        sourceButton.Position = UDim2.new(0, 18 + buttonWidth, 1, -62)
-        closeButton.Position = UDim2.new(0, 28 + buttonWidth * 2, 1, -62)
-        status.Position = UDim2.new(0, 8, 1, -30)
-        status.Size = UDim2.new(1, -16, 0, 22)
-    end
-    connect(main:GetPropertyChangedSignal("AbsoluteSize"), updateLayout)
-    updateLayout()
-    local dragging = false
-    local dragStart
-    local startPosition
-    local dragInput
-    connect(titleBar.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPosition = main.Position
-            dragInput = input
-            connect(input.Changed, function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    dragInput = nil
+
+        -- ========== 4. 服务器脚本列表 ==========
+        local ServerScripts = {
+            {
+                Name = "最强战场",
+                Icon = "solar:bolt-bold-duotone",
+                Scripts = {
+                    {Name = "执行自动农场", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"},
+                    {Name = "TSB 脚本 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"},
+                    {Name = "TSB 脚本 2", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"},
+                },
+            },
+            {
+                Name = "学乱",
+                Icon = "solar:book-bold-duotone",
+                Scripts = {
+                    {Name = "学乱 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%B1%89%E5%8C%96.txt"},
+                    {Name = "学乱 3", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B1%E6%96%B0%E7%89%88%E6%B1%89%E5%8C%96%E6%A8%A1%E6%9D%BF.lua"},
+                },
+            },
+        }
+
+        local function SafeExecute(scriptName, url)
+            WindUI:Notify({
+                Title = "正在加载",
+                Content = "正在获取 " .. scriptName .. "，请稍候...",
+                Duration = 3,
+            })
+            task.spawn(function()
+                local ok, err = pcall(function()
+                    local source = game:HttpGet(url)
+                    local chunk = loadstring(source)
+                    assert(type(chunk) == "function", "远程内容无法编译")
+                    chunk()
+                end)
+                if ok then
+                    WindUI:Notify({
+                        Title = "执行成功",
+                        Content = scriptName .. " 已成功运行",
+                        Duration = 4,
+                    })
+                else
+                    WindUI:Notify({
+                        Title = "执行失败",
+                        Content = scriptName .. "：" .. tostring(err),
+                        Duration = 6,
+                    })
+                    warn("[" .. scriptName .. "] " .. tostring(err))
                 end
             end)
         end
-    end)
-    connect(titleBar.InputChanged, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    connect(UserInputService.InputChanged, function(input)
-        if dragging and dragInput == input and dragStart and startPosition then
-            local delta = input.Position - dragStart
-            main.Position = UDim2.new(
-                startPosition.X.Scale, startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
-            )
-        end
-    end)
-    local function cleanupImageWindow()
-        if destroyed then
-            return
-        end
-        destroyed = true
-        loadSerial = loadSerial + 1
-        for _, connection in ipairs(connections) do
-            pcall(function() connection:Disconnect() end)
-        end
-        connections = {}
-        deleteTemporaryImage(currentAssetFile)
-        currentAssetFile = ""
-        currentImageUrl = ""
-        pcall(function() screenGui:Destroy() end)
-        if ImageWindowCleanup == cleanupImageWindow then
-            ImageWindowCleanup = nil
-        end
-    end
-    ImageWindowCleanup = cleanupImageWindow
-    local function loadImage()
-        if destroyed then
-            return
-        end
-        loadSerial = loadSerial + 1
-        local requestSerial = loadSerial
-        deleteTemporaryImage(currentAssetFile)
-        currentAssetFile = ""
-        currentImageUrl = ""
-        cover.Visible = true
-        coverText.Text = "正在请求图片..."
-        setImageStatus(status, "正在连接图片源...", Color3.fromRGB(255, 215, 0))
-        nextButton.Text = "请求中"
-        task.spawn(function()
-            local source = IMAGE_SOURCES[currentImageSourceIndex]
-            local ok, bodyOrError = pcall(function()
-                return requestHttpBody(source.Url, "application/json")
-            end)
-            if destroyed or requestSerial ~= loadSerial then
-                return
-            end
-            if not ok then
-                nextButton.Text = "下一张"
-                coverText.Text = "图片请求失败"
-                setImageStatus(status, source.Name .. "：" .. tostring(bodyOrError), Color3.fromRGB(255, 120, 120))
-                return
-            end
-            local parsedOk, imageUrl = pcall(function()
-                return parseImageResponse(source, bodyOrError)
-            end)
-            if not parsedOk or type(imageUrl) ~= "string" or imageUrl == "" then
-                nextButton.Text = "下一张"
-                coverText.Text = "图片解析失败"
-                setImageStatus(status, source.Name .. "：" .. tostring(imageUrl), Color3.fromRGB(255, 120, 120))
-                return
-            end
-            currentImageUrl = imageUrl
-            coverText.Text = "下载、重命名并读取中..."
-            local downloadCallOk, displayImage, newAssetFile, downloadOk = pcall(function()
-                return downloadTemporaryImage(imageUrl, "XLHub_Catgirl_")
-            end)
-            if destroyed or requestSerial ~= loadSerial then
-                deleteTemporaryImage(newAssetFile)
-                return
-            end
-            if not downloadCallOk then
-                nextButton.Text = "下一张"
-                coverText.Text = "图片下载失败"
-                setImageStatus(status, "下载异常：" .. tostring(displayImage), Color3.fromRGB(255, 120, 120))
-                return
-            end
-            if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
-                nextButton.Text = "下一张"
-                coverText.Text = "图片读取失败"
-                setImageStatus(status, "缓存文件写入或 getcustomasset 读取失败", Color3.fromRGB(255, 120, 120))
-                return
-            end
-            currentAssetFile = newAssetFile or ""
-            imageFrame.Image = displayImage
-            imageFrame.Visible = true
-            cover.Visible = false
-            nextButton.Text = "下一张"
-            setImageStatus(status, source.Name .. "已显示", Color3.fromRGB(180, 255, 180))
+
+        WindUI.TransparencyValue = 1
+
+        -- ========== 5. 创建主窗口 ==========
+        local WindowOk, Window = pcall(function()
+            return WindUI:CreateWindow({
+                Title = "XL Hub",
+                Icon = LUSTRE_ICON,
+                Author = "Modern UI",
+                Theme = "LiquidGold",
+                Folder = CONFIG_FOLDER,
+                Transparent = true,
+                Acrylic = false,
+                Background = "rbxassetid://0",
+                BackgroundImageTransparency = 0,
+                NewElements = true,
+                Size = UDim2.fromOffset(560, 430),
+                MinSize = Vector2.new(420, 300),
+                MaxSize = Vector2.new(900, 650),
+                Resizable = true,
+                AutoScale = true,
+                SideBarWidth = 180,
+                HideSearchBar = false,
+                ScrollBarEnabled = true,
+                OpenButton = {
+                    Title = "XL",
+                    Icon = LUSTRE_ICON,
+                    CornerRadius = UDim.new(1, 0),
+                    StrokeThickness = 4,
+                    Enabled = true,
+                    Draggable = true,
+                    OnlyMobile = true,
+                    Scale = 0.85,
+                    Color = ColorSequence.new(
+                        Color3.fromRGB(255, 215, 0),
+                        Color3.fromRGB(255, 215, 0)
+                    ),
+                },
+                Topbar = {
+                    Height = 40,
+                    ButtonsType = "Mac",
+                },
+            })
         end)
-    end
-    connect(close, cleanupImageWindow)
-    connect(closeButton, cleanupImageWindow)
-    connect(nextButton, loadImage)
-    connect(sourceButton, loadImage)
-    ImageReloadCurrent = loadImage
-    loadImage()
-end
-HomeTab:Dropdown({
-    Title = "图片来源",
-    Desc = "使用 WindUI 官方 Dropdown；选择后重新请求当前图片",
-    Icon = "solar:gallery-wide-bold-duotone",
-    Values = imageSourceNames,
-    Value = imageSourceNames[1],
-    Callback = function(value)
-        local selected = type(value) == "table" and value[1] or value
-        for index, source in ipairs(IMAGE_SOURCES) do
-            if source.Name == selected then
-                currentImageSourceIndex = index
-                break
-            end
+        if not WindowOk or not Window then
+            warn("[XL Hub] 窗口创建失败：" .. tostring(Window))
+            StartupAlive = false
+            return
         end
-        if ImageReloadCurrent then
-            task.spawn(ImageReloadCurrent)
-        end
-    end,
-})
-HomeTab:Button({
-    Title = "猫娘二次元图片",
-    Desc = "打开独立图片窗口；当前图片会下载到 XLHub_ImageCache 后直接读取",
-    Icon = "solar:gallery-bold-duotone",
-    Callback = OpenImageWindow,
-})
-HomeTab:Paragraph({
-    Title = "单张缓存",
-    Desc = "每次只下载、重命名并读取当前图片；切换或刷新前清理上一张。UI 控件背景已完全透明",
-})
-ImageReloadCurrent = nil
-local LOLICON_UNLOCK_PASSWORD = "XQVIP666"
-local LOLICON_UNLOCK_FILE = "XLHub_Lolicon_Unlocked.dat"
-local LOLICON_UNLOCK_MARKER = "XLHUB_LOLICON_UNLOCKED_V1"
-local loliconUnlocked = false
-local LoliconWindowCleanups = {}
-local LoliconWindowSequence = 0
-local function closeAllLoliconWindows()
-    local pending = {}
-    for _, cleanup in pairs(LoliconWindowCleanups) do
-        pending[#pending + 1] = cleanup
-    end
-    for _, cleanup in ipairs(pending) do
-        pcall(cleanup)
-    end
-    LoliconWindowCleanups = {}
-end
-local function hasLocalLoliconUnlock()
-    if type(isfile) ~= "function" or type(readfile) ~= "function" then
-        return false
-    end
-    local ok, value = pcall(readfile, LOLICON_UNLOCK_FILE)
-    return ok and value == LOLICON_UNLOCK_MARKER
-end
-local function saveLocalLoliconUnlock()
-    if type(writefile) == "function" then
-        pcall(writefile, LOLICON_UNLOCK_FILE, LOLICON_UNLOCK_MARKER)
-    end
-end
-local function clearLocalLoliconUnlock()
-    loliconUnlocked = false
-    if type(delfile) == "function" and type(isfile) == "function" then
+
         pcall(function()
-            if isfile(LOLICON_UNLOCK_FILE) then
-                delfile(LOLICON_UNLOCK_FILE)
-            end
+            Window:EditOpenButton({
+                Icon = LUSTRE_ICON,
+                Title = "XL Hub",
+            })
         end)
-    end
-end
-loliconUnlocked = hasLocalLoliconUnlock()
-local function requestLoliconImage()
-    local url = "https://api.lolicon.app/setu/v2"
-        .. "?r18=1&num=1&size=small&proxy=i.pixiv.re&excludeAI=true"
-    local body = requestHttpBody(url, "application/json")
-    local decoded = HttpService:JSONDecode(body)
-    if type(decoded) ~= "table" then
-        error("Lolicon 返回不是有效 JSON")
-    end
-    if decoded.error and decoded.error ~= "" then
-        error("Lolicon：" .. tostring(decoded.error))
-    end
-    local item = decoded.data and decoded.data[1]
-    local urls = item and item.urls
-    local imageUrl = urls and (urls.small or urls.thumb or urls.regular or urls.original or urls.mini)
-    if type(imageUrl) ~= "string" or imageUrl == "" then
-        error("Lolicon 没有返回可用图片地址")
-    end
-    return imageUrl, item
-end
-local function loadLoliconAsset(imageUrl)
-    return downloadTemporaryImage(imageUrl, "XLHub_R18_")
-end
-local function OpenLoliconWindow(windowTitle, requestFunction, assetFunction)
-    windowTitle = windowTitle or "R18"
-    requestFunction = requestFunction or requestLoliconImage
-    assetFunction = assetFunction or loadLoliconAsset
-    if not loliconUnlocked then
-        WindUI:Notify({
-            Title = "需要解锁",
-            Content = "请先输入正确的 Lolicon 解锁密码",
-            Duration = 4,
-        })
-        return
-    end
-    local parent = getImageParent()
-    if not parent then
-        WindUI:Notify({Title = "Lolicon", Content = "找不到可用的界面容器", Duration = 4})
-        return
-    end
-    LoliconWindowSequence = LoliconWindowSequence + 1
-    local windowId = LoliconWindowSequence
-    local connections = {}
-    local destroyed = false
-    local assetFile = ""
-    local loadSerial = 0
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "XLHubLoliconWindow_" .. tostring(windowId)
-    screenGui.ResetOnSpawn = false
-    screenGui.IgnoreGuiInset = true
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    screenGui.Parent = parent
-    local main = Instance.new("Frame")
-    main.Name = "LoliconPanel"
-    main.Parent = screenGui
-    main.AnchorPoint = Vector2.new(0.5, 0.5)
-    main.Position = UDim2.fromScale(0.5, 0.5)
-    main.Size = UDim2.fromOffset(360, 300)
-    main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    main.BackgroundTransparency = 1
-    main.BorderSizePixel = 0
-    main.Active = true
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = main
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(255, 215, 0)
-    stroke.Thickness = 1.5
-    stroke.Parent = main
-    local title = Instance.new("TextLabel")
-    title.Parent = main
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.fromOffset(12, 6)
-    title.Size = UDim2.new(1, -52, 0, 26)
-    title.Text = windowTitle
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 16
-    title.Font = Enum.Font.SourceSansSemibold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Active = true
-    title.ZIndex = 2
-    local close = Instance.new("TextButton")
-    close.Parent = main
-    close.BackgroundTransparency = 1
-    close.Position = UDim2.new(1, -38, 0, 4)
-    close.Size = UDim2.fromOffset(32, 30)
-    close.Text = "×"
-    close.TextColor3 = Color3.fromRGB(255, 220, 220)
-    close.TextSize = 24
-    close.Font = Enum.Font.SourceSansBold
-    close.ZIndex = 3
-    local image = Instance.new("ImageLabel")
-    image.Parent = main
-    image.Position = UDim2.fromOffset(10, 40)
-    image.Size = UDim2.new(1, -20, 0, 205)
-    image.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    image.BorderSizePixel = 0
-    image.ScaleType = Enum.ScaleType.Fit
-    local status = Instance.new("TextLabel")
-    status.Parent = main
-    status.BackgroundTransparency = 1
-    status.Position = UDim2.fromOffset(10, 252)
-    status.Size = UDim2.new(1, -125, 0, 30)
-    status.Text = "准备请求..."
-    status.TextColor3 = Color3.fromRGB(190, 190, 190)
-    status.TextSize = 13
-    status.Font = Enum.Font.SourceSans
-    status.TextXAlignment = Enum.TextXAlignment.Left
-    status.TextTruncate = Enum.TextTruncate.AtEnd
-    local refresh = Instance.new("TextButton")
-    refresh.Parent = main
-    refresh.Position = UDim2.new(1, -108, 1, -43)
-    refresh.Size = UDim2.fromOffset(98, 30)
-    refresh.Text = "下一张"
-    refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
-    refresh.TextSize = 14
-    refresh.Font = Enum.Font.SourceSansSemibold
-    refresh.BackgroundColor3 = Color3.fromRGB(58, 47, 0)
-    refresh.BackgroundTransparency = 1
-    refresh.BorderSizePixel = 0
-    local refreshCorner = Instance.new("UICorner")
-    refreshCorner.CornerRadius = UDim.new(0, 6)
-    refreshCorner.Parent = refresh
-    local function connect(signal, callback)
-        local ok, connection = pcall(function()
-            return signal:Connect(callback)
-        end)
-        if ok and connection then
-            connections[#connections + 1] = connection
+
+        -- ========== 6. UI 背景管理（缓存持久化） ==========
+        local UIBackgroundCache = {}
+        local UIBackgroundCurrentIndex = 0
+        local UI_BACKGROUND_FILE_PREFIX = "XLHub_UIBackground_v2_"
+        local UIBackgroundGeneration = 0
+        local UIBackgroundTasks = {}
+
+        local function getUIBackgroundFileName(source)
+            return IMAGE_CACHE_FOLDER .. "/" .. UI_BACKGROUND_FILE_PREFIX .. source.Id .. source.Extension
         end
-        return connection
-    end
-    local dragging = false
-    local dragStart
-    local startPosition
-    local dragInput
-    connect(title.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPosition = main.Position
-            dragInput = input
-            connect(input.Changed, function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    dragInput = nil
+
+        -- 只删除旧格式缓存（v1），新格式不会被删除
+        local function removeLegacyUIBackgroundCache()
+            if type(delfile) ~= "function" then
+                return
+            end
+            for index = 1, 4 do
+                deleteTemporaryImage(IMAGE_CACHE_FOLDER .. "/XLHub_UIBackground_" .. tostring(index) .. ".jpg")
+            end
+        end
+        removeLegacyUIBackgroundCache()
+
+        local function isExistingFile(fileName)
+            if type(isfile) ~= "function" then
+                return false
+            end
+            local ok, exists = pcall(isfile, fileName)
+            return ok and exists == true
+        end
+
+        local function downloadOneUIBackground(index)
+            local source = UI_BACKGROUND_SOURCES[index]
+            if not source then
+                return false, "背景源不存在"
+            end
+            local assetLoader = getcustomasset or getsynasset
+            if type(assetLoader) ~= "function"
+                or type(writefile) ~= "function"
+                or not ensureImageCacheFolder() then
+                return false, "执行器缺少图片缓存能力"
+            end
+            local fileName = getUIBackgroundFileName(source)
+            local function writeAndRead()
+                if not isExistingFile(fileName) then
+                    local body = requestHttpBody(source.Url, source.ContentType or "image/jpeg")
+                    local writeOk, writeError = pcall(function()
+                        writefile(fileName, body)
+                    end)
+                    if not writeOk then
+                        error(tostring(writeError))
+                    end
                 end
+                local assetOk, assetId = pcall(assetLoader, fileName)
+                if not assetOk or type(assetId) ~= "string" or assetId == "" then
+                    error(assetOk and "缓存图片资源为空" or tostring(assetId))
+                end
+                return assetId
+            end
+            local ok, assetId = pcall(writeAndRead)
+            if not ok then
+                if isExistingFile(fileName) and type(writefile) == "function" then
+                    local retryOk, retryAsset = pcall(function()
+                        local body = requestHttpBody(source.Url, source.ContentType or "image/jpeg")
+                        writefile(fileName, body)
+                        local loaded, loadedAsset = pcall(assetLoader, fileName)
+                        if not loaded or type(loadedAsset) ~= "string" or loadedAsset == "" then
+                            error(loaded and "重试后的缓存资源为空" or tostring(loadedAsset))
+                        end
+                        return loadedAsset
+                    end)
+                    if retryOk then
+                        assetId = retryAsset
+                        ok = true
+                    else
+                        return false, tostring(retryAsset)
+                    end
+                else
+                    return false, tostring(assetId)
+                end
+            end
+            UIBackgroundCache[index] = {
+                Asset = assetId,
+                File = fileName,
+                Name = source.Name,
+            }
+            return true
+        end
+
+        local function applyUIBackground(index)
+            local cached = UIBackgroundCache[index]
+            if not cached then
+                local ok, errorMessage = downloadOneUIBackground(index)
+                if not ok then
+                    return false, errorMessage
+                end
+                cached = UIBackgroundCache[index]
+            end
+            local setOk, setError = pcall(function()
+                Window:SetBackgroundImage(cached.Asset)
+                Window:SetBackgroundImageTransparency(0)
             end)
-        end
-    end)
-    connect(title.InputChanged, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    connect(UserInputService.InputChanged, function(input)
-        if dragging and dragInput and input == dragInput and dragStart and startPosition then
-            local delta = input.Position - dragStart
-            main.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
-            )
-        end
-    end)
-    local function updateLoliconLayout()
-        local width = math.max(300, main.AbsoluteSize.X)
-        local height = math.max(260, main.AbsoluteSize.Y)
-        local imageHeight = math.max(100, height - 95)
-        image.Position = UDim2.fromOffset(10, 40)
-        image.Size = UDim2.new(1, -20, 0, imageHeight)
-        status.Position = UDim2.new(0, 10, 1, -38)
-        status.Size = UDim2.new(1, -125, 0, 30)
-        refresh.Position = UDim2.new(1, -108, 1, -43)
-    end
-    addResizeHandle(main, connect, 300, 260, 760, 700, function(width, height)
-        main.Size = UDim2.fromOffset(width, height)
-        updateLoliconLayout()
-    end)
-    updateLoliconLayout()
-    local function cleanup()
-        if destroyed then
-            return
-        end
-        destroyed = true
-        for _, connection in ipairs(connections) do
-            pcall(function() connection:Disconnect() end)
-        end
-        deleteTemporaryImage(assetFile)
-        assetFile = ""
-        pcall(function() screenGui:Destroy() end)
-        if LoliconWindowCleanups[windowId] == cleanup then
-            LoliconWindowCleanups[windowId] = nil
-        end
-    end
-    LoliconWindowCleanups[windowId] = cleanup
-    local function load()
-        if destroyed then
-            return
-        end
-        loadSerial = loadSerial + 1
-        local requestSerial = loadSerial
-        deleteTemporaryImage(assetFile)
-        assetFile = ""
-        refresh.Text = "请求中"
-        status.Text = "正在请求 Lolicon..."
-        task.spawn(function()
-            local ok, imageUrl, item = pcall(requestFunction)
-            if destroyed or requestSerial ~= loadSerial then
-                return
+            if not setOk then
+                return false, tostring(setError)
             end
-            if not ok or type(imageUrl) ~= "string" or imageUrl == "" then
-                refresh.Text = "下一张"
-                status.Text = "请求失败：" .. tostring(imageUrl)
-                status.TextColor3 = Color3.fromRGB(255, 120, 120)
-                return
-            end
-            local downloadCallOk, displayImage, newAssetFile, downloadOk = pcall(function()
-                return assetFunction(imageUrl)
-            end)
-            if destroyed or requestSerial ~= loadSerial then
-                deleteTemporaryImage(newAssetFile)
-                return
-            end
-            if not downloadCallOk then
-                refresh.Text = "下一张"
-                status.Text = "图片下载失败：" .. tostring(displayImage)
-                status.TextColor3 = Color3.fromRGB(255, 120, 120)
-                return
-            end
-            assetFile = newAssetFile or ""
-            if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
-                refresh.Text = "下一张"
-                status.Text = "图片下载失败"
-                status.TextColor3 = Color3.fromRGB(255, 120, 120)
-                return
-            end
-            image.Image = displayImage
-            image.Visible = true
-            refresh.Text = "下一张"
-            status.Text = "已显示：" .. tostring(item and (item.author or item.title) or windowTitle)
-            status.TextColor3 = Color3.fromRGB(180, 255, 180)
-        end)
-    end
-    connect(close.Activated, cleanup)
-    connect(refresh.Activated, load)
-    load()
-end
-HomeTab:Input({
-    Title = "Lolicon 解锁密码",
-    Desc = "输入正确密码后解锁 Lolicon R18 图片接口",
-    Icon = "solar:lock-keyhole-bold-duotone",
-    InputIcon = "solar:lock-keyhole-bold-duotone",
-    Placeholder = "输入解锁密码",
-    ClearTextOnFocus = false,
-    Callback = function(value)
-        local entered = tostring(value or "")
-        if entered:gsub("^%s+", ""):gsub("%s+$", "") == "" then
-            return
+            UIBackgroundCurrentIndex = index
+            return true
         end
-        if entered == LOLICON_UNLOCK_PASSWORD then
-            loliconUnlocked = true
-            saveLocalLoliconUnlock()
-            WindUI:Notify({Title = "解锁成功", Content = "授权已保存，请手动打开 Lolicon 窗口", Duration = 3})
-        else
-            clearLocalLoliconUnlock()
-            WindUI:Notify({Title = "密码错误", Content = "Lolicon 接口仍处于锁定状态", Duration = 3})
-        end
-    end,
-})
-HomeTab:Button({
-    Title = "打开🔞图片",
-    Desc = "解锁后打开独立窗口",
-    Icon = "solar:gallery-wide-bold-duotone",
-    Callback = OpenLoliconWindow,
-})
-HomeTab:Button({
-    Title = "清除  本地授权",
-    Desc = "删除本地授权标记下次执行需要重新输入密码",
-    Icon = "solar:lock-keyhole-minimalistic-bold-duotone",
-    Callback = function()
-        clearLocalLoliconUnlock()
-        closeAllLoliconWindows()
-        WindUI:Notify({Title = "授权已清除", Content = "下次使用需要重新输入密码", Duration = 3})
-    end,
-})
-local GeneralTab = Window:Tab({
-    Title = "通用",
-    Icon = "solar:widget-5-bold-duotone",
-})
-local GeneralState = {
-    SpeedEnabled = false,
-    SpeedValue = 32,
-    InfiniteJumpEnabled = false,
-    JumpPowerValue = 50,
-    CompatibilityEnabled = false,
-    JumpConnection = nil,
-    CharacterConnection = nil,
-    OriginalWalkSpeed = nil,
-    OriginalJumpPower = nil,
-    OriginalUseJumpPower = nil,
-}
-local function getLocalHumanoid()
-    local character = LocalPlayer and LocalPlayer.Character
-    return character and character:FindFirstChildOfClass("Humanoid")
-end
-local function applyGeneralMovement()
-    local humanoid = getLocalHumanoid()
-    if not humanoid then
-        return
-    end
-    if GeneralState.OriginalWalkSpeed == nil then
-        GeneralState.OriginalWalkSpeed = humanoid.WalkSpeed
-    end
-    if GeneralState.OriginalJumpPower == nil then
-        GeneralState.OriginalJumpPower = humanoid.JumpPower
-    end
-    if GeneralState.OriginalUseJumpPower == nil then
-        GeneralState.OriginalUseJumpPower = humanoid.UseJumpPower
-    end
-    if GeneralState.SpeedEnabled then
-        humanoid.WalkSpeed = GeneralState.SpeedValue
-    elseif GeneralState.OriginalWalkSpeed ~= nil then
-        humanoid.WalkSpeed = GeneralState.OriginalWalkSpeed
-    end
-    if GeneralState.InfiniteJumpEnabled then
-        humanoid.UseJumpPower = true
-        humanoid.JumpPower = GeneralState.JumpPowerValue
-    else
-        humanoid.JumpPower = GeneralState.OriginalJumpPower
-        humanoid.UseJumpPower = GeneralState.OriginalUseJumpPower
-    end
-end
-local function setInfiniteJumpEnabled(enabled)
-    GeneralState.InfiniteJumpEnabled = enabled
-    if GeneralState.JumpConnection then
-        GeneralState.JumpConnection:Disconnect()
-        GeneralState.JumpConnection = nil
-    end
-    if enabled then
-        GeneralState.JumpConnection = UserInputService.JumpRequest:Connect(function()
-            local humanoid = getLocalHumanoid()
-            if humanoid and humanoid.Health > 0 then
-                humanoid.JumpPower = GeneralState.JumpPowerValue
-                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-            end
-        end)
-    end
-    applyGeneralMovement()
-end
-local function setCompatibilityProtectionEnabled(enabled)
-    GeneralState.CompatibilityEnabled = enabled == true
-    applyGeneralMovement()
-end
-GeneralTab:Section({
-    Title = "速度与跳跃",
-})
-GeneralTab:Toggle({
-    Title = "速度增强",
-    Desc = "开启后持续应用移动速度，关闭后自动恢复",
-    Icon = "solar:bolt-bold-duotone",
-    Value = false,
-    Callback = function(value)
-        GeneralState.SpeedEnabled = value
-        applyGeneralMovement()
-    end,
-})
-GeneralTab:Slider({
-    Title = "移动速度",
-    Desc = "调整 WalkSpeed 数值",
-    Icon = "solar:running-bold-duotone",
-    Step = 1,
-    Value = {
-        Min = 16,
-        Max = 500,
-        Default = 32,
-    },
-    Callback = function(value)
-        GeneralState.SpeedValue = tonumber(value) or 32
-        applyGeneralMovement()
-    end,
-})
-GeneralTab:Toggle({
-    Title = "无限跳跃",
-    Desc = "允许在空中继续触发跳跃，关闭后自动恢复",
-    Icon = "solar:arrow-up-bold-duotone",
-    Value = false,
-    Callback = setInfiniteJumpEnabled,
-})
-GeneralTab:Slider({
-    Title = "跳跃高度",
-    Desc = "调整 JumpPower 数值",
-    Icon = "solar:arrow-up-bold-duotone",
-    Step = 1,
-    Value = {
-        Min = 25,
-        Max = 250,
-        Default = 50,
-    },
-    Callback = function(value)
-        GeneralState.JumpPowerValue = tonumber(value) or 50
-        applyGeneralMovement()
-    end,
-})
-GeneralTab:Toggle({
-    Title = "基础兼容保护",
-    Desc = "重生后恢复本地速度和跳跃设置，不修改远程调用",
-    Icon = "solar:shield-check-bold-duotone",
-    Value = false,
-    Callback = setCompatibilityProtectionEnabled,
-})
-if GeneralState.CharacterConnection then
-    GeneralState.CharacterConnection:Disconnect()
-end
-GeneralState.CharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
-    GeneralState.OriginalWalkSpeed = nil
-    GeneralState.OriginalJumpPower = nil
-    GeneralState.OriginalUseJumpPower = nil
-    task.spawn(function()
-        local humanoid = character:WaitForChild("Humanoid", 5)
-        if humanoid and character.Parent and (
-            GeneralState.CompatibilityEnabled
-            or GeneralState.SpeedEnabled
-            or GeneralState.InfiniteJumpEnabled
-        ) then
-            task.wait(0.15)
-            if character.Parent then
-                applyGeneralMovement()
-            end
-        end
-    end)
-end)
-GeneralTab:Section({
-    Title = "外部脚本",
-})
-GeneralTab:Button({
-    Title = "多方向吸附",
-    Desc = "点击直接执行外部脚本",
-    Icon = "solar:bolt-bold-duotone",
-    Callback = function()
-        SafeExecute("多方向吸附", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84")
-    end,
-})
-local HanHuaTab = Window:Tab({
-    Title = "汉化",
-    Icon = "solar:translation-bold-duotone",
-})
-local ExternalTranslationURL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E6%B1%89%E5%8C%96.lua"
-local ExternalTranslationState = rawget(_G, "__XLHubExternalTranslationState")
-if type(ExternalTranslationState) ~= "table" or ExternalTranslationState.Url ~= ExternalTranslationURL then
-    ExternalTranslationState = {Url = ExternalTranslationURL, Loading = false, Loaded = false}
-    _G.__XLHubExternalTranslationState = ExternalTranslationState
-end
-HanHuaTab:Button({
-    Title = "执行汉化",
-    Desc = "点击加载",
-    Icon = "solar:translation-bold-duotone",
-    Callback = function()
-        if ExternalTranslationState.Loading then
-            WindUI:Notify({Title = "汉化", Content = "加载中", Duration = 2})
-            return
-        end
-        if ExternalTranslationState.Loaded then
-            WindUI:Notify({Title = "汉化", Content = "已执行", Duration = 2})
-            return
-        end
-        ExternalTranslationState.Loading = true
+
+        -- 启动时仅尝试加载第一张背景（若缓存存在则直接使用，否则下载）
         task.spawn(function()
             local ok, err = pcall(function()
-                local source = game:HttpGet(ExternalTranslationURL)
-                local chunk = loadstring(source)
-                assert(type(chunk) == "function", "汉化脚本无法编译")
-                chunk()
+                applyUIBackground(1)
             end)
-            ExternalTranslationState.Loading = false
-            ExternalTranslationState.Loaded = ok
-            WindUI:Notify({Title = "汉化", Content = ok and "已执行" or "执行失败", Duration = 3})
             if not ok then
-                warn("[XL Hub] external translation failed: " .. tostring(err))
+                warn("[XL Hub] 初始背景加载失败（不影响主功能）: " .. tostring(err))
             end
         end)
-    end,
-})
-local TeleportTab = Window:Tab({
-    Title = "传送",
-    Icon = "solar:round-transfer-diagonal-bold-duotone",
-})
-local selectedTeleportPlayer = nil
-local TeleportState = {
-    PlayerAddedConnection = nil,
-    PlayerRemovingConnection = nil,
-}
-local function getTeleportPlayerNames()
-    local values = {}
-    for _, player in ipairs(Players:GetPlayers()) do
-        table.insert(values, player.Name)
-    end
-    table.sort(values)
-    return values
-end
-local function resolveTeleportPlayer(value)
-    local playerName = value
-    if type(value) == "table" then
-        playerName = value[1]
-    end
-    if type(playerName) ~= "string" or playerName == "" then
-        return nil
-    end
-    return Players:FindFirstChild(playerName)
-end
-TeleportTab:Section({
-    Title = "玩家传送",
-})
-local teleportPlayerDropdown = TeleportTab:Dropdown({
-    Title = "玩家列表",
-    Desc = "自动获取当前服务器玩家",
-    Icon = "solar:users-group-rounded-bold-duotone",
-    Values = getTeleportPlayerNames(),
-    Callback = function(value)
-        selectedTeleportPlayer = resolveTeleportPlayer(value)
-    end,
-})
-local function refreshTeleportPlayers()
-    pcall(function()
-        teleportPlayerDropdown:Refresh(getTeleportPlayerNames())
-    end)
-end
-TeleportState.PlayerAddedConnection = Players.PlayerAdded:Connect(refreshTeleportPlayers)
-TeleportState.PlayerRemovingConnection = Players.PlayerRemoving:Connect(function(player)
-    if selectedTeleportPlayer == player then
-        selectedTeleportPlayer = nil
-    end
-    refreshTeleportPlayers()
-end)
-TeleportTab:Button({
-    Title = "传送到玩家身边",
-    Desc = "传送到已选择玩家身边",
-    Icon = "solar:plain-3-bold-duotone",
-    Callback = function()
-        if not selectedTeleportPlayer then
-            WindUI:Notify({Title = "传送失败", Content = "请先在玩家列表中选择一个玩家！", Duration = 3})
-            return
+
+        UIBackgroundCleanup = function()
+            StartupAlive = false
+            UIBackgroundGeneration += 1
+            if UIBackgroundTask and task.cancel then pcall(task.cancel, UIBackgroundTask) end
+            UIBackgroundTask = nil
+            if task.cancel then
+                for index, handle in pairs(UIBackgroundTasks) do
+                    pcall(task.cancel, handle)
+                    UIBackgroundTasks[index] = nil
+                end
+            end
+            UIBackgroundCleanup = nil
         end
-        local localPlayer = Players.LocalPlayer
-        if not selectedTeleportPlayer.Parent then
-            WindUI:Notify({Title = "传送失败", Content = "目标玩家已退出游戏！", Duration = 3})
-            selectedTeleportPlayer = nil
-            refreshTeleportPlayers()
-            return
+
+        -- ========== 7. 侧边栏透明处理 ==========
+        do
+            local sidebarTransparencyConnections = {}
+            local boundSidebarObjects = setmetatable({}, {__mode = "k"})
+            local function makeSidebarTabBackgroundTransparent(object)
+                if not object or not object:IsA("GuiObject") then
+                    return
+                end
+                if object.Name ~= "Frame" and object.Name ~= "Outline" then
+                    return
+                end
+                if boundSidebarObjects[object] then
+                    return
+                end
+                boundSidebarObjects[object] = true
+                if object:IsA("ImageLabel") or object:IsA("ImageButton") then
+                    object.ImageTransparency = 1
+                    local imageConnection = object:GetPropertyChangedSignal("ImageTransparency"):Connect(function()
+                        if object.Parent then
+                            object.ImageTransparency = 1
+                        end
+                    end)
+                    sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = imageConnection
+                end
+                object.BackgroundTransparency = 1
+                local backgroundConnection = object:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+                    if object.Parent then
+                        object.BackgroundTransparency = 1
+                    end
+                end)
+                sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = backgroundConnection
+            end
+            local function bindSidebarTree(root)
+                makeSidebarTabBackgroundTransparent(root)
+                if root and root.GetDescendants then
+                    for _, descendant in ipairs(root:GetDescendants()) do
+                        makeSidebarTabBackgroundTransparent(descendant)
+                    end
+                end
+            end
+            local sidebar = Window.UIElements and Window.UIElements.SideBarContainer
+            if sidebar then
+                bindSidebarTree(sidebar)
+                local sidebarBindQueued = false
+                local sidebarConnection = sidebar.DescendantAdded:Connect(function()
+                    if sidebarBindQueued then return end
+                    sidebarBindQueued = true
+                    task.defer(function()
+                        sidebarBindQueued = false
+                        if sidebar.Parent then bindSidebarTree(sidebar) end
+                    end)
+                end)
+                sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = sidebarConnection
+                SidebarTransparencyCleanup = function()
+                    for _, connection in ipairs(sidebarTransparencyConnections) do
+                        pcall(function() connection:Disconnect() end)
+                    end
+                    sidebarTransparencyConnections = {}
+                    boundSidebarObjects = setmetatable({}, {__mode = "k"})
+                    SidebarTransparencyCleanup = nil
+                end
+            end
         end
-        if selectedTeleportPlayer == localPlayer then
-            WindUI:Notify({Title = "传送失败", Content = "不能传送到自己！", Duration = 3})
-            return
+
+        -- 悬浮按钮透明
+        do
+            local FloatingButton = Window.OpenButtonMain and Window.OpenButtonMain.Button
+            if FloatingButton then
+                FloatingButton.BackgroundTransparency = 1
+                local FloatingStroke = FloatingButton:FindFirstChildOfClass("UIStroke")
+                if FloatingStroke then
+                    FloatingStroke.Transparency = 0.88
+                    local FloatingGradient = FloatingStroke:FindFirstChildOfClass("UIGradient")
+                    if FloatingGradient then
+                        FloatingGradient.Enabled = false
+                    end
+                end
+                local FloatingTextButton = FloatingButton:FindFirstChild("TextButton")
+                if FloatingTextButton then
+                    FloatingTextButton.BackgroundTransparency = 1
+                end
+            end
         end
-        local targetChar = selectedTeleportPlayer.Character
-        if not targetChar or not targetChar.Parent then
-            WindUI:Notify({Title = "传送失败", Content = "目标玩家尚未加载角色！", Duration = 3})
-            return
+
+        -- ========== 8. 构建主界面 ==========
+        local VersionTag = Window:Tag({
+            Title = "Beta",
+            Icon = "solar:star-bold-duotone",
+            Color = Color3.fromHex("#FFD700"),
+            Border = true,
+        })
+
+        local HomeTab = Window:Tab({
+            Title = "首页",
+            Icon = "solar:home-2-bold-duotone",
+        })
+        HomeTab:Section({ Title = "首页" })
+        HomeTab:Paragraph({
+            Title = "欢迎使用",
+            Desc = "该脚本仍处于测试阶段，会有很多不稳定因素 会收集更多的脚本并加入",
+        })
+
+        -- 首页二次元图片浏览器：小窗口、API 请求、刷新与分类切换
+        --==================================================
+        -- SFW 二次元图片源列表：不接入露骨或 R18 内容。
+        local IMAGE_SOURCES = {
+            {
+                Name = "猫娘图片",
+                Parser = "Nekosia",
+                Url = "https://api.nekosia.cat/api/v1/images/catgirl",
+            },
+            {
+                Name = "二次元图片",
+                Parser = "Waifu",
+                Url = "https://api.waifu.im/images?IncludedTags=waifu&IsNsfw=False",
+            },
+            {
+                Name = "PurrBot 猫娘",
+                Parser = "PurrBot",
+                Url = "https://api.purrbot.site/v2/img/sfw/neko/img",
+            },
+            {
+                Name = "PurrBot 狐娘",
+                Parser = "PurrBot",
+                Url = "https://api.purrbot.site/v2/img/sfw/kitsune/img",
+            },
+            {
+                Name = "PurrBot 狼娘",
+                Parser = "PurrBot",
+                Url = "https://api.purrbot.site/v2/img/sfw/okami/img",
+            },
+            {
+                Name = "PurrBot 千纸鹤娘",
+                Parser = "PurrBot",
+                Url = "https://api.purrbot.site/v2/img/sfw/senko/img",
+            },
+            {
+                Name = "PurrBot 白发娘",
+                Parser = "PurrBot",
+                Url = "https://api.purrbot.site/v2/img/sfw/shiro/img",
+            },
+        }
+
+        local currentImageSourceIndex = 1
+        local imageSourceNames = {}
+        for _, source in ipairs(IMAGE_SOURCES) do
+            imageSourceNames[#imageSourceNames + 1] = source.Name
         end
-        local targetHRP = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:WaitForChild("HumanoidRootPart", 2)
-        if not targetHRP then
-            WindUI:Notify({Title = "传送失败", Content = "无法获取目标玩家位置！", Duration = 3})
-            return
-        end
-        local myChar = localPlayer.Character or localPlayer.CharacterAdded:Wait()
-        local myHRP = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:WaitForChild("HumanoidRootPart", 2))
-        if not myHRP then
-            WindUI:Notify({Title = "传送失败", Content = "无法获取你的位置！", Duration = 3})
-            return
-        end
-        local offset = Vector3.new(0, 0, 3)
-        myHRP.CFrame = targetHRP.CFrame + targetHRP.CFrame:VectorToWorldSpace(offset)
-        WindUI:Notify({Title = "传送成功", Content = "已传送到玩家：" .. selectedTeleportPlayer.Name, Duration = 3})
-    end,
-})
-for _, server in ipairs(ServerScripts) do
-    local tab = Window:Tab({
-        Title = server.Name,
-        Icon = server.Icon,
-    })
-    local scriptSection = tab:Section({
-        Title = "脚本列表",
-    })
-    for _, scriptInfo in ipairs(server.Scripts) do
-        tab:Button({
-            Title = scriptInfo.Name,
-            Desc = "点击直接执行",
-            Icon = "solar:bolt-bold-duotone",
-            Callback = function()
-                SafeExecute(scriptInfo.Name, scriptInfo.Url)
+
+        HomeTab:Dropdown({
+            Title = "图片来源",
+            Desc = "手动选择图片源，不会自动轮换；选择后会刷新当前窗口",
+            Icon = "solar:gallery-wide-bold-duotone",
+            Values = imageSourceNames,
+            Value = imageSourceNames[1],
+            Callback = function(value)
+                local selected = type(value) == "table" and value[1] or value
+                for index, source in ipairs(IMAGE_SOURCES) do
+                    if source.Name == selected then
+                        currentImageSourceIndex = index
+                        break
+                    end
+                end
+                if ImageReloadCurrent then
+                    task.spawn(ImageReloadCurrent)
+                end
             end,
         })
-    end
-end
-local SettingTab = Window:Tab({
-    Title = "设置",
-    Icon = "solar:settings-bold-duotone",
-})
-SettingTab:Section({
-    Title = "透明界面设置",
-})
-SettingTab:Paragraph({
-    Title = "透明 UI 模式",
-    Desc = "已固定使用 LiquidGold 透明主题，已移除会覆盖透明度的主题切换",
-})
-local uiBackgroundNames = {}
-for _, backgroundSource in ipairs(UI_BACKGROUND_SOURCES) do
-    uiBackgroundNames[#uiBackgroundNames + 1] = backgroundSource.Name
-end
-local uiBackgroundDropdown = SettingTab:Dropdown({
-    Title = "UI 背景图片",
-    Desc = "启动时预下载全部 JPG；切换时直接读取本地缓存",
-    Icon = "solar:wallpaper-bold-duotone",
-    Values = uiBackgroundNames,
-    Value = uiBackgroundNames[1],
-    Callback = function(value)
-        local selected = type(value) == "table" and value[1] or value
-        for index, backgroundSource in ipairs(UI_BACKGROUND_SOURCES) do
-            if backgroundSource.Name == selected then
+
+        local function getImageParent()
+            if type(gethui) == "function" then
+                local ok, result = pcall(gethui)
+                if ok and result then
+                    return result
+                end
+            end
+
+            local ok, coreGui = pcall(function()
+                return game:GetService("CoreGui")
+            end)
+            if ok and coreGui then
+                return coreGui
+            end
+
+            return LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        end
+
+        local function setImageStatus(label, text, color)
+            if label and label.Parent then
+                label.Text = tostring(text or "")
+                if color then
+                    label.TextColor3 = color
+                end
+            end
+        end
+
+        local function createImageButton(parent, text, position, size)
+            local button = Instance.new("TextButton")
+            button.Parent = parent
+            button.BackgroundColor3 = Color3.fromRGB(58, 47, 0)
+            button.BackgroundTransparency = 0.05
+            button.BorderSizePixel = 0
+            button.Position = position
+            button.Size = size
+            button.Font = Enum.Font.SourceSansSemibold
+            button.Text = text
+            button.TextColor3 = Color3.fromRGB(255, 255, 255)
+            button.TextSize = 14
+            button.AutoButtonColor = true
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 6)
+            corner.Parent = button
+
+            return button
+        end
+
+        local function addResizeHandle(parent, connect, minWidth, minHeight, maxWidth, maxHeight, onResize)
+            local handle = Instance.new("TextButton")
+            handle.Name = "ResizeHandle"
+            handle.Parent = parent
+            handle.AnchorPoint = Vector2.new(1, 1)
+            handle.Position = UDim2.fromScale(1, 1)
+            handle.Size = UDim2.fromOffset(24, 24)
+            handle.BackgroundTransparency = 1
+            handle.BorderSizePixel = 0
+            handle.Font = Enum.Font.SourceSansBold
+            handle.Text = "↘"
+            handle.TextColor3 = Color3.fromRGB(255, 215, 0)
+            handle.TextSize = 18
+            handle.ZIndex = 20
+            handle.AutoButtonColor = false
+
+            local resizing = false
+            local dragStart
+            local startWidth
+            local startHeight
+
+            connect(handle.InputBegan, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.Touch then
+                    resizing = true
+                    dragStart = input.Position
+                    startWidth = parent.AbsoluteSize.X
+                    startHeight = parent.AbsoluteSize.Y
+                    connect(input.Changed, function()
+                        if input.UserInputState == Enum.UserInputState.End then
+                            resizing = false
+                        end
+                    end)
+                end
+            end)
+
+            connect(UserInputService.InputChanged, function(input)
+                if resizing and dragStart and startWidth and startHeight
+                    and (input.UserInputType == Enum.UserInputType.MouseMovement
+                        or input.UserInputType == Enum.UserInputType.Touch) then
+                    local delta = input.Position - dragStart
+                    local width = math.max(minWidth, math.min(maxWidth, startWidth + delta.X))
+                    local height = math.max(minHeight, math.min(maxHeight, startHeight + delta.Y))
+                    onResize(width, height)
+                end
+            end)
+
+            return handle
+        end
+
+        local function OpenImageWindow()
+            if ImageWindowCleanup then
+                local ok = pcall(ImageWindowCleanup, false)
+                if not ok then
+                    ImageWindowCleanup = nil
+                end
+            end
+
+            local parent = getImageParent()
+            if not parent then
+                WindUI:Notify({
+                    Title = "图片窗口",
+                    Content = "找不到可用的界面容器",
+                    Duration = 4,
+                })
+                return
+            end
+
+            local connections = {}
+            local destroyed = false
+            local currentImageUrl = ""
+            local currentImageAsset = ""
+
+            local function connect(signal, callback)
+                local ok, connection = pcall(function()
+                    return signal:Connect(callback)
+                end)
+                if ok and connection then
+                    connections[#connections + 1] = connection
+                    return connection
+                end
+                return nil
+            end
+
+            local screenGui = Instance.new("ScreenGui")
+            screenGui.Name = "XLHubImageWindow"
+            screenGui.ResetOnSpawn = false
+            screenGui.IgnoreGuiInset = true
+            screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            screenGui.Parent = parent
+
+            local main = Instance.new("Frame")
+            main.Name = "ImagePanel"
+            main.Parent = screenGui
+            main.AnchorPoint = Vector2.new(0.5, 0.5)
+            main.Position = UDim2.fromScale(0.5, 0.5)
+            main.Size = UDim2.fromOffset(300, 260)
+            main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            main.BackgroundTransparency = 1
+            main.BorderSizePixel = 0
+            main.Active = true
+
+            local mainCorner = Instance.new("UICorner")
+            mainCorner.CornerRadius = UDim.new(0, 10)
+            mainCorner.Parent = main
+
+            local mainStroke = Instance.new("UIStroke")
+            mainStroke.Color = Color3.fromRGB(255, 215, 0)
+            mainStroke.Thickness = 1.5
+            mainStroke.Transparency = 0
+            mainStroke.Parent = main
+
+            local titleBar = Instance.new("Frame")
+            titleBar.Name = "TitleBar"
+            titleBar.Parent = main
+            titleBar.BackgroundColor3 = Color3.fromRGB(38, 32, 0)
+            titleBar.BackgroundTransparency = 1
+            titleBar.BorderSizePixel = 0
+            titleBar.Size = UDim2.new(1, 0, 0, 30)
+            titleBar.Active = true
+
+            local title = Instance.new("TextLabel")
+            title.Parent = titleBar
+            title.BackgroundTransparency = 1
+            title.Position = UDim2.fromOffset(10, 0)
+            title.Size = UDim2.new(1, -42, 1, 0)
+            title.Font = Enum.Font.SourceSansSemibold
+            title.Text = "猫娘"
+            title.TextColor3 = Color3.fromRGB(255, 255, 255)
+            title.TextSize = 15
+            title.TextXAlignment = Enum.TextXAlignment.Left
+
+            local closeButton = Instance.new("TextButton")
+            closeButton.Parent = titleBar
+            closeButton.BackgroundTransparency = 1
+            closeButton.Position = UDim2.new(1, -30, 0, 1)
+            closeButton.Size = UDim2.fromOffset(28, 28)
+            closeButton.Font = Enum.Font.SourceSansBold
+            closeButton.Text = "×"
+            closeButton.TextColor3 = Color3.fromRGB(255, 220, 220)
+            closeButton.TextSize = 24
+
+            local imageFrame = Instance.new("ImageLabel")
+            imageFrame.Name = "Image"
+            imageFrame.Parent = main
+            imageFrame.Position = UDim2.fromOffset(8, 38)
+            imageFrame.Size = UDim2.fromOffset(284, 155)
+            imageFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            imageFrame.BackgroundTransparency = 1
+            imageFrame.BorderSizePixel = 0
+
+            imageFrame.ZIndex = 2
+
+            local cover = Instance.new("ImageLabel")
+            cover.Name = "Cover"
+            cover.Parent = main
+            cover.Position = imageFrame.Position
+            cover.Size = imageFrame.Size
+            cover.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            cover.BackgroundTransparency = 1
+            cover.BorderSizePixel = 0
+            cover.Image = ""
+            cover.ScaleType = Enum.ScaleType.Crop
+            cover.ZIndex = 3
+
+            local coverText = Instance.new("TextLabel")
+            coverText.Parent = cover
+            coverText.BackgroundTransparency = 1
+            coverText.Size = UDim2.fromScale(1, 1)
+            coverText.Font = Enum.Font.SourceSans
+            coverText.Text = "正在请求图片..."
+            coverText.TextColor3 = Color3.fromRGB(255, 255, 255)
+            coverText.TextSize = 16
+            coverText.ZIndex = 4
+
+            local nextButton = createImageButton(main, "下一张", UDim2.fromOffset(8, 200), UDim2.fromOffset(88, 28))
+            local sourceButton = createImageButton(main, "换类型", UDim2.fromOffset(106, 200), UDim2.fromOffset(88, 28))
+            local pauseButton = createImageButton(main, "刷新", UDim2.fromOffset(204, 200), UDim2.fromOffset(88, 28))
+
+            local status = Instance.new("TextLabel")
+            status.Parent = main
+            status.BackgroundTransparency = 1
+            status.Position = UDim2.fromOffset(8, 232)
+            status.Size = UDim2.new(1, -16, 0, 22)
+            status.Font = Enum.Font.SourceSans
+            status.Text = "等待请求..."
+            status.TextColor3 = Color3.fromRGB(190, 190, 190)
+            status.TextSize = 13
+            status.TextXAlignment = Enum.TextXAlignment.Left
+            status.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local function updateImageLayout()
+                local width = math.max(260, main.AbsoluteSize.X)
+                local height = math.max(220, main.AbsoluteSize.Y)
+                local imageHeight = math.max(80, height - 105)
+                local buttonWidth = math.max(60, math.floor((width - 36) / 3))
+                imageFrame.Position = UDim2.fromOffset(8, 38)
+                imageFrame.Size = UDim2.new(1, -16, 0, imageHeight)
+                cover.Position = imageFrame.Position
+                cover.Size = imageFrame.Size
+                nextButton.Size = UDim2.fromOffset(buttonWidth, 28)
+                sourceButton.Size = UDim2.fromOffset(buttonWidth, 28)
+                pauseButton.Size = UDim2.fromOffset(buttonWidth, 28)
+                nextButton.Position = UDim2.new(0, 8, 1, -60)
+                sourceButton.Position = UDim2.new(0, 18 + buttonWidth, 1, -60)
+                pauseButton.Position = UDim2.new(0, 28 + buttonWidth * 2, 1, -60)
+                status.Position = UDim2.new(0, 8, 1, -28)
+                status.Size = UDim2.new(1, -16, 0, 22)
+            end
+
+            addResizeHandle(main, connect, 260, 220, 720, 620, function(width, height)
+                main.Size = UDim2.fromOffset(width, height)
+                updateImageLayout()
+            end)
+            updateImageLayout()
+
+            -- 标题栏拖动：兼容鼠标和触摸拖动。
+            local dragging = false
+            local dragStart
+            local startPosition
+            local dragInput
+
+            connect(titleBar.InputBegan, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true
+                    dragStart = input.Position
+                    startPosition = main.Position
+                    dragInput = input
+                    connect(input.Changed, function()
+                        if input.UserInputState == Enum.UserInputState.End then
+                            dragging = false
+                        end
+                    end)
+                end
+            end)
+
+            connect(titleBar.InputChanged, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement
+                    or input.UserInputType == Enum.UserInputType.Touch then
+                    dragInput = input
+                end
+            end)
+
+            connect(UserInputService.InputChanged, function(input)
+                if input == dragInput and dragging and dragStart and startPosition then
+                    local delta = input.Position - dragStart
+                    main.Position = UDim2.new(
+                        startPosition.X.Scale,
+                        startPosition.X.Offset + delta.X,
+                        startPosition.Y.Scale,
+                        startPosition.Y.Offset + delta.Y
+                    )
+                end
+            end)
+
+            local function cleanupImageWindow()
+                if destroyed then
+                    return
+                end
+                destroyed = true
+                for _, connection in ipairs(connections) do
+                    pcall(function()
+                        connection:Disconnect()
+                    end)
+                end
+                connections = {}
+                if currentImageAsset ~= "" and type(delfile) == "function" then
+                    pcall(delfile, currentImageAsset)
+                    currentImageAsset = ""
+                end
+                pcall(function()
+                    screenGui:Destroy()
+                end)
+                if ImageWindowCleanup == cleanupImageWindow then
+                    ImageWindowCleanup = nil
+                end
+            end
+
+            ImageWindowCleanup = cleanupImageWindow
+
+            local function cleanImageUrl(value)
+                if type(value) ~= "string" then
+                    return ""
+                end
+                value = value:gsub("^%s+", ""):gsub("%s+$", "")
+                if value:sub(1, 2) == "//" then
+                    value = "https:" .. value
+                end
+                if value:match("^https?://") then
+                    return value
+                end
+                return ""
+            end
+
+            local function parseImageResponse(source, body)
+                local decodedOk, decoded = pcall(function()
+                    return HttpService:JSONDecode(body)
+                end)
+                if not decodedOk or type(decoded) ~= "table" then
+                    error(source.Name .. " 返回的不是有效 JSON")
+                end
+
+                local imageUrl = ""
+                if source.Parser == "Nekosia" then
+                    if decoded.success ~= true or tonumber(decoded.status) ~= 200 then
+                        error(source.Name .. " 返回错误：" .. tostring(decoded.message or decoded.status))
+                    end
+                    imageUrl = decoded.image
+                        and decoded.image.compressed
+                        and decoded.image.compressed.url
+                elseif source.Parser == "Waifu" then
+                    local first = decoded.items and decoded.items[1]
+                    imageUrl = first and first.url
+                elseif source.Parser == "PurrBot" then
+                    if decoded.error == true or tonumber(decoded["response-code"]) ~= 200 then
+                        error(source.Name .. " 返回错误：" .. tostring(decoded.error or decoded["response-code"]))
+                    end
+                    imageUrl = decoded.link
+                end
+
+                imageUrl = cleanImageUrl(imageUrl)
+                if imageUrl == "" then
+                    error(source.Name .. " 未返回有效的图片地址")
+                end
+                return imageUrl
+            end
+
+            local function requestSourceBody(source)
+                local requestFunctions = {}
+                local function addRequestFunction(candidate)
+                    if type(candidate) == "function" then
+                        requestFunctions[#requestFunctions + 1] = candidate
+                    end
+                end
+
+                addRequestFunction(rawget(_G, "request"))
+                addRequestFunction(rawget(_G, "http_request"))
+
+                local synTable = rawget(_G, "syn")
+                if type(synTable) == "table" then
+                    addRequestFunction(synTable.request)
+                end
+
+                local httpTable = rawget(_G, "http")
+                if type(httpTable) == "table" then
+                    addRequestFunction(httpTable.request)
+                end
+
+                local requestHeaders = {
+                    ["Accept"] = "application/json",
+                    ["User-Agent"] = "XLHub image client",
+                }
+                for _, requestFunction in ipairs(requestFunctions) do
+                    local requestOk, response = pcall(function()
+                        return requestFunction({
+                            Url = source.Url,
+                            Method = "GET",
+                            Headers = requestHeaders,
+                        })
+                    end)
+                    if requestOk and type(response) == "table" then
+                        local body = response.Body or response.body
+                        if type(body) == "string" and body ~= "" then
+                            return body
+                        end
+                    end
+                end
+
+                local body = game:HttpGet(source.Url)
+                if type(body) ~= "string" or body == "" then
+                    error(source.Name .. " 返回为空")
+                end
+                return body
+            end
+
+            local function requestImageFromSelectedSource()
+                local source = IMAGE_SOURCES[currentImageSourceIndex]
+                if not source then
+                    error("没有选择有效的图片源")
+                end
+                local body = requestSourceBody(source)
+                return parseImageResponse(source, body), source.Name
+            end
+
+            local function loadImageAsset(imageUrl)
+                local assetLoader = getcustomasset or getsynasset
+                if type(assetLoader) ~= "function" or type(writefile) ~= "function" then
+                    return imageUrl
+                end
+
+                if currentImageAsset ~= "" and type(delfile) == "function" then
+                    pcall(delfile, currentImageAsset)
+                    currentImageAsset = ""
+                end
+
+                local extension = imageUrl:lower():match("%.png") and ".png" or ".jpg"
+                local fileName = "XLHub_Catgirl_" .. tostring(math.random(100000, 999999)) .. extension
+                local body = nil
+                local requestFunctions = {}
+                local function addRequestFunction(candidate)
+                    if type(candidate) == "function" then
+                        requestFunctions[#requestFunctions + 1] = candidate
+                    end
+                end
+
+                addRequestFunction(rawget(_G, "request"))
+                addRequestFunction(rawget(_G, "http_request"))
+                local synTable = rawget(_G, "syn")
+                if type(synTable) == "table" then
+                    addRequestFunction(synTable.request)
+                end
+
+                for _, requestFunction in ipairs(requestFunctions) do
+                    local requestOk, response = pcall(function()
+                        return requestFunction({
+                            Url = imageUrl,
+                            Method = "GET",
+                            Headers = { ["Accept"] = "image/*" },
+                        })
+                    end)
+                    if requestOk and type(response) == "table" then
+                        local responseBody = response.Body or response.body
+                        if type(responseBody) == "string" and responseBody ~= "" then
+                            body = responseBody
+                            break
+                        end
+                    end
+                end
+
+                if not body then
+                    local httpOk, responseBody = pcall(function()
+                        return game:HttpGet(imageUrl)
+                    end)
+                    if httpOk and type(responseBody) == "string" and responseBody ~= "" then
+                        body = responseBody
+                    end
+                end
+
+                if not body then
+                    return imageUrl
+                end
+
+                local writeOk = pcall(function()
+                    writefile(fileName, body)
+                end)
+                if not writeOk then
+                    return imageUrl
+                end
+
+                local assetOk, assetId = pcall(assetLoader, fileName)
+                if assetOk and type(assetId) == "string" and assetId ~= "" then
+                    currentImageAsset = fileName
+                    return assetId
+                end
+                if type(delfile) == "function" then
+                    pcall(delfile, fileName)
+                end
+                return imageUrl
+            end
+
+            local function loadImage()
+                if destroyed then
+                    return
+                end
+
+                cover.Visible = true
+                cover.Image = ""
+                coverText.Text = "正在请求图片..."
+                setImageStatus(status, "正在连接图片源...", Color3.fromRGB(255, 215, 0))
+                nextButton.Text = "请求中"
+
                 task.spawn(function()
-                    local callOk, backgroundOk, backgroundError = pcall(applyUIBackground, index)
-                    if callOk and backgroundOk then
+                    local ok, result, sourceName = pcall(requestImageFromSelectedSource)
+
+                    if destroyed then
+                        return
+                    end
+
+                    nextButton.Text = "下一张"
+                    if not ok or type(result) ~= "string" or result == "" then
+                        coverText.Text = "图片请求失败"
+                        setImageStatus(status, "请求失败：" .. tostring(result), Color3.fromRGB(255, 120, 120))
+                        return
+                    end
+
+                    currentImageUrl = result
+                    coverText.Text = "图片加载中..."
+                    local displayImage = loadImageAsset(currentImageUrl)
+                    imageFrame.Image = displayImage
+                    imageFrame.ScaleType = Enum.ScaleType.Fit
+                    imageFrame.ImageTransparency = 0
+                    imageFrame.Visible = true
+                    imageFrame.ZIndex = 4
+                    cover.Visible = false
+                    setImageStatus(status, sourceName .. "已显示", Color3.fromRGB(180, 255, 180))
+                end)
+            end
+
+            connect(closeButton.MouseButton1Click, cleanupImageWindow)
+            connect(nextButton.MouseButton1Click, function()
+                loadImage()
+            end)
+            sourceButton.Text = "刷新当前"
+            connect(sourceButton.MouseButton1Click, function()
+                loadImage()
+            end)
+            connect(pauseButton.MouseButton1Click, function()
+                loadImage()
+            end)
+            ImageReloadCurrent = loadImage
+            loadImage()
+        end
+
+        HomeTab:Button({
+            Title = "猫娘二次元图片",
+            Desc = "打开猫娘和二次元图片窗口，可切换类型和刷新",
+            Icon = "solar:gallery-bold-duotone",
+            Callback = OpenImageWindow,
+        })
+
+        -- ========== 9. Lolicon 相关 ==========
+        local LOLICON_UNLOCK_PASSWORD = "XQVIP666"
+        local LOLICON_UNLOCK_FILE = "XLHub_Lolicon_Unlocked.dat"
+        local LOLICON_UNLOCK_MARKER = "XLHUB_LOLICON_UNLOCKED_V1"
+        local loliconUnlocked = false
+        local LoliconWindowCleanups = {}
+        local LoliconWindowSequence = 0
+
+        local function closeAllLoliconWindows()
+            local pending = {}
+            for _, cleanup in pairs(LoliconWindowCleanups) do
+                pending[#pending + 1] = cleanup
+            end
+            for _, cleanup in ipairs(pending) do
+                pcall(cleanup)
+            end
+            LoliconWindowCleanups = {}
+        end
+
+        local function hasLocalLoliconUnlock()
+            if type(isfile) ~= "function" or type(readfile) ~= "function" then
+                return false
+            end
+            local ok, value = pcall(readfile, LOLICON_UNLOCK_FILE)
+            return ok and value == LOLICON_UNLOCK_MARKER
+        end
+
+        local function saveLocalLoliconUnlock()
+            if type(writefile) == "function" then
+                pcall(writefile, LOLICON_UNLOCK_FILE, LOLICON_UNLOCK_MARKER)
+            end
+        end
+
+        local function clearLocalLoliconUnlock()
+            loliconUnlocked = false
+            if type(delfile) == "function" and type(isfile) == "function" then
+                pcall(function()
+                    if isfile(LOLICON_UNLOCK_FILE) then
+                        delfile(LOLICON_UNLOCK_FILE)
+                    end
+                end)
+            end
+        end
+
+        loliconUnlocked = hasLocalLoliconUnlock()
+
+        local function requestLoliconImage()
+            local url = "https://api.lolicon.app/setu/v2"
+                .. "?r18=1&num=1&size=small&proxy=i.pixiv.re&excludeAI=true"
+            local body = requestHttpBody(url, "application/json")
+            local decoded = HttpService:JSONDecode(body)
+            if type(decoded) ~= "table" then
+                error("Lolicon 返回不是有效 JSON")
+            end
+            if decoded.error and decoded.error ~= "" then
+                error("Lolicon：" .. tostring(decoded.error))
+            end
+            local item = decoded.data and decoded.data[1]
+            local urls = item and item.urls
+            local imageUrl = urls and (urls.small or urls.thumb or urls.regular or urls.original or urls.mini)
+            if type(imageUrl) ~= "string" or imageUrl == "" then
+                error("Lolicon 没有返回可用图片地址")
+            end
+            return imageUrl, item
+        end
+
+        local function loadLoliconAsset(imageUrl)
+            return downloadTemporaryImage(imageUrl, "XLHub_R18_")
+        end
+
+        -- 图片窗口通用缩放手柄：支持鼠标与触摸，并固定在右下角
+        local function addResizeHandle(frame, connectFunc, minWidth, minHeight, maxWidth, maxHeight, onResize)
+            local handle = Instance.new("TextButton")
+            handle.Name = "ResizeHandle"
+            handle.Parent = frame
+            handle.AnchorPoint = Vector2.new(1, 1)
+            handle.Position = UDim2.new(1, -4, 1, -4)
+            handle.Size = UDim2.fromOffset(28, 28)
+            handle.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+            handle.BackgroundTransparency = 0.08
+            handle.BorderSizePixel = 0
+            handle.AutoButtonColor = false
+            handle.Text = "◢"
+            handle.TextColor3 = Color3.fromRGB(255, 255, 255)
+            handle.TextSize = 17
+            handle.Font = Enum.Font.SourceSansBold
+            handle.Active = true
+            handle.Selectable = false
+            handle.ZIndex = 100
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 5)
+            corner.Parent = handle
+
+            local resizing = false
+            local resizeStart
+            local startSize
+
+            local function beginResize(input)
+                if input.UserInputType ~= Enum.UserInputType.MouseButton1
+                    and input.UserInputType ~= Enum.UserInputType.Touch then
+                    return
+                end
+                resizing = true
+                resizeStart = input.Position
+                startSize = frame.AbsoluteSize
+            end
+
+            local function moveResize(input)
+                if not resizing or not resizeStart or not startSize then
+                    return
+                end
+                local delta = input.Position - resizeStart
+                local width = math.clamp(startSize.X + delta.X, minWidth, maxWidth)
+                local height = math.clamp(startSize.Y + delta.Y, minHeight, maxHeight)
+                if onResize then
+                    onResize(width, height)
+                else
+                    frame.Size = UDim2.fromOffset(width, height)
+                end
+            end
+
+            connectFunc(handle.InputBegan, beginResize)
+            connectFunc(UserInputService.InputChanged, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
+                    moveResize(input)
+                end
+            end)
+            connectFunc(UserInputService.TouchMoved, moveResize)
+            connectFunc(UserInputService.InputEnded, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.Touch then
+                    resizing = false
+                    resizeStart = nil
+                    startSize = nil
+                end
+            end)
+
+            return handle
+        end
+
+        local function OpenLoliconWindow(windowTitle, requestFunction, assetFunction)
+            windowTitle = windowTitle or "R18"
+            requestFunction = requestFunction or requestLoliconImage
+            assetFunction = assetFunction or loadLoliconAsset
+            if not loliconUnlocked then
+                WindUI:Notify({
+                    Title = "需要解锁",
+                    Content = "请先输入正确的 Lolicon 解锁密码",
+                    Duration = 4,
+                })
+                return
+            end
+            local parent = getImageParent()
+            if not parent then
+                WindUI:Notify({Title = "Lolicon", Content = "找不到可用的界面容器", Duration = 4})
+                return
+            end
+            LoliconWindowSequence = LoliconWindowSequence + 1
+            local windowId = LoliconWindowSequence
+            local connections = {}
+            local destroyed = false
+            local assetFile = ""
+            local loadSerial = 0
+            local screenGui = Instance.new("ScreenGui")
+            screenGui.Name = "XLHubLoliconWindow_" .. tostring(windowId)
+            screenGui.ResetOnSpawn = false
+            screenGui.IgnoreGuiInset = true
+            screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            screenGui.Parent = parent
+
+            local main = Instance.new("Frame")
+            main.Name = "LoliconPanel"
+            main.Parent = screenGui
+            main.AnchorPoint = Vector2.new(0.5, 0.5)
+            main.Position = UDim2.fromScale(0.5, 0.5)
+            main.Size = UDim2.fromOffset(320, 260)
+            main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+            main.BackgroundTransparency = 1
+            main.BorderSizePixel = 0
+            main.Active = true
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 10)
+            corner.Parent = main
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(255, 215, 0)
+            stroke.Thickness = 1.5
+            stroke.Transparency = 0
+            stroke.Parent = main
+
+            local title = Instance.new("TextLabel")
+            title.Parent = main
+            title.BackgroundTransparency = 1
+            title.Position = UDim2.fromOffset(12, 6)
+            title.Size = UDim2.new(1, -52, 0, 26)
+            title.Text = windowTitle
+            title.TextColor3 = Color3.fromRGB(255, 255, 255)
+            title.TextSize = 16
+            title.Font = Enum.Font.SourceSansSemibold
+            title.TextXAlignment = Enum.TextXAlignment.Left
+            title.Active = true
+            title.ZIndex = 2
+
+            local close = Instance.new("TextButton")
+            close.Parent = main
+            close.BackgroundTransparency = 1
+            close.Position = UDim2.new(1, -38, 0, 4)
+            close.Size = UDim2.fromOffset(32, 30)
+            close.Text = "×"
+            close.TextColor3 = Color3.fromRGB(255, 220, 220)
+            close.TextSize = 24
+            close.Font = Enum.Font.SourceSansBold
+            close.ZIndex = 3
+
+            local image = Instance.new("ImageLabel")
+            image.Parent = main
+            image.Position = UDim2.fromOffset(10, 40)
+            image.Size = UDim2.new(1, -20, 0, 205)
+            -- R18 请求完成前不显示黑色底，直接透出透明窗口背景
+            image.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+            image.BackgroundTransparency = 1
+            image.BorderSizePixel = 0
+            image.ScaleType = Enum.ScaleType.Fit
+            image.ZIndex = 20
+
+            local status = Instance.new("TextLabel")
+            status.Parent = main
+            status.BackgroundTransparency = 1
+            status.Position = UDim2.fromOffset(10, 252)
+            status.Size = UDim2.new(1, -125, 0, 30)
+            status.Text = "准备请求..."
+            status.TextColor3 = Color3.fromRGB(255, 215, 0)
+            status.TextSize = 13
+            status.Font = Enum.Font.SourceSans
+            status.TextXAlignment = Enum.TextXAlignment.Left
+            status.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local refresh = Instance.new("TextButton")
+            refresh.Parent = main
+            refresh.Position = UDim2.new(1, -108, 1, -43)
+            refresh.Size = UDim2.fromOffset(98, 30)
+            refresh.Text = "下一张"
+            refresh.TextColor3 = Color3.fromRGB(255, 255, 255)
+            refresh.TextSize = 14
+            refresh.Font = Enum.Font.SourceSansSemibold
+            refresh.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+            refresh.BackgroundTransparency = 1
+            refresh.BorderSizePixel = 0
+            refresh.ZIndex = 80
+            local refreshCorner = Instance.new("UICorner")
+            refreshCorner.CornerRadius = UDim.new(0, 6)
+            refreshCorner.Parent = refresh
+
+            local function connect(signal, callback)
+                local ok, connection = pcall(function()
+                    return signal:Connect(callback)
+                end)
+                if ok and connection then
+                    connections[#connections + 1] = connection
+                end
+                return connection
+            end
+
+            -- 拖动：使用透明按钮捕获移动端触摸，避免 TextLabel 拦截或丢失输入
+            local dragButton = Instance.new("TextButton")
+            dragButton.Name = "DragArea"
+            dragButton.Parent = main
+            dragButton.BackgroundTransparency = 1
+            dragButton.BorderSizePixel = 0
+            dragButton.Position = UDim2.fromOffset(0, 0)
+            dragButton.Size = UDim2.new(1, -45, 0, 36)
+            dragButton.Text = ""
+            dragButton.AutoButtonColor = false
+            dragButton.Active = true
+            dragButton.Selectable = false
+            dragButton.ZIndex = 90
+            title.Active = false
+            title.Selectable = false
+            title.ZIndex = 91
+            close.ZIndex = 92
+
+            local dragging = false
+            local dragStart
+            local startPosition
+
+            connect(dragButton.InputBegan, function(input)
+                if input.UserInputType ~= Enum.UserInputType.MouseButton1
+                    and input.UserInputType ~= Enum.UserInputType.Touch then
+                    return
+                end
+                dragging = true
+                dragStart = input.Position
+                startPosition = main.Position
+            end)
+
+            local function moveLoliconDrag(input)
+                if not dragging or not dragStart or not startPosition then
+                    return
+                end
+                local delta = input.Position - dragStart
+                main.Position = UDim2.new(
+                    startPosition.X.Scale, startPosition.X.Offset + delta.X,
+                    startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+                )
+            end
+
+            connect(UserInputService.InputChanged, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseMovement then
+                    moveLoliconDrag(input)
+                end
+            end)
+            connect(UserInputService.TouchMoved, moveLoliconDrag)
+            connect(UserInputService.InputEnded, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = false
+                    dragStart = nil
+                    startPosition = nil
+                end
+            end)
+
+            local function updateLoliconLayout()
+                local width = math.max(300, main.AbsoluteSize.X)
+                local height = math.max(260, main.AbsoluteSize.Y)
+                local imageHeight = math.max(100, height - 95)
+                image.Position = UDim2.fromOffset(10, 40)
+                image.Size = UDim2.new(1, -20, 0, imageHeight)
+                status.Position = UDim2.new(0, 10, 1, -38)
+                status.Size = UDim2.new(1, -125, 0, 30)
+                refresh.Position = UDim2.new(1, -108, 1, -43)
+            end
+
+            local secondaryViewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+            local secondaryMaxWidth = math.max(320, math.floor(secondaryViewport.X - 24))
+            local secondaryMaxHeight = math.max(260, math.floor(secondaryViewport.Y - 24))
+            addResizeHandle(main, connect, 300, 260, secondaryMaxWidth, secondaryMaxHeight, function(width, height)
+                main.Size = UDim2.fromOffset(width, height)
+                updateLoliconLayout()
+            end)
+
+            updateLoliconLayout()
+
+            local function cleanup()
+                if destroyed then
+                    return
+                end
+                destroyed = true
+                for _, connection in ipairs(connections) do
+                    pcall(function() connection:Disconnect() end)
+                end
+                deleteTemporaryImage(assetFile)
+                assetFile = ""
+                pcall(function() screenGui:Destroy() end)
+                if LoliconWindowCleanups[windowId] == cleanup then
+                    LoliconWindowCleanups[windowId] = nil
+                end
+            end
+            LoliconWindowCleanups[windowId] = cleanup
+
+            local function load()
+                if destroyed then
+                    return
+                end
+                loadSerial = loadSerial + 1
+                local requestSerial = loadSerial
+                deleteTemporaryImage(assetFile)
+                assetFile = ""
+                refresh.Text = "请求中"
+                status.Text = "正在请求 Lolicon..."
+                task.spawn(function()
+                    local ok, imageUrl, item = pcall(requestFunction)
+                    if destroyed or requestSerial ~= loadSerial then
+                        return
+                    end
+                    if not ok or type(imageUrl) ~= "string" or imageUrl == "" then
+                        refresh.Text = "下一张"
+                        status.Text = "请求失败：" .. tostring(imageUrl)
+                        status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                        return
+                    end
+                    local downloadCallOk, displayImage, newAssetFile, downloadOk = pcall(function()
+                        return assetFunction(imageUrl)
+                    end)
+                    if destroyed or requestSerial ~= loadSerial then
+                        deleteTemporaryImage(newAssetFile)
+                        return
+                    end
+                    if not downloadCallOk then
+                        refresh.Text = "下一张"
+                        status.Text = "图片下载失败：" .. tostring(displayImage)
+                        status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                        return
+                    end
+                    assetFile = newAssetFile or ""
+                    if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
+                        refresh.Text = "下一张"
+                        status.Text = "图片下载失败"
+                        status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                        return
+                    end
+                    image.Image = displayImage
+                    image.Visible = true
+                    refresh.Text = "下一张"
+                    status.Text = "已显示：" .. tostring(item and (item.author or item.title) or windowTitle)
+                    status.TextColor3 = Color3.fromRGB(180, 255, 180)
+                end)
+            end
+
+            connect(close.Activated, cleanup)
+            connect(refresh.Activated, load)
+            load()
+        end
+
+        -- Lolicon 控件
+        HomeTab:Input({
+            Title = "Lolicon 解锁密码",
+            Desc = "输入正确密码后解锁 Lolicon R18 图片接口",
+            Icon = "solar:lock-keyhole-bold-duotone",
+            InputIcon = "solar:lock-keyhole-bold-duotone",
+            Placeholder = "输入解锁密码",
+            ClearTextOnFocus = false,
+            Callback = function(value)
+                local entered = tostring(value or "")
+                if entered:gsub("^%s+", ""):gsub("%s+$", "") == "" then
+                    return
+                end
+                if entered == LOLICON_UNLOCK_PASSWORD then
+                    loliconUnlocked = true
+                    saveLocalLoliconUnlock()
+                    WindUI:Notify({Title = "解锁成功", Content = "授权已保存，请手动打开 Lolicon 窗口", Duration = 3})
+                else
+                    clearLocalLoliconUnlock()
+                    WindUI:Notify({Title = "密码错误", Content = "Lolicon 接口仍处于锁定状态", Duration = 3})
+                end
+            end,
+        })
+        HomeTab:Button({
+            Title = "打开🔞图片",
+            Desc = "解锁后打开独立窗口",
+            Icon = "solar:gallery-wide-bold-duotone",
+            Callback = OpenLoliconWindow,
+        })
+        HomeTab:Button({
+            Title = "清除本地授权",
+            Desc = "删除本地授权标记下次执行需要重新输入密码",
+            Icon = "solar:lock-keyhole-minimalistic-bold-duotone",
+            Callback = function()
+                clearLocalLoliconUnlock()
+                closeAllLoliconWindows()
+                WindUI:Notify({Title = "授权已清除", Content = "下次使用需要重新输入密码", Duration = 3})
+            end,
+        })
+
+        -- ========== 10. 通用 Tab ==========
+        local GeneralTab = Window:Tab({
+            Title = "通用",
+            Icon = "solar:widget-5-bold-duotone",
+        })
+        local GeneralState = {
+            SpeedEnabled = false,
+            SpeedValue = 32,
+            InfiniteJumpEnabled = false,
+            JumpPowerValue = 50,
+            CompatibilityEnabled = false,
+            JumpConnection = nil,
+            CharacterConnection = nil,
+            OriginalWalkSpeed = nil,
+            OriginalJumpPower = nil,
+            OriginalUseJumpPower = nil,
+        }
+
+        local function getLocalHumanoid()
+            local character = LocalPlayer and LocalPlayer.Character
+            return character and character:FindFirstChildOfClass("Humanoid")
+        end
+
+        local function applyGeneralMovement()
+            local humanoid = getLocalHumanoid()
+            if not humanoid then
+                return
+            end
+            if GeneralState.OriginalWalkSpeed == nil then
+                GeneralState.OriginalWalkSpeed = humanoid.WalkSpeed
+            end
+            if GeneralState.OriginalJumpPower == nil then
+                GeneralState.OriginalJumpPower = humanoid.JumpPower
+            end
+            if GeneralState.OriginalUseJumpPower == nil then
+                GeneralState.OriginalUseJumpPower = humanoid.UseJumpPower
+            end
+            if GeneralState.SpeedEnabled then
+                humanoid.WalkSpeed = GeneralState.SpeedValue
+            elseif GeneralState.OriginalWalkSpeed ~= nil then
+                humanoid.WalkSpeed = GeneralState.OriginalWalkSpeed
+            end
+            if GeneralState.InfiniteJumpEnabled then
+                humanoid.UseJumpPower = true
+                humanoid.JumpPower = GeneralState.JumpPowerValue
+            else
+                humanoid.JumpPower = GeneralState.OriginalJumpPower
+                humanoid.UseJumpPower = GeneralState.OriginalUseJumpPower
+            end
+        end
+
+        local function setInfiniteJumpEnabled(enabled)
+            GeneralState.InfiniteJumpEnabled = enabled
+            if GeneralState.JumpConnection then
+                GeneralState.JumpConnection:Disconnect()
+                GeneralState.JumpConnection = nil
+            end
+            if enabled then
+                GeneralState.JumpConnection = UserInputService.JumpRequest:Connect(function()
+                    local humanoid = getLocalHumanoid()
+                    if humanoid and humanoid.Health > 0 then
+                        humanoid.JumpPower = GeneralState.JumpPowerValue
+                        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+                end)
+            end
+            applyGeneralMovement()
+        end
+
+        local function setCompatibilityProtectionEnabled(enabled)
+            GeneralState.CompatibilityEnabled = enabled == true
+            applyGeneralMovement()
+        end
+
+        GeneralTab:Section({ Title = "速度与跳跃" })
+        GeneralTab:Toggle({
+            Title = "速度增强",
+            Desc = "开启后持续应用移动速度，关闭后自动恢复",
+            Icon = "solar:bolt-bold-duotone",
+            Value = false,
+            Callback = function(value)
+                GeneralState.SpeedEnabled = value
+                applyGeneralMovement()
+            end,
+        })
+        GeneralTab:Slider({
+            Title = "移动速度",
+            Desc = "调整 WalkSpeed 数值",
+            Icon = "solar:running-bold-duotone",
+            Step = 1,
+            Value = {
+                Min = 16,
+                Max = 500,
+                Default = 32,
+            },
+            Callback = function(value)
+                GeneralState.SpeedValue = tonumber(value) or 32
+                applyGeneralMovement()
+            end,
+        })
+        GeneralTab:Toggle({
+            Title = "无限跳跃",
+            Desc = "允许在空中继续触发跳跃，关闭后自动恢复",
+            Icon = "solar:arrow-up-bold-duotone",
+            Value = false,
+            Callback = setInfiniteJumpEnabled,
+        })
+        GeneralTab:Slider({
+            Title = "跳跃高度",
+            Desc = "调整 JumpPower 数值",
+            Icon = "solar:arrow-up-bold-duotone",
+            Step = 1,
+            Value = {
+                Min = 25,
+                Max = 250,
+                Default = 50,
+            },
+            Callback = function(value)
+                GeneralState.JumpPowerValue = tonumber(value) or 50
+                applyGeneralMovement()
+            end,
+        })
+        GeneralTab:Toggle({
+            Title = "基础兼容保护",
+            Desc = "重生后恢复本地速度和跳跃设置，不修改远程调用",
+            Icon = "solar:shield-check-bold-duotone",
+            Value = false,
+            Callback = setCompatibilityProtectionEnabled,
+        })
+        if GeneralState.CharacterConnection then
+            GeneralState.CharacterConnection:Disconnect()
+        end
+        GeneralState.CharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
+            GeneralState.OriginalWalkSpeed = nil
+            GeneralState.OriginalJumpPower = nil
+            GeneralState.OriginalUseJumpPower = nil
+            task.spawn(function()
+                local humanoid = character:WaitForChild("Humanoid", 5)
+                if humanoid and character.Parent and (
+                    GeneralState.CompatibilityEnabled
+                    or GeneralState.SpeedEnabled
+                    or GeneralState.InfiniteJumpEnabled
+                ) then
+                    task.wait(0.15)
+                    if character.Parent then
+                        applyGeneralMovement()
+                    end
+                end
+            end)
+        end)
+
+        GeneralTab:Section({ Title = "外部脚本" })
+        GeneralTab:Button({
+            Title = "多方向吸附",
+            Desc = "点击直接执行外部脚本",
+            Icon = "solar:bolt-bold-duotone",
+            Callback = function()
+                SafeExecute("多方向吸附", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%A4%9A%E6%96%B9%E5%90%91%E5%90%B8%E9%99%84")
+            end,
+        })
+
+        -- ========== 11. 汉化 Tab ==========
+        local HanHuaTab = Window:Tab({
+            Title = "汉化",
+            Icon = "solar:translation-bold-duotone",
+        })
+        local ExternalTranslationURL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E6%B1%89%E5%8C%96.lua"
+        local ExternalTranslationState = rawget(_G, "__XLHubExternalTranslationState")
+        if type(ExternalTranslationState) ~= "table" or ExternalTranslationState.Url ~= ExternalTranslationURL then
+            ExternalTranslationState = {Url = ExternalTranslationURL, Loading = false, Loaded = false}
+            _G.__XLHubExternalTranslationState = ExternalTranslationState
+        end
+        HanHuaTab:Button({
+            Title = "执行汉化",
+            Desc = "点击加载",
+            Icon = "solar:translation-bold-duotone",
+            Callback = function()
+                if ExternalTranslationState.Loading then
+                    WindUI:Notify({Title = "汉化", Content = "加载中", Duration = 2})
+                    return
+                end
+                if ExternalTranslationState.Loaded then
+                    WindUI:Notify({Title = "汉化", Content = "已执行", Duration = 2})
+                    return
+                end
+                ExternalTranslationState.Loading = true
+                task.spawn(function()
+                    local ok, err = pcall(function()
+                        local source = game:HttpGet(ExternalTranslationURL)
+                        local chunk = loadstring(source)
+                        assert(type(chunk) == "function", "汉化脚本无法编译")
+                        chunk()
+                    end)
+                    ExternalTranslationState.Loading = false
+                    ExternalTranslationState.Loaded = ok
+                    WindUI:Notify({Title = "汉化", Content = ok and "已执行" or "执行失败", Duration = 3})
+                    if not ok then
+                        warn("[XL Hub] external translation failed: " .. tostring(err))
+                    end
+                end)
+            end,
+        })
+
+        -- ========== 12. 传送 Tab ==========
+        local TeleportTab = Window:Tab({
+            Title = "传送",
+            Icon = "solar:round-transfer-diagonal-bold-duotone",
+        })
+        local selectedTeleportPlayer = nil
+        local TeleportState = {
+            PlayerAddedConnection = nil,
+            PlayerRemovingConnection = nil,
+        }
+
+        local function getTeleportPlayerNames()
+            local values = {}
+            for _, player in ipairs(Players:GetPlayers()) do
+                table.insert(values, player.Name)
+            end
+            table.sort(values)
+            return values
+        end
+
+        local function resolveTeleportPlayer(value)
+            local playerName = value
+            if type(value) == "table" then
+                playerName = value[1]
+            end
+            if type(playerName) ~= "string" or playerName == "" then
+                return nil
+            end
+            return Players:FindFirstChild(playerName)
+        end
+
+        TeleportTab:Section({ Title = "玩家传送" })
+        local teleportPlayerDropdown = TeleportTab:Dropdown({
+            Title = "玩家列表",
+            Desc = "自动获取当前服务器玩家",
+            Icon = "solar:users-group-rounded-bold-duotone",
+            Values = getTeleportPlayerNames(),
+            Callback = function(value)
+                selectedTeleportPlayer = resolveTeleportPlayer(value)
+            end,
+        })
+
+        local function refreshTeleportPlayers()
+            pcall(function()
+                teleportPlayerDropdown:Refresh(getTeleportPlayerNames())
+            end)
+        end
+
+        TeleportState.PlayerAddedConnection = Players.PlayerAdded:Connect(refreshTeleportPlayers)
+        TeleportState.PlayerRemovingConnection = Players.PlayerRemoving:Connect(function(player)
+            if selectedTeleportPlayer == player then
+                selectedTeleportPlayer = nil
+            end
+            refreshTeleportPlayers()
+        end)
+
+        TeleportTab:Button({
+            Title = "传送到玩家身边",
+            Desc = "传送到已选择玩家身边",
+            Icon = "solar:plain-3-bold-duotone",
+            Callback = function()
+                if not selectedTeleportPlayer then
+                    WindUI:Notify({Title = "传送失败", Content = "请先在玩家列表中选择一个玩家！", Duration = 3})
+                    return
+                end
+                local localPlayer = Players.LocalPlayer
+                if not selectedTeleportPlayer.Parent then
+                    WindUI:Notify({Title = "传送失败", Content = "目标玩家已退出游戏！", Duration = 3})
+                    selectedTeleportPlayer = nil
+                    refreshTeleportPlayers()
+                    return
+                end
+                if selectedTeleportPlayer == localPlayer then
+                    WindUI:Notify({Title = "传送失败", Content = "不能传送到自己！", Duration = 3})
+                    return
+                end
+                local targetChar = selectedTeleportPlayer.Character
+                if not targetChar or not targetChar.Parent then
+                    WindUI:Notify({Title = "传送失败", Content = "目标玩家尚未加载角色！", Duration = 3})
+                    return
+                end
+                local targetHRP = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:WaitForChild("HumanoidRootPart", 2)
+                if not targetHRP then
+                    WindUI:Notify({Title = "传送失败", Content = "无法获取目标玩家位置！", Duration = 3})
+                    return
+                end
+                local myChar = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+                local myHRP = myChar and (myChar:FindFirstChild("HumanoidRootPart") or myChar:WaitForChild("HumanoidRootPart", 2))
+                if not myHRP then
+                    WindUI:Notify({Title = "传送失败", Content = "无法获取你的位置！", Duration = 3})
+                    return
+                end
+                local offset = Vector3.new(0, 0, 3)
+                myHRP.CFrame = targetHRP.CFrame + targetHRP.CFrame:VectorToWorldSpace(offset)
+                WindUI:Notify({Title = "传送成功", Content = "已传送到玩家：" .. selectedTeleportPlayer.Name, Duration = 3})
+            end,
+        })
+
+        -- ========== 13. 服务器脚本 Tabs ==========
+        for _, server in ipairs(ServerScripts) do
+            local tab = Window:Tab({
+                Title = server.Name,
+                Icon = server.Icon,
+            })
+            tab:Section({ Title = "脚本列表" })
+            for _, scriptInfo in ipairs(server.Scripts) do
+                tab:Button({
+                    Title = scriptInfo.Name,
+                    Desc = "点击直接执行",
+                    Icon = "solar:bolt-bold-duotone",
+                    Callback = function()
+                        SafeExecute(scriptInfo.Name, scriptInfo.Url)
+                    end,
+                })
+            end
+        end
+
+        -- ========== 14. 设置 Tab ==========
+        local SettingTab = Window:Tab({
+            Title = "设置",
+            Icon = "solar:settings-bold-duotone",
+        })
+        SettingTab:Section({ Title = "透明界面设置" })
+        SettingTab:Paragraph({
+            Title = "透明 UI 模式",
+            Desc = "已固定使用 LiquidGold 透明主题，已移除会覆盖透明度的主题切换",
+        })
+
+        local uiBackgroundNames = {}
+        for _, backgroundSource in ipairs(UI_BACKGROUND_SOURCES) do
+            uiBackgroundNames[#uiBackgroundNames + 1] = backgroundSource.Name
+        end
+
+        local uiBackgroundDropdown = SettingTab:Dropdown({
+            Title = "UI 背景图片",
+            Desc = "切换时才会下载并缓存，启动只加载第一张",
+            Icon = "solar:wallpaper-bold-duotone",
+            Values = uiBackgroundNames,
+            Value = uiBackgroundNames[1],
+            Callback = function(value)
+                local selected = type(value) == "table" and value[1] or value
+                for index, backgroundSource in ipairs(UI_BACKGROUND_SOURCES) do
+                    if backgroundSource.Name == selected then
+                        task.spawn(function()
+                            local callOk, backgroundOk, backgroundError = pcall(applyUIBackground, index)
+                            if callOk and backgroundOk then
+                                WindUI:Notify({
+                                    Title = "UI 背景已切换",
+                                    Content = backgroundSource.Name .. " 已从本地缓存读取",
+                                    Duration = 3,
+                                })
+                            else
+                                WindUI:Notify({
+                                    Title = "UI 背景读取失败",
+                                    Content = tostring(backgroundError or "下载失败，请检查网络"),
+                                    Duration = 5,
+                                })
+                            end
+                        end)
+                        break
+                    end
+                end
+            end,
+        })
+
+        SettingTab:Section({ Title = "PC 端按键绑定" })
+        local pcToggleKeybind = SettingTab:Keybind({
+            Title = "自定义开关按键",
+            Desc = "按下绑定键切换 XL Hub 的显示状态",
+            Icon = "solar:keyboard-bold-duotone",
+            Value = "RightShift",
+            Flag = "PCWindowToggleKey",
+            Callback = function(keyName)
+                local keyCode = typeof(keyName) == "EnumItem" and keyName or Enum.KeyCode[keyName]
+                if keyCode then
+                    Window:SetToggleKey(keyCode)
+                end
+            end,
+        })
+
+        -- ========== 15. 配置管理 ==========
+        local ConfigManager = Window.ConfigManager
+        local ConfigName = "default"
+        local ConfigFile = nil
+
+        local function getWindUIConfig()
+            if not ConfigManager then
+                return nil
+            end
+            if not ConfigFile then
+                ConfigFile = ConfigManager:CreateConfig(ConfigName)
+                if ConfigFile then
+                    ConfigFile:Register("UIBackgroundSelection", uiBackgroundDropdown)
+                    ConfigFile:Register("PCWindowToggleKey", pcToggleKeybind)
+                end
+            end
+            return ConfigFile
+        end
+
+        local ConfigSaveBusy = false
+        local function saveWindUIConfig()
+            if ConfigSaveBusy or not StartupAlive then return false end
+            ConfigSaveBusy = true
+            local ok, result = pcall(function()
+                local config = getWindUIConfig()
+                if not config then return false end
+                return config:Save() == true
+            end)
+            ConfigSaveBusy = false
+            return ok and result == true
+        end
+
+        local function loadWindUIConfig()
+            local config = getWindUIConfig()
+            if not config then
+                return false
+            end
+            local ok, result = pcall(function()
+                return config:Load()
+            end)
+            return ok and result ~= nil
+        end
+
+        if ConfigManager then
+            local configInitOk, configInitError = pcall(function()
+                ConfigManager:Init(Window)
+                getWindUIConfig()
+            end)
+            if not configInitOk then
+                warn("[XL Hub] 配置初始化跳过：" .. tostring(configInitError))
+            end
+            SettingTab:Section({ Title = "配置保存" })
+            SettingTab:Button({
+                Title = "保存控件配置",
+                Desc = "保存 PC 按键和已注册控件；下次启动会自动读取",
+                Icon = "solar:diskette-bold-duotone",
+                Callback = function()
+                    if saveWindUIConfig() then
                         WindUI:Notify({
-                            Title = "UI 背景已切换",
-                            Content = backgroundSource.Name .. " 已从本地缓存读取",
+                            Title = "配置已保存",
+                            Content = "控件配置已保存到 default",
                             Duration = 3,
                         })
                     else
                         WindUI:Notify({
-                            Title = "UI 背景读取失败",
-                            Content = tostring(backgroundError or "请先确认预下载完成"),
-                            Duration = 5,
+                            Title = "保存失败",
+                            Content = "WindUI ConfigManager 不可用或配置保存失败",
+                            Duration = 4,
                         })
                     end
-                end)
-                break
-            end
-        end
-    end,
-})
-SettingTab:Section({
-    Title = "PC 端按键绑定",
-})
-local pcToggleKeybind = SettingTab:Keybind({
-    Title = "自定义开关按键",
-    Desc = "按下绑定键切换 XL Hub 的显示状态",
-    Icon = "solar:keyboard-bold-duotone",
-    Value = "RightShift",
-    Flag = "PCWindowToggleKey",
-    Callback = function(keyName)
-        local keyCode = typeof(keyName) == "EnumItem" and keyName or Enum.KeyCode[keyName]
-        if keyCode then
-            Window:SetToggleKey(keyCode)
-        end
-    end,
-})
-local ConfigManager = Window.ConfigManager
-local ConfigName = "default"
-local ConfigFile = nil
-local function getWindUIConfig()
-    if not ConfigManager then
-        return nil
-    end
-    if not ConfigFile then
-        ConfigFile = ConfigManager:CreateConfig(ConfigName)
-            if ConfigFile then
-            ConfigFile:Register("UIBackgroundSelection", uiBackgroundDropdown)
-            ConfigFile:Register("PCWindowToggleKey", pcToggleKeybind)
-        end
-    end
-    return ConfigFile
-end
-local function saveWindUIConfig()
-    local config = getWindUIConfig()
-    if not config then
-        return false
-    end
-    local ok, result = pcall(function()
-        return config:Save()
-    end)
-    return ok and result == true
-end
-local function loadWindUIConfig()
-    local config = getWindUIConfig()
-    if not config then
-        return false
-    end
-    local ok, result = pcall(function()
-        return config:Load()
-    end)
-    return ok and result ~= nil
-end
-if ConfigManager then
-    ConfigManager:Init(Window)
-    getWindUIConfig()
-    SettingTab:Section({
-        Title = "配置保存",
-    })
-    SettingTab:Button({
-        Title = "保存控件配置",
-        Desc = "保存 PC 按键和已注册控件；下次启动会自动读取",
-        Icon = "solar:diskette-bold-duotone",
-        Callback = function()
-            if saveWindUIConfig() then
-                WindUI:Notify({
-                    Title = "配置已保存",
-                    Content = "控件配置已保存到 default",
-                    Duration = 3,
-                })
-            else
-                WindUI:Notify({
-                    Title = "保存失败",
-                    Content = "WindUI ConfigManager 不可用或配置保存失败",
-                    Duration = 4,
-                })
-            end
-        end,
-    })
-    SettingTab:Button({
-        Title = "立即读取已保存配置",
-        Desc = "手动恢复上次保存的主题和控件配置",
-        Icon = "solar:folder-open-bold-duotone",
-        Callback = function()
-            if loadWindUIConfig() then
-                WindUI:Notify({
-                    Title = "配置已读取",
-                    Content = "已恢复 default 配置",
-                    Duration = 3,
-                })
-            else
-                WindUI:Notify({
-                    Title = "读取失败",
-                    Content = "暂未找到可读取的配置文件",
-                    Duration = 4,
-                })
-            end
-        end,
-    })
-    task.defer(function()
-        if loadWindUIConfig() then
-            WindUI:Notify({
-                Title = "配置已自动读取",
-                Content = "已恢复上次保存的主题和控件设置",
-                Duration = 3,
+                end,
+            })
+            SettingTab:Button({
+                Title = "立即读取已保存配置",
+                Desc = "手动恢复上次保存的主题和控件配置",
+                Icon = "solar:folder-open-bold-duotone",
+                Callback = function()
+                    if loadWindUIConfig() then
+                        WindUI:Notify({
+                            Title = "配置已读取",
+                            Content = "已恢复 default 配置",
+                            Duration = 3,
+                        })
+                    else
+                        WindUI:Notify({
+                            Title = "读取失败",
+                            Content = "暂未找到可读取的配置文件",
+                            Duration = 4,
+                        })
+                    end
+                end,
+            })
+            task.defer(function()
+                if not StartupAlive then return end
+                local loadOk, loaded = pcall(loadWindUIConfig)
+                if loadOk and loaded then
+                    WindUI:Notify({
+                        Title = "配置已自动读取",
+                        Content = "已恢复上次保存的主题和控件设置",
+                        Duration = 3,
+                    })
+                end
+            end)
+            Window:OnClose(function()
+                saveWindUIConfig()
+            end)
+            Window:OnDestroy(function()
+                saveWindUIConfig()
+            end)
+        else
+            SettingTab:Paragraph({
+                Title = "配置管理器不可用",
+                Desc = "当前 WindUI 版本未提供 ConfigManager，无法保存主题配置",
+                Icon = "solar:danger-triangle-bold-duotone",
             })
         end
-    end)
-    Window:OnClose(function()
-        saveWindUIConfig()
-    end)
-    Window:OnDestroy(function()
-        saveWindUIConfig()
-    end)
-else
-    SettingTab:Paragraph({
-        Title = "配置管理器不可用",
-        Desc = "当前 WindUI 版本未提供 ConfigManager，无法保存主题配置",
-        Icon = "solar:danger-triangle-bold-duotone",
-    })
-end
-_G.__XLHubCleanup = function()
-    if UIBackgroundCleanup then
-        pcall(UIBackgroundCleanup)
-    end
-    if ImageWindowCleanup then
-        pcall(ImageWindowCleanup)
-        ImageWindowCleanup = nil
-    end
-    ImageReloadCurrent = nil
-    if SidebarTransparencyCleanup then
-        pcall(SidebarTransparencyCleanup)
-    end
-    if GeneralState and GeneralState.CharacterConnection then
-        pcall(function() GeneralState.CharacterConnection:Disconnect() end)
-        GeneralState.CharacterConnection = nil
-    end
-    if TeleportState then
-        for _, connectionName in ipairs({"PlayerAddedConnection", "PlayerRemovingConnection"}) do
-            local connection = TeleportState[connectionName]
-            if connection then
-                pcall(function() connection:Disconnect() end)
-                TeleportState[connectionName] = nil
+
+        -- ========== 16. 清理函数 ==========
+        _G.__XLHubCleanup = function()
+            if not StartupAlive then return end
+            StartupAlive = false
+            if UIBackgroundCleanup then
+                pcall(UIBackgroundCleanup)
             end
+            if ImageWindowCleanup then
+                pcall(ImageWindowCleanup)
+                ImageWindowCleanup = nil
+            end
+            ImageReloadCurrent = nil
+            if SidebarTransparencyCleanup then
+                pcall(SidebarTransparencyCleanup)
+            end
+            UIBackgroundGeneration += 1
+            if _G.__XLHubBootToken == BootToken then
+                _G.__XLHubBootToken = nil
+            end
+            if GeneralState and GeneralState.CharacterConnection then
+                pcall(function() GeneralState.CharacterConnection:Disconnect() end)
+                GeneralState.CharacterConnection = nil
+            end
+            if TeleportState then
+                for _, connectionName in ipairs({"PlayerAddedConnection", "PlayerRemovingConnection"}) do
+                    local connection = TeleportState[connectionName]
+                    if connection then
+                        pcall(function() connection:Disconnect() end)
+                        TeleportState[connectionName] = nil
+                    end
+                end
+            end
+            pcall(function()
+                if Window and Window.Destroy then
+                    Window:Destroy()
+                end
+            end)
         end
+
+    end, globalErrorHandler)
+
+    if not ok then
+        warn("[XL Hub] 启动异常: " .. tostring(startupErr))
     end
-    pcall(function()
-        if Window and Window.Destroy then
-            Window:Destroy()
-        end
-    end)
 end
+
+-- 安全启动
+xpcall(safeStartup, function(err)
+    warn("[XL Hub] 致命启动错误: " .. tostring(err))
+    warn(debug.traceback())
+end)
