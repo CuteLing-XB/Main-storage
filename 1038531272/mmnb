@@ -729,6 +729,995 @@ local function safeStartup()
             end
         end
 
+        -- ========== Phantom Visual Engine：核心逻辑（无独立菜单） ==========
+        local PhantomRunService = game:GetService("RunService")
+        local PhantomCoreGui = game:GetService("CoreGui")
+        local PhantomWorkspace = game:GetService("Workspace")
+        local PhantomStats = game:GetService("Stats")
+        local PhantomPlayers = Players
+        local PhantomUserInputService = UserInputService
+        local PhantomLocalPlayer = LocalPlayer
+        local PhantomCamera = PhantomWorkspace.CurrentCamera
+        local PhantomPlayerList = PhantomPlayers:GetPlayers()
+        local HasDrawing = typeof(Drawing) == "table"
+        local PhantomCleanup = nil
+        local PhantomWatermarkGui = Instance.new("ScreenGui")
+        PhantomWatermarkGui.Name = "PhantomVisualEngine_Terminal"
+        PhantomWatermarkGui.ResetOnSpawn = false
+        PhantomWatermarkGui.IgnoreGuiInset = true
+        PhantomWatermarkGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        pcall(function() PhantomWatermarkGui.Parent = PhantomCoreGui end)
+        if not PhantomWatermarkGui.Parent and PhantomLocalPlayer then
+            pcall(function() PhantomWatermarkGui.Parent = PhantomLocalPlayer:WaitForChild("PlayerGui") end)
+        end
+local PhantomThemes = {
+    HackerGreen = {
+        Main = Color3.fromRGB(0, 255, 128),
+        Secondary = Color3.fromRGB(90, 255, 190),
+        Accent = Color3.fromRGB(0, 170, 90),
+        Text = Color3.fromRGB(225, 255, 240)
+    },
+    CyberBlue = {
+        Main = Color3.fromRGB(0, 180, 255),
+        Secondary = Color3.fromRGB(90, 230, 255),
+        Accent = Color3.fromRGB(0, 95, 220),
+        Text = Color3.fromRGB(225, 245, 255)
+    },
+    NeonRed = {
+        Main = Color3.fromRGB(255, 55, 80),
+        Secondary = Color3.fromRGB(255, 135, 150),
+        Accent = Color3.fromRGB(210, 20, 50),
+        Text = Color3.fromRGB(255, 235, 238)
+    },
+    LaserPurple = {
+        Main = Color3.fromRGB(185, 70, 255),
+        Secondary = Color3.fromRGB(230, 145, 255),
+        Accent = Color3.fromRGB(105, 35, 200),
+        Text = Color3.fromRGB(248, 235, 255)
+    },
+    GoldYellow = {
+        Main = Color3.fromRGB(255, 205, 35),
+        Secondary = Color3.fromRGB(255, 240, 125),
+        Accent = Color3.fromRGB(220, 140, 0),
+        Text = Color3.fromRGB(255, 248, 220)
+    },
+    IceWhite = {
+        Main = Color3.fromRGB(235, 245, 255),
+        Secondary = Color3.fromRGB(150, 210, 255),
+        Accent = Color3.fromRGB(70, 130, 200),
+        Text = Color3.fromRGB(255, 255, 255)
+    },
+    Sunset = {
+        Main = Color3.fromRGB(255, 115, 45),
+        Secondary = Color3.fromRGB(255, 185, 95),
+        Accent = Color3.fromRGB(255, 55, 120),
+        Text = Color3.fromRGB(255, 240, 225)
+    },
+    AquaPink = {
+        Main = Color3.fromRGB(35, 240, 220),
+        Secondary = Color3.fromRGB(255, 90, 210),
+        Accent = Color3.fromRGB(80, 150, 255),
+        Text = Color3.fromRGB(235, 255, 255)
+    }
+}
+
+local PhantomConfig = {
+    Enabled = false,
+    TeamCheck = false,
+    MaxDistance = 3000,
+    Theme = "HackerGreen",
+
+    ShowWatermark = false,
+    ShowCornerBox = false,
+    ShowFilledBox = false,
+    ShowSkeleton = false,
+    ShowHeadHitbox = false,
+    ShowName = false,
+    ShowDistance = false,
+    ShowWeapon = false,
+    ShowHealth = false,
+    ShowHealthBorder = false,
+    ShowAimView = false,
+    ShowVelocity = false,
+    ShowFootRings = false,
+    ShowOffScreen = false,
+    ShowTracer = false,
+    ShowTargetDot = false,
+    ShowStatusTag = false,
+    ShowFOVCircle = false,
+    ShowDynamicCrosshair = false,
+    ShowPulseBox = false,
+    ShowDistanceLine = false,
+    ShowHealthGradient = false,
+    ShowDamageIndicator = false,
+    ShowMotionTrail = false,
+    ShowGhostTrail = false,
+
+    HealthSmoothness = 0.22,
+    MenuVisible = true
+}
+
+local PhantomThemeColor = PhantomThemes[PhantomConfig.Theme].Main
+local function GetTheme()
+    return PhantomThemes[PhantomConfig.Theme] or PhantomThemes.HackerGreen
+end
+-- ============================================================
+-- 终端水印（改用 Roblox GUI，彻底避免 Drawing.Text 异常中断渲染）
+-- ============================================================
+
+local PhantomWatermarkFrame = Instance.new("Frame")
+PhantomWatermarkFrame.Name = "TerminalWatermark"
+PhantomWatermarkFrame.AnchorPoint = Vector2.new(1, 0)
+PhantomWatermarkFrame.Size = UDim2.fromOffset(330, 32)
+PhantomWatermarkFrame.Position = UDim2.new(1, -18, 0, 24)
+PhantomWatermarkFrame.BackgroundColor3 = Color3.fromRGB(8, 12, 12)
+PhantomWatermarkFrame.BackgroundTransparency = 0.18
+PhantomWatermarkFrame.BorderSizePixel = 1
+PhantomWatermarkFrame.BorderColor3 = PhantomThemeColor
+PhantomWatermarkFrame.Visible = false
+PhantomWatermarkFrame.ZIndex = 50
+PhantomWatermarkFrame.Parent = PhantomWatermarkGui
+
+local PhantomWatermarkStroke = Instance.new("UIStroke")
+PhantomWatermarkStroke.Thickness = 1
+PhantomWatermarkStroke.Color = PhantomThemeColor
+PhantomWatermarkStroke.Transparency = 0.15
+PhantomWatermarkStroke.Parent = PhantomWatermarkFrame
+
+local PhantomWatermarkText = Instance.new("TextLabel")
+PhantomWatermarkText.Size = UDim2.new(1, -10, 1, 0)
+PhantomWatermarkText.Position = UDim2.fromOffset(5, 0)
+PhantomWatermarkText.BackgroundTransparency = 1
+PhantomWatermarkText.Font = Enum.Font.Code
+PhantomWatermarkText.TextSize = 13
+PhantomWatermarkText.TextXAlignment = Enum.TextXAlignment.Center
+PhantomWatermarkText.TextYAlignment = Enum.TextYAlignment.Center
+PhantomWatermarkText.TextColor3 = PhantomThemeColor
+PhantomWatermarkText.TextStrokeTransparency = 0.55
+PhantomWatermarkText.ZIndex = 51
+PhantomWatermarkText.Parent = PhantomWatermarkFrame
+
+local frameCounter = 0
+local fpsValue = 0
+local fpsClock = os.clock()
+local PhantomWatermarkNextUpdate = 0
+local PhantomWatermarkLastTheme = ""
+-- ============================================================
+-- Drawing 安全封装
+-- ============================================================
+
+local function NewDrawing(class, props)
+    if not HasDrawing then return nil end
+    local ok, obj = pcall(function()
+        return Drawing.new(class)
+    end)
+    if not ok or not obj then return nil end
+    for k, v in pairs(props or {}) do
+        pcall(function() obj[k] = v end)
+    end
+    return obj
+end
+
+local PhantomDrawingPropertyCache = setmetatable({}, {__mode = "k"})
+local function SetDrawingProperty(obj, property, value)
+    if not obj then return end
+    local cache = PhantomDrawingPropertyCache[obj]
+    if not cache then
+        cache = {}
+        PhantomDrawingPropertyCache[obj] = cache
+    end
+    if cache[property] == value then return end
+    cache[property] = value
+    pcall(function() obj[property] = value end)
+end
+
+local function Hide(obj)
+    if not obj then return end
+    local cache = PhantomDrawingPropertyCache[obj]
+    if cache then cache.Visible = false end
+    pcall(function() obj.Visible = false end)
+end
+
+local function DestroyDrawing(obj)
+    if obj then
+        pcall(function() obj.Visible = false end)
+        pcall(function() obj:Remove() end)
+    end
+end
+
+local PhantomESP = {}
+local PhantomCharacterCache = {}
+local TrailHistory = {}
+local PhantomSmoothHealth = {}
+local PhantomDamageCache = {}
+
+local PhantomGlobal = {
+    FOV = NewDrawing("Circle", {Thickness = 1, Filled = false, NumSides = 64}),
+    CrossTop = NewDrawing("Line", {Thickness = 1}),
+    CrossBottom = NewDrawing("Line", {Thickness = 1}),
+    CrossLeft = NewDrawing("Line", {Thickness = 1}),
+    CrossRight = NewDrawing("Line", {Thickness = 1})
+}
+
+local function NewPlayerObjects()
+    local o = {
+        Corner = {},
+        Skeleton = {},
+        Filled = NewDrawing("Square", {Filled = true, Transparency = 0.18}),
+        Head = NewDrawing("Circle", {Filled = false, Thickness = 1}),
+        Arrow = NewDrawing("Triangle", {Filled = false, Thickness = 1}),
+        Name = NewDrawing("Text", {Size = 13, Center = true, Outline = true}),
+        Distance = NewDrawing("Text", {Size = 11, Center = true, Outline = true}),
+        Weapon = NewDrawing("Text", {Size = 11, Center = true, Outline = true}),
+        Health = NewDrawing("Line", {Thickness = 2}),
+        HealthBorder = NewDrawing("Line", {Thickness = 3}),
+        HealthText = NewDrawing("Text", {Size = 11, Center = false, Outline = true}),
+        Aim = NewDrawing("Line", {Thickness = 1}),
+        Velocity = NewDrawing("Line", {Thickness = 1}),
+        Tracer = NewDrawing("Line", {Thickness = 1}),
+        TargetDot = NewDrawing("Circle", {Filled = false, Thickness = 1}),
+        Status = NewDrawing("Text", {Size = 10, Center = true, Outline = true}),
+        Damage = NewDrawing("Text", {Size = 12, Center = true, Outline = true}),
+        Trail = {},
+        Ghost = {},
+        TrailHistory = {},
+        TrailPool = {},
+        Foot = {},
+        FootPoints = {},
+        TextCache = {},
+        LastStyleVersion = 0,
+        _Hidden = true,
+    }
+
+    for i = 1, 8 do o.Corner[i] = NewDrawing("Line", {Thickness = 1}) end
+    for i = 1, 8 do o.Trail[i] = NewDrawing("Line", {Thickness = math.max(1, 8-i)}) end
+    for i = 1, 12 do o.Trail[i] = NewDrawing("Line", {Thickness = math.max(1, 3 - math.floor(i / 5))}) end
+    for i = 1, 8 do o.Ghost[i] = NewDrawing("Square", {Filled = false, Thickness = 1}) end
+    for i = 1, 16 do o.Foot[i] = NewDrawing("Line", {Thickness = 1}) end
+    for i = 1, 32 do o.Skeleton[i] = NewDrawing("Line", {Thickness = 1}) end
+
+    return o
+end
+
+local function HideObjects(o)
+    if not o or o._Hidden then return end
+    o._Hidden = true
+    for _, v in pairs(o.Corner) do Hide(v) end
+    for _, v in pairs(o.Trail or {}) do Hide(v) end
+    for _, v in pairs(o.Ghost or {}) do Hide(v) end
+    for _, v in pairs(o.Skeleton) do Hide(v) end
+    for _, v in pairs(o.Trail) do Hide(v) end
+    for _, v in pairs(o.Foot) do Hide(v) end
+    for _, v in pairs({
+        o.Filled, o.Head, o.Arrow, o.Name, o.Distance, o.Weapon,
+        o.Health, o.HealthBorder, o.HealthText, o.Aim, o.Velocity,
+        o.Tracer, o.TargetDot, o.Status, o.Damage
+    }) do Hide(v) end
+end
+
+local function DestroyObjects(o)
+    if not o then return end
+    for _, v in pairs(o.Corner) do DestroyDrawing(v) end
+    for _, v in pairs(o.Trail or {}) do DestroyDrawing(v) end
+    for _, v in pairs(o.Ghost or {}) do DestroyDrawing(v) end
+    for _, v in pairs(o.Skeleton) do DestroyDrawing(v) end
+    for _, v in pairs(o.Trail) do DestroyDrawing(v) end
+    for _, v in pairs(o.Foot) do DestroyDrawing(v) end
+    for _, v in pairs({
+        o.Filled, o.Head, o.Arrow, o.Name, o.Distance, o.Weapon,
+        o.Health, o.HealthBorder, o.HealthText, o.Aim, o.Velocity,
+        o.Tracer, o.TargetDot, o.Status, o.Damage
+    }) do DestroyDrawing(v) end
+end
+
+local function GetCharacterState(player)
+    return PhantomCharacterCache[player]
+end
+
+local function ResetCharacter(player)
+    local old = PhantomCharacterCache[player]
+    if old and old.HealthConnection then
+        pcall(function() old.HealthConnection:Disconnect() end)
+    end
+    PhantomCharacterCache[player] = {
+        Character = nil,
+        Humanoid = nil,
+        Root = nil,
+        Head = nil,
+        Ready = false,
+        Status = "RESPAWNING",
+        LastRatio = 1
+    }
+    PhantomSmoothHealth[player] = 1
+    TrailHistory[player] = {}
+    PhantomDamageCache[player] = {Previous = nil, Value = 0, Time = 0}
+end
+
+local function BindCharacter(player, character)
+    ResetCharacter(player)
+    local state = PhantomCharacterCache[player]
+    state.Character = character
+    state.Status = "RESPAWNING"
+
+    task.spawn(function()
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then humanoid = character:WaitForChild("Humanoid", 5) end
+        local root = character:FindFirstChild("HumanoidRootPart")
+        if not root then root = character:WaitForChild("HumanoidRootPart", 5) end
+        local head = character:FindFirstChild("Head")
+
+        if player.Character ~= character or not humanoid or not root then
+            return
+        end
+
+        local untilTime = os.clock() + 5
+        while os.clock() < untilTime do
+            if player.Character ~= character then return end
+            if humanoid.Parent and root.Parent and humanoid.MaxHealth > 0 then break end
+            task.wait()
+        end
+
+        if player.Character ~= character or not humanoid.Parent or not root.Parent then
+            return
+        end
+
+        state.Humanoid = humanoid
+        state.Root = root
+        state.Head = head or character:FindFirstChild("Head")
+        state.Ready = humanoid.MaxHealth > 0
+        state.Status = (humanoid.Health > 0) and "ALIVE" or "DEAD"
+
+        local ratio = 1
+        if humanoid.MaxHealth > 0 then
+            ratio = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+        end
+        state.LastRatio = ratio
+        PhantomSmoothHealth[player] = ratio
+        PhantomDamageCache[player].Previous = humanoid.Health
+
+        state.HealthConnection = humanoid.HealthChanged:Connect(function(h)
+            if player.Character ~= character or state.Humanoid ~= humanoid then return end
+            local maxH = humanoid.MaxHealth
+            if type(h) == "number" and type(maxH) == "number" and maxH > 0 then
+                local previous = PhantomDamageCache[player].Previous
+                local damage = previous and math.max(previous - h, 0) or 0
+                PhantomDamageCache[player].Previous = h
+                if damage > 0 then
+                    PhantomDamageCache[player].Value = damage
+                    PhantomDamageCache[player].Time = os.clock()
+                end
+                state.LastRatio = math.clamp(h / maxH, 0, 1)
+                state.Status = h > 0 and "ALIVE" or "DEAD"
+            end
+        end)
+    end)
+end
+
+local function GetSafeRatio(player)
+    local s = PhantomCharacterCache[player]
+    if not s or not s.Ready or player.Character ~= s.Character or not s.Humanoid then
+        return nil, false
+    end
+    local h = s.Humanoid.Health
+    local mh = s.Humanoid.MaxHealth
+    if type(h) ~= "number" or type(mh) ~= "number" or mh <= 0 or h <= 0 then
+        return 0, false
+    end
+    local ratio = math.clamp(h / mh, 0, 1)
+    s.LastRatio = ratio
+    return ratio, true
+end
+
+
+local function SmoothValue(old, target, amount)
+    if old == nil then return target end
+    amount = math.clamp(amount or 0.22, 0.05, 1)
+    return old + (target - old) * amount
+end
+
+local function HealthColor(ratio)
+    ratio = math.clamp(ratio, 0, 1)
+    if ratio > 0.5 then
+        local t = (ratio - 0.5) / 0.5
+        return Color3.fromRGB(255 - math.floor(175 * t), 255, 50)
+    end
+    local t = ratio / 0.5
+    return Color3.fromRGB(255, math.floor(60 + 175 * t), 45)
+end
+
+local BoneR15 = {
+    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"},
+    {"LeftLowerArm", "LeftHand"}, {"UpperTorso", "RightUpperArm"},
+    {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"},
+    {"LeftLowerLeg", "LeftFoot"}, {"LowerTorso", "RightUpperLeg"},
+    {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+}
+local BoneR6 = {
+    {"Head", "Torso"}, {"Torso", "Left Arm"}, {"Left Arm", "Left Arm"},
+    {"Torso", "Right Arm"}, {"Torso", "Left Leg"}, {"Torso", "Right Leg"}
+}
+local PhantomFootOffsets = {}
+for i = 1, 16 do
+    local angle = math.rad((i - 1) * (360 / 16))
+    PhantomFootOffsets[i] = Vector3.new(math.cos(angle) * 2.2, 0, math.sin(angle) * 2.2)
+end
+
+local function BonePairs(character, humanoid)
+    return humanoid.RigType == Enum.HumanoidRigType.R15 and BoneR15 or BoneR6
+end
+
+local function OffscreenArrow(world)
+    local vp = PhantomCamera.ViewportSize
+    local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+    local p, on = PhantomCamera:WorldToViewportPoint(world)
+    if on then return nil end
+    local dir = Vector2.new(p.X - center.X, p.Y - center.Y)
+    if dir.Magnitude < 0.01 then dir = Vector2.new(0, -1) end
+    dir = dir.Unit
+    local radius = math.min(vp.X, vp.Y) * 0.38
+    local tip = center + dir * radius
+    local side = Vector2.new(-dir.Y, dir.X) * 10
+    return tip, tip - dir * 18 + side, tip - dir * 18 - side
+end
+
+local function GetPing()
+    local n = 0
+    pcall(function()
+        n = PhantomStats.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+    return math.floor(tonumber(n) or 0)
+end
+
+local function UpdateGlobal()
+    if PhantomGlobal.FOV then
+        SetDrawingProperty(PhantomGlobal.FOV, "Visible", PhantomConfig.Enabled and PhantomConfig.ShowFOVCircle)
+        PhantomGlobal.FOV.Position = Vector2.new(PhantomCamera.ViewportSize.X * 0.5, PhantomCamera.ViewportSize.Y * 0.5)
+        SetDrawingProperty(PhantomGlobal.FOV, "Radius", 140)
+        SetDrawingProperty(PhantomGlobal.FOV, "Color", GetTheme().Secondary)
+    end
+
+    local showCross = PhantomConfig.Enabled and PhantomConfig.ShowDynamicCrosshair
+    local c = Vector2.new(PhantomCamera.ViewportSize.X * 0.5, PhantomCamera.ViewportSize.Y * 0.5)
+    local gap = 10 + math.abs(math.sin(os.clock() * 4)) * 4
+    local accent = GetTheme().Accent
+    local function updateCross(obj, fromPoint, toPoint)
+        if not obj then return end
+        obj.From, obj.To = fromPoint, toPoint
+        SetDrawingProperty(obj, "Color", accent)
+        SetDrawingProperty(obj, "Visible", showCross)
+    end
+    updateCross(PhantomGlobal.CrossTop, c + Vector2.new(0, -gap), c + Vector2.new(0, -gap - 7))
+    updateCross(PhantomGlobal.CrossBottom, c + Vector2.new(0, gap), c + Vector2.new(0, gap + 7))
+    updateCross(PhantomGlobal.CrossLeft, c - Vector2.new(gap, 0), c - Vector2.new(gap + 7, 0))
+    updateCross(PhantomGlobal.CrossRight, c + Vector2.new(gap, 0), c + Vector2.new(gap + 7, 0))
+
+    -- 终端水印独立于 Drawing 渲染，不会因为水印异常停止 PhantomESP。
+    local watermarkOn = PhantomConfig.ShowWatermark == true
+    PhantomWatermarkFrame.Visible = watermarkOn
+    if watermarkOn then
+        local watermarkNow = os.clock()
+        local themeName = tostring(PhantomConfig.Theme or "HackerGreen")
+        if watermarkNow >= PhantomWatermarkNextUpdate or PhantomWatermarkLastTheme ~= themeName then
+            local ok, ping = pcall(GetPing)
+            ping = ok and tonumber(ping) or 0
+            PhantomWatermarkText.Text = "PHANTOM_SYS | FPS:" .. tostring(tonumber(fpsValue) or 0)
+                .. " | PING:" .. tostring(math.floor(ping or 0)) .. "ms | THEME:" .. themeName
+            PhantomWatermarkNextUpdate = watermarkNow + 0.5
+            PhantomWatermarkLastTheme = themeName
+        end
+        if PhantomWatermarkLastTheme == themeName then
+            PhantomWatermarkText.TextColor3 = PhantomThemeColor
+            PhantomWatermarkFrame.BorderColor3 = PhantomThemeColor
+            PhantomWatermarkStroke.Color = PhantomThemeColor
+        end
+    end
+end
+
+local function CheckVisibility(root)
+    -- 绘制默认永久穿墙：不进行遮挡过滤，不会因为墙体隐藏。
+    return true
+end
+
+local function RenderPlayer(player, o, precomputedDistance)
+    HideObjects(o)
+    if o and o.Velocity then
+        -- 速度线每次进入目标渲染时先强制清零，避免停速/裁剪/失活后残留。
+        pcall(function() o.Velocity.Visible = false end)
+    end
+
+    if not PhantomConfig.Enabled or player == PhantomLocalPlayer then return end
+    if PhantomConfig.TeamCheck and player.Team == PhantomLocalPlayer.Team then return end
+
+    local s = PhantomCharacterCache[player]
+    if not s or not s.Ready or s.Status ~= "ALIVE" then return end
+    if player.Character ~= s.Character or not s.Root or not s.Root.Parent then return end
+
+    local root = s.Root
+    local head = s.Head or s.Character:FindFirstChild("Head")
+    local distance = precomputedDistance or (PhantomCamera.CFrame.Position - root.Position).Magnitude
+    if distance > PhantomConfig.MaxDistance then return end
+
+    local rootP, onScreen = PhantomCamera:WorldToViewportPoint(root.Position)
+    local theme = GetTheme()
+    local base = theme.Main
+
+    -- 默认永久穿墙绘制，不进行遮挡 return。
+
+    if not onScreen then
+        if PhantomConfig.ShowOffScreen and o.Arrow then
+            o._Hidden = false
+            local a, b, c = OffscreenArrow(root.Position)
+            if a then
+                o.Arrow.PointA, o.Arrow.PointB, o.Arrow.PointC = a, b, c
+                SetDrawingProperty(o.Arrow, "Color", base)
+                SetDrawingProperty(o.Arrow, "Visible", true)
+            end
+        end
+        return
+    end
+
+    o._Hidden = false
+    local headWorld = head and head.Position or (root.Position + Vector3.new(0, 3, 0))
+    local headP = PhantomCamera:WorldToViewportPoint(headWorld + Vector3.new(0, 0.5, 0))
+    local legP = PhantomCamera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+    local height = math.clamp(math.abs(headP.Y - legP.Y), 18, 600)
+    local width = math.clamp(height * 0.55, 12, 320)
+    local pos = Vector2.new(rootP.X - width * 0.5, headP.Y)
+
+    -- 动态拖尾：记录屏幕位置，关闭时立即清空显示
+    if PhantomConfig.ShowMotionTrail or PhantomConfig.ShowGhostTrail then
+        local history = o.TrailHistory
+        local now = os.clock()
+        local last = history[#history]
+        if not last or (last.Position - Vector2.new(rootP.X, rootP.Y)).Magnitude > 1.5 or now - last.Time > 0.045 then
+            local poolCount = #o.TrailPool
+            local entry = poolCount > 0 and o.TrailPool[poolCount] or {}
+            if poolCount > 0 then o.TrailPool[poolCount] = nil end
+            entry.Position = Vector2.new(rootP.X, rootP.Y)
+            entry.Width = width
+            entry.Height = height
+            entry.Time = now
+            history[#history + 1] = entry
+        end
+        while #history > 13 do
+            local oldEntry = history[1]
+            for i = 1, #history - 1 do history[i] = history[i + 1] end
+            history[#history] = nil
+            if oldEntry then o.TrailPool[#o.TrailPool + 1] = oldEntry end
+        end
+
+        -- 清理过旧历史，防止站立/重生后残影留屏
+        for i = #history, 1, -1 do
+            if now - history[i].Time > 1.0 then
+                local oldEntry = history[i]
+                for j = i, #history - 1 do history[j] = history[j + 1] end
+                history[#history] = nil
+                if oldEntry then o.TrailPool[#o.TrailPool + 1] = oldEntry end
+            end
+        end
+
+        if PhantomConfig.ShowMotionTrail then
+            for i = 1, #o.Trail do
+                local line = o.Trail[i]
+                local a = history[i]
+                local b = history[i + 1]
+                if a and b and line then
+                    local age = math.clamp((now - a.Time) / 1.0, 0, 1)
+                    line.From = a.Position
+                    line.To = b.Position
+                    SetDrawingProperty(line, "Color", base)
+                    SetDrawingProperty(line, "Transparency", 0.08 + age * 0.82)
+                    SetDrawingProperty(line, "Visible", true)
+                else
+                    Hide(line)
+                end
+            end
+        end
+
+        if PhantomConfig.ShowGhostTrail then
+            local count = math.min(#o.Ghost, #history)
+            for i = 1, #o.Ghost do
+                local ghost = o.Ghost[i]
+                local point = history[math.max(1, #history - i + 1)]
+                if i <= count and point and ghost then
+                    local age = math.clamp((now - point.Time) / 1.0, 0, 1)
+                    local scale = 1 - i * 0.035
+                    local gw = math.max(8, point.Width * scale)
+                    local gh = math.max(12, point.Height * scale)
+                    ghost.Position = Vector2.new(point.Position.X - gw * 0.5, point.Position.Y - gh * 0.5)
+                    ghost.Size = Vector2.new(gw, gh)
+                    SetDrawingProperty(ghost, "Color", base)
+                    SetDrawingProperty(ghost, "Transparency", math.clamp(0.15 + i * 0.1 + age * 0.35, 0, 0.95))
+                    SetDrawingProperty(ghost, "Visible", true)
+                else
+                    Hide(ghost)
+                end
+            end
+        end
+    else
+        table.clear(o.TrailHistory)
+        for _, line in pairs(o.Trail) do Hide(line) end
+        for _, ghost in pairs(o.Ghost) do Hide(ghost) end
+    end
+
+    -- CornerBox
+    if PhantomConfig.ShowCornerBox or PhantomConfig.ShowPulseBox then
+        local l = width * 0.25
+        local segments = {
+            {pos, pos + Vector2.new(l, 0)},
+            {pos, pos + Vector2.new(0, l)},
+            {pos + Vector2.new(width, 0), pos + Vector2.new(width-l, 0)},
+            {pos + Vector2.new(width, 0), pos + Vector2.new(width, l)},
+            {pos + Vector2.new(0, height), pos + Vector2.new(l, height)},
+            {pos + Vector2.new(0, height), pos + Vector2.new(0, height-l)},
+            {pos + Vector2.new(width, height), pos + Vector2.new(width-l, height)},
+            {pos + Vector2.new(width, height), pos + Vector2.new(width, height-l)}
+        }
+        local alpha = 1
+        if PhantomConfig.ShowPulseBox then
+            alpha = 0.55 + (math.sin(os.clock() * 3.4) + 1) * 0.2
+        end
+        for i, seg in ipairs(segments) do
+            o.Corner[i].From, o.Corner[i].To = seg[1], seg[2]
+            SetDrawingProperty(o.Corner[i], "Color", base)
+            SetDrawingProperty(o.Corner[i], "Transparency", alpha)
+            SetDrawingProperty(o.Corner[i], "Visible", true)
+        end
+    end
+
+    if PhantomConfig.ShowFilledBox and o.Filled then
+        o.Filled.Position = pos
+        o.Filled.Size = Vector2.new(width, height)
+        SetDrawingProperty(o.Filled, "Color", base)
+        SetDrawingProperty(o.Filled, "Transparency", 0.18)
+        SetDrawingProperty(o.Filled, "Visible", true)
+    end
+
+    if PhantomConfig.ShowHeadHitbox and head and o.Head then
+        local p, vis = PhantomCamera:WorldToViewportPoint(head.Position)
+        if vis then
+            o.Head.Position = Vector2.new(p.X, p.Y)
+            o.Head.Radius = math.clamp(900 / math.max(distance, 1), 3, 18)
+            SetDrawingProperty(o.Head, "Color", base)
+            SetDrawingProperty(o.Head, "Visible", true)
+        end
+    end
+
+    if PhantomConfig.ShowSkeleton then
+        local pairs = BonePairs(s.Character, s.Humanoid)
+        for i, pair in ipairs(pairs) do
+            if o.Skeleton[i] then
+                local p1 = s.Character:FindFirstChild(pair[1])
+                local p2 = s.Character:FindFirstChild(pair[2])
+                if p1 and p2 then
+                    local a, va = PhantomCamera:WorldToViewportPoint(p1.Position)
+                    local b, vb = PhantomCamera:WorldToViewportPoint(p2.Position)
+                    if va and vb then
+                        o.Skeleton[i].From = Vector2.new(a.X, a.Y)
+                        o.Skeleton[i].To = Vector2.new(b.X, b.Y)
+                        SetDrawingProperty(o.Skeleton[i], "Color", base)
+                        SetDrawingProperty(o.Skeleton[i], "Visible", true)
+                    end
+                end
+            end
+        end
+    end
+
+    local textCache = o.TextCache
+    if PhantomConfig.ShowName and o.Name then
+        local displayName = tostring(player.DisplayName or player.Name)
+        if textCache.Name ~= displayName then
+            o.Name.Text = displayName
+            textCache.Name = displayName
+        end
+        o.Name.Position = Vector2.new(rootP.X, pos.Y - 16)
+        SetDrawingProperty(o.Name, "Color", base)
+        SetDrawingProperty(o.Name, "Visible", true)
+    end
+
+    if PhantomConfig.ShowDistance and o.Distance then
+        local distanceValue = math.floor(distance)
+        local now = os.clock()
+        if textCache.DistanceValue ~= distanceValue or not textCache.NextDistanceUpdate or now >= textCache.NextDistanceUpdate then
+            o.Distance.Text = "[" .. tostring(distanceValue) .. "m]"
+            textCache.DistanceValue = distanceValue
+            textCache.NextDistanceUpdate = now + 0.25
+        end
+        o.Distance.Position = Vector2.new(rootP.X, pos.Y + height + 3)
+        SetDrawingProperty(o.Distance, "Color", Color3.fromRGB(225, 225, 225))
+        SetDrawingProperty(o.Distance, "Visible", true)
+    end
+
+    if PhantomConfig.ShowWeapon and o.Weapon then
+        local tool = s.Character:FindFirstChildOfClass("Tool")
+        if tool then
+            local weaponName = tool.Name
+            if textCache.Weapon ~= weaponName then
+                o.Weapon.Text = weaponName
+                textCache.Weapon = weaponName
+            end
+            o.Weapon.Position = Vector2.new(rootP.X, pos.Y + height + 17)
+            SetDrawingProperty(o.Weapon, "Color", theme.Secondary)
+            SetDrawingProperty(o.Weapon, "Visible", true)
+        end
+    end
+
+    if PhantomConfig.ShowHealth then
+        local ratio, valid = GetSafeRatio(player)
+        if valid and ratio then
+            PhantomSmoothHealth[player] = SmoothValue(PhantomSmoothHealth[player], ratio, PhantomConfig.HealthSmoothness)
+            local drawRatio = math.clamp(PhantomSmoothHealth[player], 0, 1)
+            local x = pos.X - 7
+            local bottom = pos.Y + height
+            local top = bottom - math.max(height * drawRatio, 1.5)
+            local color = PhantomConfig.ShowHealthGradient and HealthColor(ratio) or theme.Secondary
+
+            -- 核心：默认没有任何黑色健康条背景。
+            if PhantomConfig.ShowHealthBorder and o.HealthBorder then
+                o.HealthBorder.From = Vector2.new(x, pos.Y)
+                o.HealthBorder.To = Vector2.new(x, bottom)
+                SetDrawingProperty(o.HealthBorder, "Color", Color3.fromRGB(45, 45, 50))
+                SetDrawingProperty(o.HealthBorder, "Transparency", 0.35)
+                SetDrawingProperty(o.HealthBorder, "Visible", true)
+            end
+
+            o.Health.From = Vector2.new(x, bottom)
+            o.Health.To = Vector2.new(x, top)
+            SetDrawingProperty(o.Health, "Color", color)
+            SetDrawingProperty(o.Health, "Visible", true)
+
+            local healthPercent = math.floor(ratio * 100 + 0.5)
+            if textCache.HealthPercent ~= healthPercent then
+                o.HealthText.Text = tostring(healthPercent) .. "%"
+                textCache.HealthPercent = healthPercent
+            end
+            o.HealthText.Position = Vector2.new(x - 22, top - 6)
+            SetDrawingProperty(o.HealthText, "Color", color)
+            SetDrawingProperty(o.HealthText, "Visible", true)
+        end
+    end
+
+    if PhantomConfig.ShowAimView and head and o.Aim then
+        local a = PhantomCamera:WorldToViewportPoint(head.Position)
+        local b = PhantomCamera:WorldToViewportPoint(head.Position + head.CFrame.LookVector * 8)
+        if a and b then
+            o.Aim.From = Vector2.new(a.X, a.Y)
+            o.Aim.To = Vector2.new(b.X, b.Y)
+            SetDrawingProperty(o.Aim, "Color", theme.Text)
+            SetDrawingProperty(o.Aim, "Visible", true)
+        end
+    end
+
+    if PhantomConfig.ShowVelocity and o.Velocity then
+        local velocity = root.AssemblyLinearVelocity
+        if velocity.Magnitude > 0.5 then
+            local p, vis = PhantomCamera:WorldToViewportPoint(root.Position + velocity * 0.35)
+                        if vis then
+                o.Velocity.From = Vector2.new(rootP.X, rootP.Y)
+                o.Velocity.To = Vector2.new(p.X, p.Y)
+                o.Velocity.Color = theme.Accent
+                o.Velocity.Visible = true
+            else
+                pcall(function() o.Velocity.Visible = false end)
+            end
+        else
+            pcall(function() o.Velocity.Visible = false end)
+        end
+    else
+        if o.Velocity then
+            pcall(function() o.Velocity.Visible = false end)
+        end
+    end
+    if PhantomConfig.ShowTracer and o.Tracer then
+        o.Tracer.From = Vector2.new(PhantomCamera.ViewportSize.X * 0.5, PhantomCamera.ViewportSize.Y - 6)
+        o.Tracer.To = Vector2.new(rootP.X, rootP.Y)
+        SetDrawingProperty(o.Tracer, "Color", base)
+        SetDrawingProperty(o.Tracer, "Transparency", 0.75)
+        SetDrawingProperty(o.Tracer, "Visible", true)
+    elseif PhantomConfig.ShowDistanceLine and o.Tracer then
+        o.Tracer.From = Vector2.new(rootP.X, rootP.Y)
+        o.Tracer.To = Vector2.new(rootP.X, math.min(PhantomCamera.ViewportSize.Y - 8, rootP.Y + 100))
+        SetDrawingProperty(o.Tracer, "Color", base)
+        SetDrawingProperty(o.Tracer, "Transparency", 0.7)
+        SetDrawingProperty(o.Tracer, "Visible", true)
+    end
+
+    if PhantomConfig.ShowTargetDot and o.TargetDot then
+        o.TargetDot.Position = Vector2.new(rootP.X, rootP.Y)
+        o.TargetDot.Radius = math.clamp(700 / math.max(distance, 1), 3, 10)
+        SetDrawingProperty(o.TargetDot, "Color", base)
+        SetDrawingProperty(o.TargetDot, "Visible", true)
+    end
+
+    if PhantomConfig.ShowStatusTag and o.Status then
+        o.Status.Text = "[ALIVE]"
+        o.Status.Position = Vector2.new(rootP.X, pos.Y - 30)
+        SetDrawingProperty(o.Status, "Color", theme.Secondary)
+        SetDrawingProperty(o.Status, "Visible", true)
+    end
+
+    if PhantomConfig.ShowDamageIndicator then
+        local d = PhantomDamageCache[player]
+        if d and d.Value > 0 and os.clock() - d.Time < 0.75 then
+            local a = math.clamp((os.clock() - d.Time) / 0.75, 0, 1)
+            local damageValue = math.floor(d.Value + 0.5)
+            if o.TextCache.DamageValue ~= damageValue then
+                o.Damage.Text = "-" .. tostring(damageValue)
+                o.TextCache.DamageValue = damageValue
+            end
+            o.Damage.Position = Vector2.new(rootP.X, pos.Y - 44 - a * 25)
+            o.Damage.Transparency = a
+            SetDrawingProperty(o.Damage, "Color", Color3.fromRGB(255, 75, 75))
+            SetDrawingProperty(o.Damage, "Visible", true)
+        end
+    end
+
+    if PhantomConfig.ShowFootRings then
+        local foot = root.Position - Vector3.new(0, 3, 0)
+        local pts = o.FootPoints
+        local pointCount = 0
+        for i = 1, 16 do
+            local p, vis = PhantomCamera:WorldToViewportPoint(foot + PhantomFootOffsets[i])
+            if not vis then
+                pointCount = 0
+                break
+            end
+            pointCount = i
+            pts[i] = Vector2.new(p.X, p.Y)
+        end
+        if pointCount == 16 then
+            for i = 1, 16 do
+                local footLine = o.Foot[i]
+                if footLine then
+                    footLine.From = pts[i]
+                    footLine.To = pts[(i % 16) + 1]
+                    SetDrawingProperty(footLine, "Color", base)
+                    SetDrawingProperty(footLine, "Visible", true)
+                end
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- 生命周期
+-- ============================================================
+
+local PhantomConnections = {}
+
+local function SetupPlayer(player)
+    if player == PhantomLocalPlayer then return end
+    ResetCharacter(player)
+
+    if player.Character then
+        BindCharacter(player, player.Character)
+    end
+
+    PhantomConnections[player] = player.CharacterAdded:Connect(function(character)
+        if PhantomESP[player] then HideObjects(PhantomESP[player]) end
+        BindCharacter(player, character)
+    end)
+end
+
+local function RemovePlayer(player)
+    if PhantomConnections[player] then
+        pcall(function() PhantomConnections[player]:Disconnect() end)
+        PhantomConnections[player] = nil
+    end
+    if PhantomCharacterCache[player] and PhantomCharacterCache[player].HealthConnection then
+        pcall(function() PhantomCharacterCache[player].HealthConnection:Disconnect() end)
+    end
+    if PhantomESP[player] then
+        DestroyObjects(PhantomESP[player])
+        PhantomESP[player] = nil
+    end
+    PhantomCharacterCache[player] = nil
+    PhantomSmoothHealth[player] = nil
+    PhantomDamageCache[player] = nil
+end
+
+for _, player in ipairs(PhantomPlayerList) do
+    SetupPlayer(player)
+end
+PhantomConnections.PlayerAdded = PhantomPlayers.PlayerAdded:Connect(function(player)
+    PhantomPlayerList[#PhantomPlayerList + 1] = player
+    SetupPlayer(player)
+end)
+PhantomConnections.PlayerRemoving = PhantomPlayers.PlayerRemoving:Connect(function(player)
+    RemovePlayer(player)
+    for i = #PhantomPlayerList, 1, -1 do
+        if PhantomPlayerList[i] == player then
+            table.remove(PhantomPlayerList, i)
+            break
+        end
+    end
+end)
+PhantomConnections.CurrentCameraChanged = PhantomWorkspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    PhantomCamera = PhantomWorkspace.CurrentCamera
+end)
+local PhantomRenderConnection
+local PhantomDestroyed = false
+
+local function PhantomHideEverything()
+    for _, o in pairs(PhantomESP) do HideObjects(o) end
+    for _, o in pairs(PhantomGlobal) do Hide(o) end
+end
+
+local function PhantomCleanupImpl()
+    if PhantomDestroyed then return end
+    PhantomDestroyed = true
+
+    if PhantomRenderConnection then
+        pcall(function() PhantomRenderConnection:Disconnect() end)
+        PhantomRenderConnection = nil
+    end
+
+    for k, c in pairs(PhantomConnections) do
+        pcall(function() c:Disconnect() end)
+        PhantomConnections[k] = nil
+    end
+
+    PhantomHideEverything()
+
+    for _, o in pairs(PhantomESP) do
+        DestroyObjects(o)
+    end
+    table.clear(PhantomESP)
+    table.clear(PhantomCharacterCache)
+    table.clear(PhantomSmoothHealth)
+    table.clear(PhantomDamageCache)
+    table.clear(PhantomDrawingPropertyCache)
+
+    for _, o in pairs(PhantomGlobal) do
+        DestroyDrawing(o)
+    end
+
+    pcall(function() PhantomWatermarkGui:Destroy() end)
+end
+        PhantomCleanup = PhantomCleanupImpl
+if HasDrawing then
+PhantomRenderConnection = PhantomRunService.RenderStepped:Connect(function()
+    if PhantomDestroyed then return end
+    if not PhantomConfig.Enabled and not PhantomConfig.ShowWatermark then return end
+    if not PhantomCamera then return end
+    frameCounter += 1
+    local now = os.clock()
+    if now - fpsClock >= 1 then
+        fpsValue = frameCounter
+        frameCounter = 0
+        fpsClock = now
+    end
+
+    PhantomThemeColor = GetTheme().Main
+    UpdateGlobal()
+
+    if not HasDrawing then return end
+
+    if not PhantomConfig.Enabled then
+        return
+    end
+
+    local cameraPosition = PhantomCamera.CFrame.Position
+    local maxDistance = PhantomConfig.MaxDistance
+    for _, player in ipairs(PhantomPlayerList) do
+        if player ~= PhantomLocalPlayer then
+            if not PhantomESP[player] then
+                PhantomESP[player] = NewPlayerObjects()
+            end
+            local state = PhantomCharacterCache[player]
+            local root = state and state.Root
+            local distance = root and root.Parent and (cameraPosition - root.Position).Magnitude or math.huge
+            if distance <= maxDistance then
+                RenderPlayer(player, PhantomESP[player], distance)
+            else
+                HideObjects(PhantomESP[player])
+            end
+        end
+    end
+end)
+end
         -- ========== 8. 构建主界面 ==========
         local VersionTag = Window:Tag({
             Title = "Beta",
@@ -2137,6 +3126,155 @@ local function safeStartup()
             end,
         })
 
+        -- ========== 视觉 (ESP) Tab：Phantom Visual Engine ==========
+        local VisualTab = Window:Tab({
+            Title = "视觉 (ESP)",
+            Icon = "solar:eye-bold-duotone",
+        })
+        local PhantomControls = {}
+        local PhantomToggleControls = {}
+        VisualTab:Section({ Title = "Phantom Visual Engine" })
+        VisualTab:Paragraph({
+            Title = "Drawing API 视觉引擎",
+            Desc = HasDrawing and "ESP 绘制设置" or "当前执行器不支持 Drawing API。",
+            Icon = HasDrawing and "solar:shield-check-bold-duotone" or "solar:danger-triangle-bold-duotone",
+        })
+        if not HasDrawing then
+            VisualTab:Paragraph({
+                Title = "Drawing API 不可用",
+                Desc = "当前执行器不支持 ESP 绘制。",
+                Icon = "solar:danger-triangle-bold-duotone",
+            })
+        end
+
+        local function PhantomToggle(title, key, desc)
+            local control = VisualTab:Toggle({
+                Title = title,
+                Desc = desc or "独立开关",
+                Icon = "solar:eye-bold-duotone",
+                Value = PhantomConfig[key] == true,
+                Flag = "ESP_" .. key,
+                Callback = function(value)
+                    PhantomConfig[key] = value == true
+                    if value == true and key ~= "Enabled" and key ~= "TeamCheck" and not PhantomConfig.Enabled then
+                        PhantomConfig.Enabled = true
+                        local master = PhantomToggleControls.Enabled
+                        if master then
+                            pcall(function()
+                                if type(master.Set) == "function" then
+                                    master:Set(true)
+                                elseif type(master.SetValue) == "function" then
+                                    master:SetValue(true)
+                                end
+                            end)
+                        end
+                    elseif key == "Enabled" and not PhantomConfig.Enabled then
+                        PhantomHideEverything()
+                    end
+                end,
+            })
+                        PhantomControls["ESP_" .. key] = control
+            PhantomToggleControls[key] = control
+            return control
+        end
+        local function PhantomDisableAll()
+            for key in pairs(PhantomToggleControls) do
+                PhantomConfig[key] = false
+            end
+            for _, control in pairs(PhantomToggleControls) do
+                if control then
+                    pcall(function()
+                        if type(control.Set) == "function" then
+                            control:Set(false)
+                        end
+                    end)
+                    pcall(function()
+                        if type(control.SetValue) == "function" then
+                            control:SetValue(false)
+                        end
+                    end)
+                end
+            end
+            PhantomHideEverything()
+        end
+        local function PhantomSlider(title, key, minValue, maxValue, step, desc)
+            local control = VisualTab:Slider({
+                Title = title,
+                Desc = desc or "调整参数",
+                Icon = "solar:settings-bold-duotone",
+                Step = step,
+                Value = {Min = minValue, Max = maxValue, Default = PhantomConfig[key]},
+                Flag = "ESP_" .. key,
+                Callback = function(value)
+                    PhantomConfig[key] = tonumber(value) or PhantomConfig[key]
+                end,
+            })
+            PhantomControls["ESP_" .. key] = control
+            return control
+        end
+
+        PhantomToggle("总视觉开关", "Enabled", "开启或关闭全部 ESP 绘制")
+        VisualTab:Section({ Title = "目标信息与方框" })
+        PhantomToggle("终端水印", "ShowWatermark")
+        PhantomToggle("角落方框", "ShowCornerBox")
+        PhantomToggle("半透明方框", "ShowFilledBox")
+        PhantomToggle("呼吸方框", "ShowPulseBox")
+        PhantomToggle("骨骼", "ShowSkeleton")
+        PhantomToggle("头部圆", "ShowHeadHitbox")
+        PhantomToggle("玩家名字", "ShowName")
+        PhantomToggle("距离", "ShowDistance")
+        PhantomToggle("手持武器", "ShowWeapon")
+        PhantomToggle("血条", "ShowHealth")
+        PhantomToggle("血条外框", "ShowHealthBorder")
+        PhantomToggle("血条渐变", "ShowHealthGradient")
+        PhantomToggle("状态标签", "ShowStatusTag")
+        PhantomToggle("伤害提示", "ShowDamageIndicator")
+
+        VisualTab:Section({ Title = "轨迹、辅助线与方向" })
+        PhantomToggle("动态拖尾", "ShowMotionTrail")
+        PhantomToggle("残影拖尾", "ShowGhostTrail")
+        PhantomToggle("视线方向", "ShowAimView")
+        PhantomToggle("速度预测", "ShowVelocity")
+        PhantomToggle("脚底光环", "ShowFootRings")
+        PhantomToggle("屏幕外箭头", "ShowOffScreen")
+        PhantomToggle("底部追踪线", "ShowTracer")
+        PhantomToggle("距离辅助线", "ShowDistanceLine")
+        PhantomToggle("目标点", "ShowTargetDot")
+
+        VisualTab:Section({ Title = "屏幕效果与参数" })
+        PhantomToggle("FOV 圈", "ShowFOVCircle")
+        PhantomToggle("动态准星", "ShowDynamicCrosshair")
+        PhantomToggle("队友过滤", "TeamCheck")
+        PhantomSlider("最大绘制距离", "MaxDistance", 100, 10000, 50, "超过此距离的目标不绘制")
+        PhantomSlider("血量平滑度", "HealthSmoothness", 0.05, 1, 0.01, "血条平滑跟随真实血量")
+
+        local PhantomThemeNames = {"HackerGreen", "CyberBlue", "NeonRed", "LaserPurple", "GoldYellow", "IceWhite", "Sunset", "AquaPink"}
+        local PhantomThemeControl = VisualTab:Dropdown({
+            Title = "视觉主题",
+            Desc = "切换主色、副色、强调色和终端水印配色",
+            Icon = "solar:palette-bold-duotone",
+            Values = PhantomThemeNames,
+            Value = PhantomConfig.Theme,
+            Flag = "ESP_Theme",
+            Callback = function(value)
+                local selected = type(value) == "table" and value[1] or value
+                if PhantomThemes[selected] then
+                    PhantomConfig.Theme = selected
+                    local selectedTheme = PhantomThemes[selected]
+                    PhantomThemeColor = selectedTheme.Main
+                end
+            end,
+        })
+        PhantomControls["ESP_Theme"] = PhantomThemeControl
+        VisualTab:Button({
+            Title = "清理绘制并关闭全部开关",
+            Desc = "关闭所有 ESP 开关并立即清理绘制",
+            Icon = "solar:trash-bin-trash-bold-duotone",
+            Callback = function()
+                PhantomDisableAll()
+            end,
+        })
+
         -- ========== 13. 服务器脚本 Tabs ==========
         for _, server in ipairs(ServerScripts) do
             local tab = Window:Tab({
@@ -2233,6 +3371,12 @@ local function safeStartup()
                 if ConfigFile then
                     ConfigFile:Register("UIBackgroundSelection", uiBackgroundDropdown)
                     ConfigFile:Register("PCWindowToggleKey", pcToggleKeybind)
+                    for flag, control in pairs(PhantomControls) do
+                        local key = string.gsub(flag, "^ESP_", "")
+                        if control and not PhantomToggleControls[key] then
+                            pcall(function() ConfigFile:Register(flag, control) end)
+                        end
+                    end
                 end
             end
             return ConfigFile
@@ -2257,7 +3401,11 @@ local function safeStartup()
                 return false
             end
             local ok, result = pcall(function()
-                return config:Load()
+                local loaded = config:Load()
+                if PhantomDisableAll then
+                    PhantomDisableAll()
+                end
+                return loaded
             end)
             return ok and result ~= nil
         end
@@ -2273,7 +3421,7 @@ local function safeStartup()
             SettingTab:Section({ Title = "配置保存" })
             SettingTab:Button({
                 Title = "保存控件配置",
-                Desc = "保存 PC 按键和已注册控件；下次启动会自动读取",
+                Desc = "保存主题、参数和按键；ESP 开关不保存",
                 Icon = "solar:diskette-bold-duotone",
                 Callback = function()
                     if saveWindUIConfig() then
@@ -2293,7 +3441,7 @@ local function safeStartup()
             })
             SettingTab:Button({
                 Title = "立即读取已保存配置",
-                Desc = "手动恢复上次保存的主题和控件配置",
+                Desc = "恢复主题、参数和按键；ESP 开关需手动开启",
                 Icon = "solar:folder-open-bold-duotone",
                 Callback = function()
                     if loadWindUIConfig() then
@@ -2312,12 +3460,13 @@ local function safeStartup()
                 end,
             })
             task.defer(function()
+                task.wait(0.25)
                 if not StartupAlive then return end
                 local loadOk, loaded = pcall(loadWindUIConfig)
                 if loadOk and loaded then
                     WindUI:Notify({
                         Title = "配置已自动读取",
-                        Content = "已恢复上次保存的主题和控件设置",
+                        Content = "已恢复主题、参数和按键；ESP 开关保持关闭",
                         Duration = 3,
                     })
                 end
@@ -2367,6 +3516,10 @@ local function safeStartup()
                         TeleportState[connectionName] = nil
                     end
                 end
+            end
+            if PhantomCleanup then
+                pcall(PhantomCleanup)
+                PhantomCleanup = nil
             end
             pcall(function()
                 if Window and Window.Destroy then
