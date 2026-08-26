@@ -10,6 +10,7 @@ local function safeStartup()
     local StartupAlive = true
     local SidebarTransparencyCleanup = nil
     local UIBackgroundCleanup = nil
+    local UIBackgroundTask = nil
     local ImageWindowCleanup = nil
     local ImageReloadCurrent = nil
 
@@ -145,6 +146,19 @@ local function safeStartup()
             return candidates
         end
 
+        local function getResponseBody(response)
+            if type(response) == "string" and response ~= "" then
+                return response
+            end
+            if type(response) == "table" then
+                local body = response.Body or response.body
+                if type(body) == "string" and body ~= "" then
+                    return body
+                end
+            end
+            return nil
+        end
+
         -- requestHttpBody 恢复 game:HttpGet 作为最后后备
         local function requestHttpBody(url, accept)
             if type(url) ~= "string" or url == "" then
@@ -166,14 +180,11 @@ local function safeStartup()
                     })
                 end)
                 if ok then
-                    if type(response) == "string" and response ~= "" then
-                        return response
+                    local body = getResponseBody(response)
+                    if body then
+                        return body
                     end
                     if type(response) == "table" then
-                        local body = response.Body or response.body
-                        if type(body) == "string" and body ~= "" then
-                            return body
-                        end
                         errors[#errors + 1] = "执行器返回空 Body"
                     else
                         errors[#errors + 1] = "执行器返回格式不是字符串或响应表"
@@ -195,24 +206,29 @@ local function safeStartup()
             error("所有请求方式均失败：" .. table.concat(errors, " | "))
         end
 
-        -- 防止请求函数卡住界面：超时后将控制权还给窗口并显示错误
+        -- 防止请求函数卡住界面：用事件唤醒替代固定间隔轮询。
         local function requestHttpBodyWithTimeout(url, accept, timeoutSeconds)
             timeoutSeconds = tonumber(timeoutSeconds) or 15
             local finished = false
             local requestOk = false
             local result
+            local completion = Instance.new("BindableEvent")
+            local waiting = true
 
             task.spawn(function()
                 requestOk, result = pcall(function()
                     return requestHttpBody(url, accept)
                 end)
                 finished = true
+                if waiting then completion:Fire() end
+            end)
+            task.delay(timeoutSeconds, function()
+                if waiting then completion:Fire() end
             end)
 
-            local deadline = os.clock() + timeoutSeconds
-            while not finished and os.clock() < deadline do
-                task.wait(0.05)
-            end
+            completion.Event:Wait()
+            waiting = false
+            completion:Destroy()
 
             if not finished then
                 error("请求超时（" .. tostring(timeoutSeconds) .. " 秒）")
@@ -621,13 +637,17 @@ local function safeStartup()
             return true
         end
 
-        -- 启动时仅尝试加载第一张背景（若缓存存在则直接使用，否则下载）
-        task.spawn(function()
+        -- 启动时仅尝试加载第一张背景（若缓存存在则直接使用，否则下载）。
+        local backgroundGeneration = UIBackgroundGeneration
+        UIBackgroundTask = task.spawn(function()
             local ok, err = pcall(function()
                 applyUIBackground(1)
             end)
             if not ok then
                 warn("[XL Hub] 初始背景加载失败（不影响主功能）: " .. tostring(err))
+            end
+            if UIBackgroundGeneration == backgroundGeneration then
+                UIBackgroundTask = nil
             end
         end)
 
@@ -662,20 +682,8 @@ local function safeStartup()
                 boundSidebarObjects[object] = true
                 if object:IsA("ImageLabel") or object:IsA("ImageButton") then
                     object.ImageTransparency = 1
-                    local imageConnection = object:GetPropertyChangedSignal("ImageTransparency"):Connect(function()
-                        if object.Parent then
-                            object.ImageTransparency = 1
-                        end
-                    end)
-                    sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = imageConnection
                 end
                 object.BackgroundTransparency = 1
-                local backgroundConnection = object:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
-                    if object.Parent then
-                        object.BackgroundTransparency = 1
-                    end
-                end)
-                sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = backgroundConnection
             end
             local function bindSidebarTree(root)
                 makeSidebarTabBackgroundTransparent(root)
@@ -688,14 +696,8 @@ local function safeStartup()
             local sidebar = Window.UIElements and Window.UIElements.SideBarContainer
             if sidebar then
                 bindSidebarTree(sidebar)
-                local sidebarBindQueued = false
-                local sidebarConnection = sidebar.DescendantAdded:Connect(function()
-                    if sidebarBindQueued then return end
-                    sidebarBindQueued = true
-                    task.defer(function()
-                        sidebarBindQueued = false
-                        if sidebar.Parent then bindSidebarTree(sidebar) end
-                    end)
+                local sidebarConnection = sidebar.DescendantAdded:Connect(function(descendant)
+                    makeSidebarTabBackgroundTransparent(descendant)
                 end)
                 sidebarTransparencyConnections[#sidebarTransparencyConnections + 1] = sidebarConnection
                 SidebarTransparencyCleanup = function()
@@ -838,6 +840,11 @@ local PhantomConfig = {
 }
 
 local PhantomThemeColor = PhantomThemes[PhantomConfig.Theme].Main
+local PhantomStaticColors = {
+    Distance = Color3.fromRGB(225, 225, 225),
+    HealthBorder = Color3.fromRGB(45, 45, 50),
+    Damage = Color3.fromRGB(255, 75, 75),
+}
 local function GetTheme()
     return PhantomThemes[PhantomConfig.Theme] or PhantomThemes.HackerGreen
 end
@@ -882,6 +889,8 @@ local fpsValue = 0
 local fpsClock = os.clock()
 local PhantomWatermarkNextUpdate = 0
 local PhantomWatermarkLastTheme = ""
+local PhantomLowFreqInterval = 1 / 20
+local PhantomLastLowFreqUpdate = 0
 -- ============================================================
 -- Drawing 安全封装
 -- ============================================================
@@ -1149,17 +1158,25 @@ local function BonePairs(character, humanoid)
 end
 
 local function OffscreenArrow(world)
-    local vp = PhantomCamera.ViewportSize
-    local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
-    local p, on = PhantomCamera:WorldToViewportPoint(world)
-    if on then return nil end
-    local dir = Vector2.new(p.X - center.X, p.Y - center.Y)
-    if dir.Magnitude < 0.01 then dir = Vector2.new(0, -1) end
-    dir = dir.Unit
-    local radius = math.min(vp.X, vp.Y) * 0.38
-    local tip = center + dir * radius
-    local side = Vector2.new(-dir.Y, dir.X) * 10
-    return tip, tip - dir * 18 + side, tip - dir * 18 - side
+    local viewport = PhantomCamera.ViewportSize
+    local centerX, centerY = viewport.X * 0.5, viewport.Y * 0.5
+    local point, onScreen = PhantomCamera:WorldToViewportPoint(world)
+    if onScreen then return nil end
+
+    local dx, dy = point.X - centerX, point.Y - centerY
+    local length = math.sqrt(dx * dx + dy * dy)
+    if length < 0.01 then
+        dx, dy, length = 0, -1, 1
+    end
+    dx, dy = dx / length, dy / length
+    local radius = math.min(viewport.X, viewport.Y) * 0.38
+    local tipX, tipY = centerX + dx * radius, centerY + dy * radius
+    local baseX, baseY = tipX - dx * 18, tipY - dy * 18
+    local sideX, sideY = -dy * 10, dx * 10
+
+    return Vector2.new(tipX, tipY),
+        Vector2.new(baseX + sideX, baseY + sideY),
+        Vector2.new(baseX - sideX, baseY - sideY)
 end
 
 local function GetPing()
@@ -1220,7 +1237,7 @@ local function CheckVisibility(root)
     return true
 end
 
-local function RenderPlayer(player, o, precomputedDistance)
+local function RenderPlayer(player, o, precomputedDistance, isLowFreqFrame)
     HideObjects(o)
     if o and o.Velocity then
         -- 速度线每次进入目标渲染时先强制清零，避免停速/裁剪/失活后残留。
@@ -1342,28 +1359,40 @@ local function RenderPlayer(player, o, precomputedDistance)
         for _, ghost in pairs(o.Ghost) do Hide(ghost) end
     end
 
-    -- CornerBox
+    -- CornerBox：只计算标量坐标，复用同一帧内的端点向量，不创建 segments 临时表。
     if PhantomConfig.ShowCornerBox or PhantomConfig.ShowPulseBox then
         local l = width * 0.25
-        local segments = {
-            {pos, pos + Vector2.new(l, 0)},
-            {pos, pos + Vector2.new(0, l)},
-            {pos + Vector2.new(width, 0), pos + Vector2.new(width-l, 0)},
-            {pos + Vector2.new(width, 0), pos + Vector2.new(width, l)},
-            {pos + Vector2.new(0, height), pos + Vector2.new(l, height)},
-            {pos + Vector2.new(0, height), pos + Vector2.new(0, height-l)},
-            {pos + Vector2.new(width, height), pos + Vector2.new(width-l, height)},
-            {pos + Vector2.new(width, height), pos + Vector2.new(width, height-l)}
-        }
-        local alpha = 1
-        if PhantomConfig.ShowPulseBox then
-            alpha = 0.55 + (math.sin(os.clock() * 3.4) + 1) * 0.2
-        end
-        for i, seg in ipairs(segments) do
-            o.Corner[i].From, o.Corner[i].To = seg[1], seg[2]
-            SetDrawingProperty(o.Corner[i], "Color", base)
-            SetDrawingProperty(o.Corner[i], "Transparency", alpha)
-            SetDrawingProperty(o.Corner[i], "Visible", true)
+        local px, py = pos.X, pos.Y
+        local wx, hy = px + width, py + height
+        local tl = Vector2.new(px, py)
+        local tr = Vector2.new(wx, py)
+        local bl = Vector2.new(px, hy)
+        local br = Vector2.new(wx, hy)
+        local tlH = Vector2.new(px + l, py)
+        local tlV = Vector2.new(px, py + l)
+        local trH = Vector2.new(wx - l, py)
+        local trV = Vector2.new(wx, py + l)
+        local blH = Vector2.new(px + l, hy)
+        local blV = Vector2.new(px, hy - l)
+        local brH = Vector2.new(wx - l, hy)
+        local brV = Vector2.new(wx, hy - l)
+        local corner = o.Corner
+        corner[1].From, corner[1].To = tl, tlH
+        corner[2].From, corner[2].To = tl, tlV
+        corner[3].From, corner[3].To = tr, trH
+        corner[4].From, corner[4].To = tr, trV
+        corner[5].From, corner[5].To = bl, blH
+        corner[6].From, corner[6].To = bl, blV
+        corner[7].From, corner[7].To = br, brH
+        corner[8].From, corner[8].To = br, brV
+        local alpha = PhantomConfig.ShowPulseBox
+            and (0.55 + (math.sin(os.clock() * 3.4) + 1) * 0.2)
+            or 1
+        for i = 1, 8 do
+            local line = corner[i]
+            SetDrawingProperty(line, "Color", base)
+            SetDrawingProperty(line, "Transparency", alpha)
+            SetDrawingProperty(line, "Visible", true)
         end
     end
 
@@ -1407,10 +1436,9 @@ local function RenderPlayer(player, o, precomputedDistance)
 
     local textCache = o.TextCache
     if PhantomConfig.ShowName and o.Name then
-        local displayName = tostring(player.DisplayName or player.Name)
-        if textCache.Name ~= displayName then
-            o.Name.Text = displayName
-            textCache.Name = displayName
+        if isLowFreqFrame or textCache.Name == nil then
+            textCache.Name = tostring(player.DisplayName or player.Name)
+            o.Name.Text = textCache.Name
         end
         o.Name.Position = Vector2.new(rootP.X, pos.Y - 16)
         SetDrawingProperty(o.Name, "Color", base)
@@ -1420,23 +1448,26 @@ local function RenderPlayer(player, o, precomputedDistance)
     if PhantomConfig.ShowDistance and o.Distance then
         local distanceValue = math.floor(distance)
         local now = os.clock()
-        if textCache.DistanceValue ~= distanceValue or not textCache.NextDistanceUpdate or now >= textCache.NextDistanceUpdate then
+        if isLowFreqFrame or textCache.DistanceValue == nil
+            or distanceValue ~= textCache.DistanceValue
+                and (not textCache.NextDistanceUpdate or now >= textCache.NextDistanceUpdate) then
             o.Distance.Text = "[" .. tostring(distanceValue) .. "m]"
             textCache.DistanceValue = distanceValue
             textCache.NextDistanceUpdate = now + 0.25
         end
         o.Distance.Position = Vector2.new(rootP.X, pos.Y + height + 3)
-        SetDrawingProperty(o.Distance, "Color", Color3.fromRGB(225, 225, 225))
+        SetDrawingProperty(o.Distance, "Color", PhantomStaticColors.Distance)
         SetDrawingProperty(o.Distance, "Visible", true)
     end
 
     if PhantomConfig.ShowWeapon and o.Weapon then
-        local tool = s.Character:FindFirstChildOfClass("Tool")
-        if tool then
-            local weaponName = tool.Name
-            if textCache.Weapon ~= weaponName then
-                o.Weapon.Text = weaponName
-                textCache.Weapon = weaponName
+        if isLowFreqFrame or textCache.Weapon == nil then
+            local tool = s.Character:FindFirstChildOfClass("Tool")
+            textCache.Weapon = tool and tool.Name or ""
+        end
+        if textCache.Weapon ~= "" then
+            if o.Weapon.Text ~= textCache.Weapon then
+                o.Weapon.Text = textCache.Weapon
             end
             o.Weapon.Position = Vector2.new(rootP.X, pos.Y + height + 17)
             SetDrawingProperty(o.Weapon, "Color", theme.Secondary)
@@ -1458,7 +1489,7 @@ local function RenderPlayer(player, o, precomputedDistance)
             if PhantomConfig.ShowHealthBorder and o.HealthBorder then
                 o.HealthBorder.From = Vector2.new(x, pos.Y)
                 o.HealthBorder.To = Vector2.new(x, bottom)
-                SetDrawingProperty(o.HealthBorder, "Color", Color3.fromRGB(45, 45, 50))
+                SetDrawingProperty(o.HealthBorder, "Color", PhantomStaticColors.HealthBorder)
                 SetDrawingProperty(o.HealthBorder, "Transparency", 0.35)
                 SetDrawingProperty(o.HealthBorder, "Visible", true)
             end
@@ -1549,7 +1580,7 @@ local function RenderPlayer(player, o, precomputedDistance)
             end
             o.Damage.Position = Vector2.new(rootP.X, pos.Y - 44 - a * 25)
             o.Damage.Transparency = a
-            SetDrawingProperty(o.Damage, "Color", Color3.fromRGB(255, 75, 75))
+            SetDrawingProperty(o.Damage, "Color", PhantomStaticColors.Damage)
             SetDrawingProperty(o.Damage, "Visible", true)
         end
     end
@@ -1701,17 +1732,21 @@ PhantomRenderConnection = PhantomRunService.RenderStepped:Connect(function()
 
     local cameraPosition = PhantomCamera.CFrame.Position
     local maxDistance = PhantomConfig.MaxDistance
+    local lowFreqFrame = now - PhantomLastLowFreqUpdate >= PhantomLowFreqInterval
+    if lowFreqFrame then
+        PhantomLastLowFreqUpdate = now
+    end
     for _, player in ipairs(PhantomPlayerList) do
         if player ~= PhantomLocalPlayer then
-            if not PhantomESP[player] then
-                PhantomESP[player] = NewPlayerObjects()
-            end
             local state = PhantomCharacterCache[player]
             local root = state and state.Root
             local distance = root and root.Parent and (cameraPosition - root.Position).Magnitude or math.huge
             if distance <= maxDistance then
-                RenderPlayer(player, PhantomESP[player], distance)
-            else
+                if not PhantomESP[player] then
+                    PhantomESP[player] = NewPlayerObjects()
+                end
+                RenderPlayer(player, PhantomESP[player], distance, lowFreqFrame)
+            elseif PhantomESP[player] then
                 HideObjects(PhantomESP[player])
             end
         end
@@ -1923,6 +1958,7 @@ end
             local destroyed = false
             local currentImageUrl = ""
             local currentImageAsset = ""
+            local imageLoadSerial = 0
 
             local function connect(signal, callback)
                 local ok, connection = pcall(function()
@@ -2112,6 +2148,7 @@ end
                     return
                 end
                 destroyed = true
+                imageLoadSerial += 1
                 for _, connection in ipairs(connections) do
                     pcall(function()
                         connection:Disconnect()
@@ -2180,49 +2217,9 @@ end
             end
 
             local function requestSourceBody(source)
-                local requestFunctions = {}
-                local function addRequestFunction(candidate)
-                    if type(candidate) == "function" then
-                        requestFunctions[#requestFunctions + 1] = candidate
-                    end
-                end
-
-                addRequestFunction(rawget(_G, "request"))
-                addRequestFunction(rawget(_G, "http_request"))
-
-                local synTable = rawget(_G, "syn")
-                if type(synTable) == "table" then
-                    addRequestFunction(synTable.request)
-                end
-
-                local httpTable = rawget(_G, "http")
-                if type(httpTable) == "table" then
-                    addRequestFunction(httpTable.request)
-                end
-
-                local requestHeaders = {
-                    ["Accept"] = "application/json",
-                    ["User-Agent"] = "XLHub image client",
-                }
-                for _, requestFunction in ipairs(requestFunctions) do
-                    local requestOk, response = pcall(function()
-                        return requestFunction({
-                            Url = source.Url,
-                            Method = "GET",
-                            Headers = requestHeaders,
-                        })
-                    end)
-                    if requestOk and type(response) == "table" then
-                        local body = response.Body or response.body
-                        if type(body) == "string" and body ~= "" then
-                            return body
-                        end
-                    end
-                end
-
-                local body = game:HttpGet(source.Url)
-                if type(body) ~= "string" or body == "" then
-                    error(source.Name .. " 返回为空")
+                local ok, body = pcall(requestHttpBody, source.Url, "application/json")
+                if not ok or type(body) ~= "string" or body == "" then
+                    error(source.Name .. " 请求失败：" .. tostring(body))
                 end
                 return body
             end
@@ -2249,45 +2246,10 @@ end
 
                 local extension = imageUrl:lower():match("%.png") and ".png" or ".jpg"
                 local fileName = "XLHub_Catgirl_" .. tostring(math.random(100000, 999999)) .. extension
-                local body = nil
-                local requestFunctions = {}
-                local function addRequestFunction(candidate)
-                    if type(candidate) == "function" then
-                        requestFunctions[#requestFunctions + 1] = candidate
-                    end
-                end
-
-                addRequestFunction(rawget(_G, "request"))
-                addRequestFunction(rawget(_G, "http_request"))
-                local synTable = rawget(_G, "syn")
-                if type(synTable) == "table" then
-                    addRequestFunction(synTable.request)
-                end
-
-                for _, requestFunction in ipairs(requestFunctions) do
-                    local requestOk, response = pcall(function()
-                        return requestFunction({
-                            Url = imageUrl,
-                            Method = "GET",
-                            Headers = { ["Accept"] = "image/*" },
-                        })
-                    end)
-                    if requestOk and type(response) == "table" then
-                        local responseBody = response.Body or response.body
-                        if type(responseBody) == "string" and responseBody ~= "" then
-                            body = responseBody
-                            break
-                        end
-                    end
-                end
-
-                if not body then
-                    local httpOk, responseBody = pcall(function()
-                        return game:HttpGet(imageUrl)
-                    end)
-                    if httpOk and type(responseBody) == "string" and responseBody ~= "" then
-                        body = responseBody
-                    end
+                local body
+                local requestOk, responseBody = pcall(requestHttpBody, imageUrl, "image/*")
+                if requestOk and type(responseBody) == "string" and responseBody ~= "" then
+                    body = responseBody
                 end
 
                 if not body then
@@ -2316,6 +2278,8 @@ end
                 if destroyed then
                     return
                 end
+                imageLoadSerial += 1
+                local requestSerial = imageLoadSerial
 
                 cover.Visible = true
                 cover.Image = ""
@@ -2326,7 +2290,7 @@ end
                 task.spawn(function()
                     local ok, result, sourceName = pcall(requestImageFromSelectedSource)
 
-                    if destroyed then
+                    if destroyed or requestSerial ~= imageLoadSerial then
                         return
                     end
 
@@ -2340,13 +2304,21 @@ end
                     currentImageUrl = result
                     coverText.Text = "图片加载中..."
                     local displayImage = loadImageAsset(currentImageUrl)
-                    imageFrame.Image = displayImage
-                    imageFrame.ScaleType = Enum.ScaleType.Fit
-                    imageFrame.ImageTransparency = 0
-                    imageFrame.Visible = true
-                    imageFrame.ZIndex = 4
-                    cover.Visible = false
-                    setImageStatus(status, sourceName .. "已显示", Color3.fromRGB(180, 255, 180))
+                    if destroyed or requestSerial ~= imageLoadSerial then
+                        return
+                    end
+                    task.defer(function()
+                        if destroyed or requestSerial ~= imageLoadSerial then
+                            return
+                        end
+                        imageFrame.Image = displayImage
+                        imageFrame.ScaleType = Enum.ScaleType.Fit
+                        imageFrame.ImageTransparency = 0
+                        imageFrame.Visible = true
+                        imageFrame.ZIndex = 4
+                        cover.Visible = false
+                        setImageStatus(status, sourceName .. "已显示", Color3.fromRGB(180, 255, 180))
+                    end)
                 end)
             end
 
@@ -2759,24 +2731,31 @@ end
                         deleteTemporaryImage(newAssetFile)
                         return
                     end
-                    if not downloadCallOk then
+                    task.defer(function()
+                        if destroyed or requestSerial ~= loadSerial then
+                            deleteTemporaryImage(newAssetFile)
+                            return
+                        end
+                        if not downloadCallOk then
+                            refresh.Text = "下一张"
+                            status.Text = "图片下载失败：" .. tostring(displayImage)
+                            status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                            return
+                        end
+                        if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
+                            deleteTemporaryImage(newAssetFile)
+                            refresh.Text = "下一张"
+                            status.Text = "图片下载失败"
+                            status.TextColor3 = Color3.fromRGB(255, 120, 120)
+                            return
+                        end
+                        assetFile = newAssetFile or ""
+                        image.Image = displayImage
+                        image.Visible = true
                         refresh.Text = "下一张"
-                        status.Text = "图片下载失败：" .. tostring(displayImage)
-                        status.TextColor3 = Color3.fromRGB(255, 120, 120)
-                        return
-                    end
-                    assetFile = newAssetFile or ""
-                    if downloadOk == false or type(displayImage) ~= "string" or displayImage == "" then
-                        refresh.Text = "下一张"
-                        status.Text = "图片下载失败"
-                        status.TextColor3 = Color3.fromRGB(255, 120, 120)
-                        return
-                    end
-                    image.Image = displayImage
-                    image.Visible = true
-                    refresh.Text = "下一张"
-                    status.Text = "已显示：" .. tostring(item and (item.author or item.title) or windowTitle)
-                    status.TextColor3 = Color3.fromRGB(180, 255, 180)
+                        status.Text = "已显示：" .. tostring(item and (item.author or item.title) or windowTitle)
+                        status.TextColor3 = Color3.fromRGB(180, 255, 180)
+                    end)
                 end)
             end
 
@@ -3126,7 +3105,7 @@ end
             end,
         })
 
-        -- ========== 视觉 (ESP) Tab：Phantom Visual Engine ==========
+        -- ========== 13. 视觉 (ESP) Tab：Phantom Visual Engine ==========
         local VisualTab = Window:Tab({
             Title = "视觉 (ESP)",
             Icon = "solar:eye-bold-duotone",
@@ -3275,7 +3254,110 @@ end
             end,
         })
 
-        -- ========== 13. 服务器脚本 Tabs ==========
+        -- ========== 14. FE Tab：自由摄像头与外部脚本 ==========
+        local FETab = Window:Tab({
+            Title = "FE",
+            Icon = "solar:code-bold-duotone",
+        })
+
+        local FREE_CAM_URL = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%9D%90%E6%A0%87%E4%BC%A0%E9%80%81%E8%A7%86%E8%A7%92"
+        local freeCamLoading = false
+
+        FETab:Section({
+            Title = "自由摄像头",
+        })
+
+        FETab:Button({
+            Title = "自由摄像头",
+            Desc = "加载自由摄像头；已加载时不会重复创建界面和连接",
+            Icon = "solar:camera-bold-duotone",
+            Callback = function()
+                local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                if freeCamLoading or (_G.__XLHubFreeCamLoaded and playerGui and playerGui:FindFirstChild("FreeCamGui")) then
+                    WindUI:Notify({
+                        Title = "自由摄像头",
+                        Content = "自由摄像头已经加载",
+                        Duration = 3,
+                    })
+                    return
+                end
+
+                freeCamLoading = true
+                _G.__XLHubFreeCamLoaded = true
+                WindUI:Notify({
+                    Title = "正在加载",
+                    Content = "正在获取自由摄像头，请稍候...",
+                    Duration = 3,
+                })
+
+                task.spawn(function()
+                    local ok, err = pcall(function()
+                        local source = game:HttpGet(FREE_CAM_URL)
+                        local chunk = loadstring(source)
+                        assert(type(chunk) == "function", "自由摄像头脚本无法编译")
+                        chunk()
+                    end)
+                    freeCamLoading = false
+                    if ok then
+                        WindUI:Notify({
+                            Title = "自由摄像头",
+                            Content = "加载成功",
+                            Duration = 4,
+                        })
+                    else
+                        _G.__XLHubFreeCamLoaded = nil
+                        WindUI:Notify({
+                            Title = "自由摄像头加载失败",
+                            Content = tostring(err),
+                            Duration = 6,
+                        })
+                        warn("[自由摄像头] " .. tostring(err))
+                    end
+                end)
+            end,
+        })
+
+        FETab:Section({
+            Title = "外部脚本",
+        })
+
+        FETab:Button({
+            Title = "掐死npc",
+            Desc = "点击执行 NPC 脚本",
+            Icon = "solar:skull-bold-duotone",
+            Callback = function()
+                SafeExecute("掐死npc", "https://raw.githubusercontent.com/GUI-Offical/FileTest/refs/heads/main/Grab%20R6.txt")
+            end,
+        })
+
+        FETab:Button({
+            Title = "磁铁吸附",
+            Desc = "执行移动方块和磁铁吸附脚本",
+            Icon = "solar:magnet-bold-duotone",
+            Callback = function()
+                SafeExecute("磁铁吸附", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E7%A3%81%E9%93%81%E5%90%B8%E9%99%84.txt")
+            end,
+        })
+
+        FETab:Button({
+            Title = "高级吸附",
+            Desc = "获取经典念力工具",
+            Icon = "solar:hand-stars-bold-duotone",
+            Callback = function()
+                SafeExecute("高级吸附", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E9%AB%98%E7%BA%A7%E5%90%B8%E9%99%84.txt")
+            end,
+        })
+
+        FETab:Button({
+            Title = "C00",
+            Desc = "已解锁：执行禁忌之力",
+            Icon = "solar:lock-unlocked-bold-duotone",
+            Callback = function()
+                SafeExecute("禁忌之力", "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E7%A6%81%E5%BF%8C%E4%B9%8B%E5%8A%9B.txt")
+            end,
+        })
+
+        -- ========== 15. 服务器脚本 Tabs ==========
         for _, server in ipairs(ServerScripts) do
             local tab = Window:Tab({
                 Title = server.Name,
@@ -3294,7 +3376,7 @@ end
             end
         end
 
-        -- ========== 14. 设置 Tab ==========
+        -- ========== 16. 设置 Tab ==========
         local SettingTab = Window:Tab({
             Title = "设置",
             Icon = "solar:settings-bold-duotone",
@@ -3357,7 +3439,7 @@ end
             end,
         })
 
-        -- ========== 15. 配置管理 ==========
+        -- ========== 17. 配置管理 ==========
         local ConfigManager = Window.ConfigManager
         local ConfigName = "default"
         local ConfigFile = nil
@@ -3485,7 +3567,7 @@ end
             })
         end
 
-        -- ========== 16. 清理函数 ==========
+        -- ========== 18. 清理函数 ==========
         _G.__XLHubCleanup = function()
             if not StartupAlive then return end
             StartupAlive = false
