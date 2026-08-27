@@ -907,30 +907,27 @@ local function NewDrawing(class, props)
     return obj
 end
 
-local PhantomDrawingPropertyCache = setmetatable({}, {__mode = "k"})
 local function SetDrawingProperty(obj, property, value)
     if not obj then return end
-    local cache = PhantomDrawingPropertyCache[obj]
-    if not cache then
-        cache = {}
-        PhantomDrawingPropertyCache[obj] = cache
+    if obj[property] ~= value then
+        obj[property] = value
     end
-    if cache[property] == value then return end
-    cache[property] = value
-    pcall(function() obj[property] = value end)
 end
 
 local function Hide(obj)
     if not obj then return end
-    local cache = PhantomDrawingPropertyCache[obj]
-    if cache then cache.Visible = false end
-    pcall(function() obj.Visible = false end)
+    if obj.Visible ~= false then
+        obj.Visible = false
+    end
 end
 
 local function DestroyDrawing(obj)
-    if obj then
-        pcall(function() obj.Visible = false end)
-        pcall(function() obj:Remove() end)
+    if not obj then return end
+    if obj.Visible ~= false then
+        obj.Visible = false
+    end
+    if obj.Remove then
+        obj:Remove()
     end
 end
 
@@ -1237,11 +1234,21 @@ local function CheckVisibility(root)
     return true
 end
 
+local function ProjectHistoryPoint(camera, position)
+    local point, visible = camera:WorldToViewportPoint(position)
+    if not visible or point.Z <= 0 then
+        return nil
+    end
+    return Vector2.new(point.X, point.Y)
+end
+
 local function RenderPlayer(player, o, precomputedDistance, isLowFreqFrame)
     HideObjects(o)
     if o and o.Velocity then
         -- 速度线每次进入目标渲染时先强制清零，避免停速/裁剪/失活后残留。
-        pcall(function() o.Velocity.Visible = false end)
+        if o.Velocity.Visible ~= false then
+            o.Velocity.Visible = false
+        end
     end
 
     if not PhantomConfig.Enabled or player == PhantomLocalPlayer then return end
@@ -1283,47 +1290,50 @@ local function RenderPlayer(player, o, precomputedDistance, isLowFreqFrame)
     local width = math.clamp(height * 0.55, 12, 320)
     local pos = Vector2.new(rootP.X - width * 0.5, headP.Y)
 
-    -- 动态拖尾：记录屏幕位置，关闭时立即清空显示
+    -- 动态拖尾：历史记录使用真实 3D 世界坐标，避免转动视角产生假拖尾。
     if PhantomConfig.ShowMotionTrail or PhantomConfig.ShowGhostTrail then
         local history = o.TrailHistory
         local now = os.clock()
+        local worldPosition = root.Position
         local last = history[#history]
-        if not last or (last.Position - Vector2.new(rootP.X, rootP.Y)).Magnitude > 1.5 or now - last.Time > 0.045 then
+
+        -- 只有目标真实移动超过阈值时才记录新点；相机移动不会新增历史点。
+        if not last or (last.Position - worldPosition).Magnitude > 0.2 then
             local poolCount = #o.TrailPool
             local entry = poolCount > 0 and o.TrailPool[poolCount] or {}
             if poolCount > 0 then o.TrailPool[poolCount] = nil end
-            entry.Position = Vector2.new(rootP.X, rootP.Y)
+            entry.Position = worldPosition
             entry.Width = width
             entry.Height = height
             entry.Time = now
             history[#history + 1] = entry
         end
+
         while #history > 13 do
-            local oldEntry = history[1]
-            for i = 1, #history - 1 do history[i] = history[i + 1] end
-            history[#history] = nil
+            local oldEntry = table.remove(history, 1)
             if oldEntry then o.TrailPool[#o.TrailPool + 1] = oldEntry end
         end
 
-        -- 清理过旧历史，防止站立/重生后残影留屏
+        -- 清理过旧历史，防止站立/重生后残影留屏。
         for i = #history, 1, -1 do
             if now - history[i].Time > 1.0 then
-                local oldEntry = history[i]
-                for j = i, #history - 1 do history[j] = history[j + 1] end
-                history[#history] = nil
+                local oldEntry = table.remove(history, i)
                 if oldEntry then o.TrailPool[#o.TrailPool + 1] = oldEntry end
             end
         end
 
+        -- 只有最终绘制时才把 3D 历史点转换为当前相机下的 2D 坐标。
         if PhantomConfig.ShowMotionTrail then
             for i = 1, #o.Trail do
                 local line = o.Trail[i]
                 local a = history[i]
                 local b = history[i + 1]
-                if a and b and line then
+                local a2D = a and ProjectHistoryPoint(PhantomCamera, a.Position)
+                local b2D = b and ProjectHistoryPoint(PhantomCamera, b.Position)
+                if a and b and a2D and b2D and line then
                     local age = math.clamp((now - a.Time) / 1.0, 0, 1)
-                    line.From = a.Position
-                    line.To = b.Position
+                    line.From = a2D
+                    line.To = b2D
                     SetDrawingProperty(line, "Color", base)
                     SetDrawingProperty(line, "Transparency", 0.08 + age * 0.82)
                     SetDrawingProperty(line, "Visible", true)
@@ -1338,12 +1348,13 @@ local function RenderPlayer(player, o, precomputedDistance, isLowFreqFrame)
             for i = 1, #o.Ghost do
                 local ghost = o.Ghost[i]
                 local point = history[math.max(1, #history - i + 1)]
-                if i <= count and point and ghost then
+                local point2D = point and ProjectHistoryPoint(PhantomCamera, point.Position)
+                if i <= count and point and point2D and ghost then
                     local age = math.clamp((now - point.Time) / 1.0, 0, 1)
                     local scale = 1 - i * 0.035
                     local gw = math.max(8, point.Width * scale)
                     local gh = math.max(12, point.Height * scale)
-                    ghost.Position = Vector2.new(point.Position.X - gw * 0.5, point.Position.Y - gh * 0.5)
+                    ghost.Position = Vector2.new(point2D.X - gw * 0.5, point2D.Y - gh * 0.5)
                     ghost.Size = Vector2.new(gw, gh)
                     SetDrawingProperty(ghost, "Color", base)
                     SetDrawingProperty(ghost, "Transparency", math.clamp(0.15 + i * 0.1 + age * 0.35, 0, 0.95))
@@ -1531,14 +1542,14 @@ local function RenderPlayer(player, o, precomputedDistance, isLowFreqFrame)
                 o.Velocity.Color = theme.Accent
                 o.Velocity.Visible = true
             else
-                pcall(function() o.Velocity.Visible = false end)
+                if o.Velocity.Visible ~= false then o.Velocity.Visible = false end
             end
         else
-            pcall(function() o.Velocity.Visible = false end)
+            if o.Velocity.Visible ~= false then o.Velocity.Visible = false end
         end
     else
-        if o.Velocity then
-            pcall(function() o.Velocity.Visible = false end)
+        if o.Velocity and o.Velocity.Visible ~= false then
+            o.Velocity.Visible = false
         end
     end
     if PhantomConfig.ShowTracer and o.Tracer then
@@ -3254,6 +3265,1140 @@ end
             end,
         })
 
+        -- ================================================================
+        -- 瞄准 Tab：算法自瞄引擎 v5
+        -- 修复：墙壁检测（双向射线+减小偏移+RespectCanCollide）
+        -- 修复：队伍检查（Attribute+自定义属性+TeamColor默认色排除）
+        -- 优化：玩家列表缓存、角色部件缓存、ESP降频、结构清晰
+        -- v5优化：RaycastParams缓存、视口中心缓存、循环内引用复用
+        -- 注意：自瞄默认关闭(Enabled=false)，不会自动开启
+        -- ================================================================
+        local AimTab = Window:Tab({
+            Title = "瞄准",
+            Icon = "solar:widget-5-bold-duotone",
+        })
+
+        -- ================================================================
+        -- 【模块1】配置与状态
+        -- ================================================================
+        local AimConfig = {
+            Enabled = false,
+            Mode = "Legit",
+            TeamCheck = true,
+            WallCheck = true,
+            TargetLock = true,
+            FOV = 150,
+            Smoothness = 35,
+            MaxDistance = 1000,
+            RageSpeed = 18,
+            LegitSpeed = 6,
+            Prediction = false,
+            PredictionTime = 0.12,
+            DynamicCrosshair = false,
+            AimPartChoice = "Body",
+            ShowFOVCircle = false,
+            ESP = false,
+        }
+
+        local AimCurrentTarget = nil
+        local AimCurrentPart = nil
+        local AimScanTimer = 0
+        local AimStrongLockEnabled = false
+        local AimStrongLockedTarget = nil
+        local AimStrongLockedPart = nil
+
+        -- 性能：缓存玩家列表，避免每帧调用 GetPlayers()
+        local AimPlayerList = {}
+
+        -- 性能：角色部件缓存，避免重复 FindFirstChild
+        local AimCharCache = {}
+
+        -- 性能：ESP 降频计数器
+        local AimESPFrameCount = 0
+
+        -- v5性能：视口中心缓存（避免每帧多次计算 ViewportSize*0.5）
+        local AimViewportCenterX = 0
+        local AimViewportCenterY = 0
+
+        -- v5性能：RaycastParams 缓存（避免每帧创建新对象产生GC）
+        local AimCachedRayParams = nil
+        local AimCachedRayParamsChar = nil
+        local AimCachedRayParamsCamera = nil
+
+        -- 服务引用
+        local AimRunService = game:GetService("RunService")
+        local AimPlayers = Players
+        local AimLocalPlayer = LocalPlayer
+        local AimUserInputService = UserInputService
+        local AimWorkspace = game:GetService("Workspace")
+
+        -- ================================================================
+        -- 【模块2】UI 控件创建（先创建UI，确保界面一定能显示）
+        -- ================================================================
+        AimTab:Section({ Title = "主控" })
+        AimTab:Toggle({
+            Title = "自瞄启用",
+            Desc = "开启自动瞄准功能（F4 快捷键切换）",
+            Icon = "solar:bolt-bold-duotone",
+            Value = AimConfig.Enabled,
+            Flag = "Aim_Enabled",
+            Callback = function(value)
+                AimConfig.Enabled = value == true
+                if not AimConfig.Enabled then
+                    AimCurrentTarget = nil
+                    AimCurrentPart = nil
+                end
+            end,
+        })
+
+        AimTab:Section({ Title = "瞄准模式" })
+        AimTab:Dropdown({
+            Title = "瞄准模式",
+            Desc = "暴力=极速锁定，合法=平滑跟随",
+            Icon = "solar:settings-bold-duotone",
+            Values = {"合法", "暴力"},
+            Value = "合法",
+            Flag = "Aim_Mode",
+            Callback = function(value)
+                local selected = type(value) == "table" and value[1] or value
+                AimConfig.Mode = (selected == "暴力") and "Rage" or "Legit"
+                AimCurrentTarget = nil
+                AimCurrentPart = nil
+            end,
+        })
+
+        AimTab:Section({ Title = "瞄准部位" })
+        AimTab:Dropdown({
+            Title = "瞄准部位",
+            Desc = "选择优先瞄准的身体部位",
+            Icon = "solar:widget-5-bold-duotone",
+            Values = {"身体", "头部"},
+            Value = "身体",
+            Flag = "Aim_Part",
+            Callback = function(value)
+                local selected = type(value) == "table" and value[1] or value
+                AimConfig.AimPartChoice = (selected == "头部") and "Head" or "Body"
+                AimCurrentTarget = nil
+                AimCurrentPart = nil
+                table.clear(AimCharCache)
+            end,
+        })
+
+        AimTab:Section({ Title = "目标筛选" })
+        AimTab:Toggle({
+            Title = "队伍检查",
+            Desc = "不瞄准队友（兼容Team对象/Attribute/自定义队伍属性）",
+            Icon = "solar:users-group-rounded-bold-duotone",
+            Value = AimConfig.TeamCheck,
+            Flag = "Aim_TeamCheck",
+            Callback = function(value)
+                AimConfig.TeamCheck = value == true
+                AimCurrentTarget = nil
+                AimCurrentPart = nil
+            end,
+        })
+        AimTab:Toggle({
+            Title = "墙壁检测",
+            Desc = "只瞄准可见目标（双向射线+偏移校验，防穿墙误判）",
+            Icon = "solar:eye-bold-duotone",
+            Value = AimConfig.WallCheck,
+            Flag = "Aim_WallCheck",
+            Callback = function(value)
+                AimConfig.WallCheck = value == true
+                AimCurrentTarget = nil
+                AimCurrentPart = nil
+            end,
+        })
+        AimTab:Toggle({
+            Title = "目标锁定",
+            Desc = "锁定当前目标直到超出范围或不可见",
+            Icon = "solar:lock-keyhole-bold-duotone",
+            Value = AimConfig.TargetLock,
+            Flag = "Aim_TargetLock",
+            Callback = function(value)
+                AimConfig.TargetLock = value == true
+                if not AimConfig.TargetLock then
+                    AimCurrentTarget = nil
+                    AimCurrentPart = nil
+                end
+            end,
+        })
+        AimTab:Toggle({
+            Title = "ESP 框 (Highlight)",
+            Desc = "算法瞄准自带的高亮透视框",
+            Icon = "solar:shield-check-bold-duotone",
+            Value = AimConfig.ESP,
+            Flag = "Aim_ESP",
+            Callback = function(value)
+                AimConfig.ESP = value == true
+            end,
+        })
+
+        AimTab:Section({ Title = "瞄准参数" })
+        AimTab:Slider({
+            Title = "视野范围 (FOV)",
+            Desc = "瞄准搜索范围半径（像素）",
+            Icon = "solar:plain-3-bold-duotone",
+            Step = 5,
+            Value = {Min = 50, Max = 300, Default = AimConfig.FOV},
+            Flag = "Aim_FOV",
+            Callback = function(value)
+                AimConfig.FOV = tonumber(value) or 150
+            end,
+        })
+        AimTab:Slider({
+            Title = "平滑度",
+            Desc = "合法模式下的瞄准平滑程度",
+            Icon = "solar:running-bold-duotone",
+            Step = 1,
+            Value = {Min = 5, Max = 100, Default = AimConfig.Smoothness},
+            Flag = "Aim_Smoothness",
+            Callback = function(value)
+                AimConfig.Smoothness = tonumber(value) or 35
+            end,
+        })
+        AimTab:Slider({
+            Title = "最大距离",
+            Desc = "超过此距离（studs）的目标不瞄准",
+            Icon = "solar:round-transfer-diagonal-bold-duotone",
+            Step = 50,
+            Value = {Min = 100, Max = 2000, Default = AimConfig.MaxDistance},
+            Flag = "Aim_MaxDistance",
+            Callback = function(value)
+                AimConfig.MaxDistance = tonumber(value) or 1000
+            end,
+        })
+
+        AimTab:Section({ Title = "预判设置" })
+        AimTab:Toggle({
+            Title = "启用预判",
+            Desc = "根据目标移动速度预测未来位置",
+            Icon = "solar:arrow-up-bold-duotone",
+            Value = AimConfig.Prediction,
+            Flag = "Aim_Prediction",
+            Callback = function(value)
+                AimConfig.Prediction = value == true
+            end,
+        })
+        AimTab:Slider({
+            Title = "预判时间 (毫秒)",
+            Desc = "预测目标未来多少毫秒后的位置",
+            Icon = "solar:settings-bold-duotone",
+            Step = 10,
+            Value = {Min = 0, Max = 500, Default = AimConfig.PredictionTime * 1000},
+            Flag = "Aim_PredictionTime",
+            Callback = function(value)
+                AimConfig.PredictionTime = (tonumber(value) or 120) / 1000
+            end,
+        })
+
+        AimTab:Section({ Title = "屏幕效果" })
+        AimTab:Toggle({
+            Title = "FOV 圆圈",
+            Desc = "在屏幕中心显示瞄准范围圆圈（最上层渲染）",
+            Icon = "solar:plain-3-bold-duotone",
+            Value = AimConfig.ShowFOVCircle,
+            Flag = "Aim_ShowFOVCircle",
+            Callback = function(value)
+                AimConfig.ShowFOVCircle = value == true
+            end,
+        })
+        AimTab:Toggle({
+            Title = "动态准心",
+            Desc = "显示随移动速度扩散的十字准心（最上层渲染）",
+            Icon = "solar:widget-5-bold-duotone",
+            Value = AimConfig.DynamicCrosshair,
+            Flag = "Aim_DynamicCrosshair",
+            Callback = function(value)
+                AimConfig.DynamicCrosshair = value == true
+            end,
+        })
+
+        AimTab:Section({ Title = "强锁功能" })
+        AimTab:Paragraph({
+            Title = "强制锁定",
+            Desc = "点击下方按钮打开独立强锁悬浮窗，可无视 FOV/墙壁/距离持续锁定目标。",
+        })
+        AimTab:Button({
+            Title = "打开强锁悬浮窗",
+            Desc = "创建一个独立可拖动的强锁控制窗口",
+            Icon = "solar:lock-keyhole-bold-duotone",
+            Callback = function()
+                if AimOpenLockWindow then
+                    pcall(AimOpenLockWindow)
+                else
+                    pcall(function()
+                        WindUI:Notify({Title = "强锁", Content = "强锁模块尚未初始化完成", Duration = 3})
+                    end)
+                end
+            end,
+        })
+
+        -- ================================================================
+        -- 【模块3】核心逻辑（pcall 保护，出错不影响 UI）
+        -- ================================================================
+        local AimCoreOk, AimCoreErr = pcall(function()
+
+        -- ============================================================
+        -- 3.1 Drawing 对象（FOV圈 + 动态准心），ZIndex 调高
+        -- ============================================================
+        local AimFOVDrawing = nil
+        local AimCrossLines = nil
+        if HasDrawing then
+            pcall(function()
+                AimFOVDrawing = Drawing.new("Circle")
+                AimFOVDrawing.Thickness = 1
+                AimFOVDrawing.Filled = false
+                AimFOVDrawing.NumSides = 64
+                AimFOVDrawing.Visible = false
+                AimFOVDrawing.Color = Color3.fromRGB(135, 130, 255)
+                AimFOVDrawing.Transparency = 0.5
+                pcall(function() AimFOVDrawing.ZIndex = 500 end)
+            end)
+            pcall(function()
+                AimCrossLines = {
+                    Top = Drawing.new("Line"),
+                    Bottom = Drawing.new("Line"),
+                    Left = Drawing.new("Line"),
+                    Right = Drawing.new("Line"),
+                }
+                for _, line in pairs(AimCrossLines) do
+                    line.Thickness = 1
+                    line.Visible = false
+                    line.Color = Color3.fromRGB(255, 255, 255)
+                    line.Transparency = 0
+                    pcall(function() line.ZIndex = 501 end)
+                end
+            end)
+        end
+
+        -- ============================================================
+        -- 3.2 工具函数
+        -- ============================================================
+        local function AimGetGuiParent()
+            local ok, result = pcall(function()
+                if type(gethui) == "function" then
+                    local hui = gethui()
+                    if hui then return hui end
+                end
+                return game:GetService("CoreGui")
+            end)
+            if ok and result then return result end
+            return AimLocalPlayer and AimLocalPlayer:FindFirstChildOfClass("PlayerGui")
+        end
+
+        -- 获取角色的关键部件（带缓存）
+        local function AimGetCharParts(player)
+            local character = player and player.Character
+            if not character then return nil end
+            local cache = AimCharCache[player]
+            if cache and cache.Character == character and cache.Root and cache.Root.Parent then
+                return cache
+            end
+            local root = character:FindFirstChild("HumanoidRootPart")
+            local head = character:FindFirstChild("Head")
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            local upperTorso = character:FindFirstChild("UpperTorso")
+            local torso = character:FindFirstChild("Torso")
+            cache = {
+                Character = character,
+                Root = root,
+                Head = head,
+                Humanoid = humanoid,
+                UpperTorso = upperTorso,
+                Torso = torso,
+            }
+            AimCharCache[player] = cache
+            return cache
+        end
+
+        -- ============================================================
+        -- 3.3 ★ 修复：队伍检查（全方位兼容）
+        -- 根因：自由对战中 TeamColor 全为 White，旧代码误判全员为队友
+        -- 新增：Attribute 检查、自定义队伍属性检查
+        -- ============================================================
+        local DEFAULT_TEAM_COLORS = {
+            ["White"] = true,
+            ["Medium stone grey"] = true,
+            ["Dark stone grey"] = true,
+            ["Black"] = true,
+            ["Really black"] = true,
+        }
+
+        -- 常见自定义队伍属性名
+        local CUSTOM_TEAM_PROPS = {
+            "Team", "TeamID", "TeamName", "Faction", "Gang",
+            "Squad", "Side", "ColorTeam", "PlayerTeam", "TeamColor",
+        }
+
+        -- 从 Player 或 Character 中读取自定义队伍标识
+        local function AimReadCustomTeam(player)
+            local character = player and player.Character
+            -- 1. Attribute 系统（Roblox 推荐方式）
+            for _, propName in ipairs(CUSTOM_TEAM_PROPS) do
+                local ok, val = pcall(function() return player:GetAttribute(propName) end)
+                if ok and val ~= nil and val ~= "" then
+                    return tostring(val)
+                end
+            end
+            -- 2. Player 的子对象（StringValue / IntValue / BrickColorValue）
+            for _, propName in ipairs(CUSTOM_TEAM_PROPS) do
+                local obj = player:FindFirstChild(propName)
+                if obj and obj.Value ~= nil and obj.Value ~= "" then
+                    return tostring(obj.Value)
+                end
+            end
+            -- 3. Character 的子对象
+            if character then
+                for _, propName in ipairs(CUSTOM_TEAM_PROPS) do
+                    local obj = character:FindFirstChild(propName)
+                    if obj and obj.Value ~= nil and obj.Value ~= "" then
+                        return tostring(obj.Value)
+                    end
+                end
+            end
+            return nil
+        end
+
+        local function AimValidTarget(player)
+            if not player or player == AimLocalPlayer then return false end
+
+            if AimConfig.TeamCheck then
+                -- 方式1：标准 Team 对象（最可靠）
+                local myTeam = AimLocalPlayer.Team
+                local targetTeam = player.Team
+                if myTeam and targetTeam then
+                    if myTeam == targetTeam then return false end
+                elseif not (myTeam or targetTeam) then
+                    -- 双方都没有 Team 对象 → 检查 TeamColor
+                    local myColor = AimLocalPlayer.TeamColor
+                    local targetColor = player.TeamColor
+                    if myColor and targetColor and myColor == targetColor then
+                        -- 排除默认颜色（自由对战中所有人都是这些颜色）
+                        if not DEFAULT_TEAM_COLORS[myColor.Name] then
+                            return false
+                        end
+                    end
+                end
+                -- 方式2：自定义队伍标识（Attribute / Value 对象）
+                local myCustom = AimReadCustomTeam(AimLocalPlayer)
+                local targetCustom = AimReadCustomTeam(player)
+                if myCustom and targetCustom and myCustom == targetCustom then
+                    return false
+                end
+            end
+
+            -- 角色与生命状态检查
+            local parts = AimGetCharParts(player)
+            if not parts or not parts.Root or not parts.Head then return false end
+            if not parts.Humanoid or parts.Humanoid.Health <= 0 then return false end
+            if parts.Character:FindFirstChildOfClass("ForceField") then return false end
+
+            -- 距离检查
+            local myParts = AimGetCharParts(AimLocalPlayer)
+            if myParts and myParts.Root then
+                local distance = (parts.Root.Position - myParts.Root.Position).Magnitude
+                if distance > AimConfig.MaxDistance then return false end
+            end
+            return true
+        end
+
+        -- ============================================================
+        -- 3.4 ★ 修复：墙壁检测（双向射线 + 小偏移 + RespectCanCollide）
+        -- 根因：旧代码偏移量0.5太大可绕过薄墙；单向射线在相机穿墙时误判
+        -- ============================================================
+        -- 偏移检测点（12个方向，偏移量减小到0.25防止绕过薄墙）
+        local AIM_VISIBLE_OFFSETS = {
+            Vector3.new(0, 0.25, 0),
+            Vector3.new(0, -0.25, 0),
+            Vector3.new(0.25, 0, 0),
+            Vector3.new(-0.25, 0, 0),
+            Vector3.new(0, 0, 0.25),
+            Vector3.new(0, 0, -0.25),
+            Vector3.new(0.15, 0.15, 0),
+            Vector3.new(-0.15, -0.15, 0),
+            Vector3.new(0.15, -0.15, 0),
+            Vector3.new(-0.15, 0.15, 0),
+            Vector3.new(0, 0.15, 0.15),
+            Vector3.new(0, -0.15, -0.15),
+        }
+
+        -- v5：RaycastParams 缓存，只有本地角色或相机变更时才重建
+        local function AimMakeRayParams()
+            local myChar = AimLocalPlayer.Character
+            local camera = AimWorkspace.CurrentCamera
+            if AimCachedRayParams and AimCachedRayParamsChar == myChar and AimCachedRayParamsCamera == camera then
+                return AimCachedRayParams
+            end
+            local params = RaycastParams.new()
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            params.IgnoreWater = true
+            params.RespectCanCollide = true
+            local ignoreList = {}
+            if camera then
+                table.insert(ignoreList, camera)
+            end
+            if myChar then
+                table.insert(ignoreList, myChar)
+            end
+            params.FilterDescendantsInstances = ignoreList
+            AimCachedRayParams = params
+            AimCachedRayParamsChar = myChar
+            AimCachedRayParamsCamera = camera
+            return params
+        end
+
+        -- 判断射线结果是否命中目标角色自身
+        local function AimHitTarget(result, targetCharacter)
+            if not result or not result.Instance then return false end
+            local inst = result.Instance
+            return inst:IsDescendantOf(targetCharacter) or inst.Parent == targetCharacter
+        end
+
+        local function AimVisible(part)
+            if not AimConfig.WallCheck then return true end
+            local camera = AimWorkspace.CurrentCamera
+            if not camera or not part then return false end
+            local origin = camera.CFrame.Position
+            local targetPos = part.Position
+            local targetCharacter = part.Parent
+            local direction = targetPos - origin
+            if direction.Magnitude < 0.1 then return true end
+
+            local params = AimMakeRayParams()
+
+            -- 主射线：相机 → 目标中心
+            local result = AimWorkspace:Raycast(origin, direction, params)
+            if not result then return true end
+            if AimHitTarget(result, targetCharacter) then return true end
+
+            -- 偏移射线：12个方向的微小偏移（防止帽子/胸甲误判，偏移量小不绕墙）
+            for _, offset in ipairs(AIM_VISIBLE_OFFSETS) do
+                local offsetPos = targetPos + offset
+                local offsetDir = offsetPos - origin
+                local subResult = AimWorkspace:Raycast(origin, offsetDir, params)
+                if not subResult or AimHitTarget(subResult, targetCharacter) then
+                    return true
+                end
+            end
+
+            -- 反向射线：目标 → 相机（验证相机是否穿墙导致误判）
+            -- 如果反向射线无阻挡，说明相机可能在墙内，实际目标可见
+            local reverseDir = origin - targetPos
+            local reverseResult = AimWorkspace:Raycast(targetPos, reverseDir, params)
+            if not reverseResult then return true end
+            if AimHitTarget(reverseResult, targetCharacter) then return true end
+
+            return false
+        end
+
+        -- ============================================================
+        -- 3.5 瞄准辅助函数
+        -- ============================================================
+        local function AimGetAimPart(character)
+            if not character then return nil end
+            if AimConfig.AimPartChoice == "Head" then
+                return character:FindFirstChild("Head")
+            else
+                return character:FindFirstChild("UpperTorso")
+                    or character:FindFirstChild("Torso")
+                    or character:FindFirstChild("HumanoidRootPart")
+                    or character:FindFirstChild("Head")
+            end
+        end
+
+        local function AimScreenDistance(part)
+            local camera = AimWorkspace.CurrentCamera
+            if not camera or not part then return math.huge end
+            local position, onScreen = camera:WorldToViewportPoint(part.Position)
+            if not onScreen or position.Z <= 0 then return math.huge end
+            -- v5：使用缓存的视口中心，避免重复计算
+            return math.sqrt((position.X - AimViewportCenterX) ^ 2 + (position.Y - AimViewportCenterY) ^ 2)
+        end
+
+        -- 寻找最佳目标（先做便宜的距离/队伍筛选，再做昂贵的射线检测）
+        local function AimFindTarget()
+            local bestPlayer = nil
+            local bestPart = nil
+            local bestDistance = AimConfig.FOV
+            local myParts = AimGetCharParts(AimLocalPlayer)
+
+            for _, player in ipairs(AimPlayerList) do
+                if player ~= AimLocalPlayer and AimValidTarget(player) then
+                    local character = player.Character
+                    local part = AimGetAimPart(character)
+                    if part then
+                        -- 先做屏幕距离快速筛选（便宜），FOV外直接跳过
+                        local screenDist = AimScreenDistance(part)
+                        if screenDist < bestDistance then
+                            -- 再做墙壁检测（昂贵），只对FOV内目标执行
+                            if AimVisible(part) then
+                                bestDistance = screenDist
+                                bestPlayer = player
+                                bestPart = part
+                            end
+                        end
+                    end
+                end
+            end
+            return bestPlayer, bestPart
+        end
+
+        local function AimTargetStillValid()
+            if not AimCurrentTarget or not AimCurrentPart then return false end
+            if not AimValidTarget(AimCurrentTarget) then return false end
+            local character = AimCurrentTarget.Character
+            local part = AimGetAimPart(character)
+            if not part then return false end
+            AimCurrentPart = part
+            if not AimVisible(part) then return false end
+            return AimScreenDistance(part) <= AimConfig.FOV * 1.35
+        end
+
+        -- 强锁验证（无视墙壁和FOV，只检查存活和距离）
+        local function AimStrongValidTarget(player)
+            if not player or player == AimLocalPlayer then return false end
+            local parts = AimGetCharParts(player)
+            if not parts or not parts.Root then return false end
+            if not parts.Humanoid or parts.Humanoid.Health <= 0 then return false end
+            local myParts = AimGetCharParts(AimLocalPlayer)
+            if myParts and myParts.Root then
+                local distance = (parts.Root.Position - myParts.Root.Position).Magnitude
+                if distance > AimConfig.MaxDistance * 2 then return false end
+            end
+            return true
+        end
+
+        -- ============================================================
+        -- 3.6 ESP (Highlight)
+        -- ============================================================
+        local AimESPObjects = {}
+
+        local function AimRemoveESP(player)
+            if AimESPObjects[player] then
+                pcall(function() AimESPObjects[player]:Destroy() end)
+                AimESPObjects[player] = nil
+            end
+        end
+
+        local function AimCreateESP(player)
+            if player == AimLocalPlayer then return end
+            if AimESPObjects[player] then return end
+            if not player.Character then return end
+            local ok, highlight = pcall(function()
+                local h = Instance.new("Highlight")
+                h.Name = "AimESPBox"
+                h.Adornee = player.Character
+                h.FillTransparency = 1
+                h.OutlineTransparency = 0.05
+                h.OutlineColor = Color3.fromRGB(235, 235, 255)
+                h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                h.Enabled = AimConfig.ESP
+                h.Parent = AimGetGuiParent()
+                return h
+            end)
+            if ok and highlight then
+                AimESPObjects[player] = highlight
+            end
+        end
+
+        -- ESP 更新（降频到每2帧，减少性能开销）
+        local function AimUpdateESP()
+            AimESPFrameCount = AimESPFrameCount + 1
+            if AimESPFrameCount < 2 then return end
+            AimESPFrameCount = 0
+
+            for player, obj in pairs(AimESPObjects) do
+                if not player.Parent then
+                    pcall(function() obj:Destroy() end)
+                    AimESPObjects[player] = nil
+                else
+                    obj.Adornee = player.Character
+                    obj.Enabled = AimConfig.ESP and AimValidTarget(player)
+                end
+            end
+            if not AimConfig.ESP then return end
+            for _, player in ipairs(AimPlayerList) do
+                if player ~= AimLocalPlayer then
+                    AimCreateESP(player)
+                end
+            end
+        end
+
+        -- ============================================================
+        -- 3.7 强锁独立悬浮窗
+        -- ============================================================
+        local AimLockWindowGui = nil
+        local AimLockWindow = nil
+        local AimLockTargetLabel = nil
+        local AimLockStatusLabel = nil
+
+        local function AimDestroyLockWindow()
+            if AimLockWindowGui then
+                pcall(function() AimLockWindowGui:Destroy() end)
+                AimLockWindowGui = nil
+            end
+            AimLockWindow = nil
+            AimLockTargetLabel = nil
+            AimLockStatusLabel = nil
+        end
+
+        function AimOpenLockWindow()
+            if AimLockWindowGui and AimLockWindowGui.Parent then
+                AimDestroyLockWindow()
+                return
+            end
+            local parent = AimGetGuiParent()
+            if not parent then
+                pcall(function() WindUI:Notify({Title="强锁", Content="找不到界面容器", Duration=3}) end)
+                return
+            end
+
+            local screenGui = Instance.new("ScreenGui")
+            screenGui.Name = "AimStrongLockWindow"
+            screenGui.ResetOnSpawn = false
+            screenGui.IgnoreGuiInset = true
+            screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            screenGui.Parent = parent
+            AimLockWindowGui = screenGui
+
+            local frame = Instance.new("Frame")
+            frame.Name = "LockPanel"
+            frame.AnchorPoint = Vector2.new(0.5, 0.5)
+            frame.Position = UDim2.fromScale(0.7, 0.4)
+            frame.Size = UDim2.fromOffset(220, 200)
+            frame.BackgroundColor3 = Color3.fromRGB(15, 16, 20)
+            frame.BackgroundTransparency = 0.05
+            frame.BorderSizePixel = 0
+            frame.Active = true
+            frame.Parent = screenGui
+            AimLockWindow = frame
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 12)
+            corner.Parent = frame
+
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(100, 200, 100)
+            stroke.Thickness = 1.5
+            stroke.Transparency = 0.1
+            stroke.Parent = frame
+
+            -- 标题栏
+            local titleBar = Instance.new("Frame")
+            titleBar.Size = UDim2.new(1, 0, 0, 36)
+            titleBar.BackgroundColor3 = Color3.fromRGB(20, 30, 22)
+            titleBar.BackgroundTransparency = 0.1
+            titleBar.BorderSizePixel = 0
+            titleBar.Active = true
+            titleBar.Parent = frame
+            local titleCorner = Instance.new("UICorner")
+            titleCorner.CornerRadius = UDim.new(0, 12)
+            titleCorner.Parent = titleBar
+
+            local title = Instance.new("TextLabel")
+            title.Size = UDim2.new(1, -40, 1, 0)
+            title.Position = UDim2.fromOffset(12, 0)
+            title.BackgroundTransparency = 1
+            title.Text = "强锁控制"
+            title.Font = Enum.Font.GothamBold
+            title.TextSize = 14
+            title.TextColor3 = Color3.fromRGB(180, 255, 180)
+            title.TextXAlignment = Enum.TextXAlignment.Left
+            title.Parent = titleBar
+
+            local closeBtn = Instance.new("TextButton")
+            closeBtn.AnchorPoint = Vector2.new(1, 0.5)
+            closeBtn.Position = UDim2.new(1, -8, 0.5, 0)
+            closeBtn.Size = UDim2.fromOffset(24, 24)
+            closeBtn.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
+            closeBtn.BackgroundTransparency = 0.1
+            closeBtn.Text = "×"
+            closeBtn.Font = Enum.Font.GothamBold
+            closeBtn.TextSize = 16
+            closeBtn.TextColor3 = Color3.fromRGB(255, 150, 150)
+            closeBtn.AutoButtonColor = true
+            closeBtn.Parent = titleBar
+            local closeCorner = Instance.new("UICorner")
+            closeCorner.CornerRadius = UDim.new(1, 0)
+            closeCorner.Parent = closeBtn
+
+            -- 状态标签
+            local statusLabel = Instance.new("TextLabel")
+            statusLabel.Size = UDim2.new(1, -20, 0, 22)
+            statusLabel.Position = UDim2.fromOffset(10, 44)
+            statusLabel.BackgroundTransparency = 1
+            statusLabel.Text = "状态：未锁定"
+            statusLabel.Font = Enum.Font.GothamMedium
+            statusLabel.TextSize = 12
+            statusLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+            statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+            statusLabel.Parent = frame
+            AimLockStatusLabel = statusLabel
+
+            -- 目标标签
+            local targetLabel = Instance.new("TextLabel")
+            targetLabel.Size = UDim2.new(1, -20, 0, 22)
+            targetLabel.Position = UDim2.fromOffset(10, 68)
+            targetLabel.BackgroundTransparency = 1
+            targetLabel.Text = "目标：无"
+            targetLabel.Font = Enum.Font.GothamBold
+            targetLabel.TextSize = 12
+            targetLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+            targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+            targetLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            targetLabel.Parent = frame
+            AimLockTargetLabel = targetLabel
+
+            -- 锁定按钮
+            local lockBtn = Instance.new("TextButton")
+            lockBtn.Size = UDim2.new(1, -20, 0, 36)
+            lockBtn.Position = UDim2.fromOffset(10, 100)
+            lockBtn.BackgroundColor3 = Color3.fromRGB(30, 80, 35)
+            lockBtn.BackgroundTransparency = 0.05
+            lockBtn.Text = "锁定当前目标"
+            lockBtn.Font = Enum.Font.GothamBold
+            lockBtn.TextSize = 13
+            lockBtn.TextColor3 = Color3.fromRGB(220, 255, 220)
+            lockBtn.AutoButtonColor = true
+            lockBtn.Parent = frame
+            local lockCorner = Instance.new("UICorner")
+            lockCorner.CornerRadius = UDim.new(0, 8)
+            lockCorner.Parent = lockBtn
+
+            -- 解锁按钮
+            local unlockBtn = Instance.new("TextButton")
+            unlockBtn.Size = UDim2.new(1, -20, 0, 36)
+            unlockBtn.Position = UDim2.fromOffset(10, 144)
+            unlockBtn.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
+            unlockBtn.BackgroundTransparency = 0.05
+            unlockBtn.Text = "解除锁定"
+            unlockBtn.Font = Enum.Font.GothamBold
+            unlockBtn.TextSize = 13
+            unlockBtn.TextColor3 = Color3.fromRGB(255, 220, 220)
+            unlockBtn.AutoButtonColor = true
+            unlockBtn.Parent = frame
+            local unlockCorner = Instance.new("UICorner")
+            unlockCorner.CornerRadius = UDim.new(0, 8)
+            unlockCorner.Parent = unlockBtn
+
+            -- 拖动逻辑
+            local dragging = false
+            local dragStart = nil
+            local startPos = nil
+            titleBar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true
+                    dragStart = input.Position
+                    startPos = frame.Position
+                end
+            end)
+            AimUserInputService.InputChanged:Connect(function(input)
+                if not dragging then return end
+                if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                    local delta = input.Position - dragStart
+                    frame.Position = UDim2.new(
+                        startPos.X.Scale, startPos.X.Offset + delta.X,
+                        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                    )
+                end
+            end)
+            AimUserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = false
+                end
+            end)
+
+            -- 按钮事件
+            closeBtn.MouseButton1Click:Connect(AimDestroyLockWindow)
+            lockBtn.MouseButton1Click:Connect(function()
+                if not AimConfig.Enabled then
+                    pcall(function() WindUI:Notify({Title="强锁", Content="请先启用自瞄", Duration=3}) end)
+                    return
+                end
+                if not AimCurrentTarget then
+                    pcall(function() WindUI:Notify({Title="强锁", Content="当前没有可锁定的目标", Duration=3}) end)
+                    return
+                end
+                AimStrongLockedTarget = AimCurrentTarget
+                AimStrongLockedPart = AimCurrentPart
+                AimStrongLockEnabled = true
+                pcall(function() WindUI:Notify({Title="强锁已开启", Content="已锁定："..AimCurrentTarget.DisplayName, Duration=3}) end)
+            end)
+            unlockBtn.MouseButton1Click:Connect(function()
+                AimStrongLockedTarget = nil
+                AimStrongLockedPart = nil
+                AimStrongLockEnabled = false
+                pcall(function() WindUI:Notify({Title="强锁已解除", Content="已取消强制锁定", Duration=3}) end)
+            end)
+
+            pcall(function() WindUI:Notify({Title="强锁", Content="强锁悬浮窗已打开", Duration=2}) end)
+        end
+
+        -- ============================================================
+        -- 3.8 玩家列表缓存与事件
+        -- ============================================================
+        -- 初始化玩家列表
+        for _, player in ipairs(AimPlayers:GetPlayers()) do
+            table.insert(AimPlayerList, player)
+        end
+
+        local AimPlayerAddedConn = AimPlayers.PlayerAdded:Connect(function(player)
+            table.insert(AimPlayerList, player)
+            player.CharacterAdded:Connect(function()
+                task.wait(0.1)
+                AimCharCache[player] = nil
+                if AimConfig.ESP then AimCreateESP(player) end
+            end)
+        end)
+
+        local AimPlayerRemovingConn = AimPlayers.PlayerRemoving:Connect(function(player)
+            -- 从缓存列表移除
+            for i, p in ipairs(AimPlayerList) do
+                if p == player then
+                    table.remove(AimPlayerList, i)
+                    break
+                end
+            end
+            AimRemoveESP(player)
+            AimCharCache[player] = nil
+            if AimCurrentTarget == player then
+                AimCurrentTarget = nil
+                AimCurrentPart = nil
+            end
+            if AimStrongLockedTarget == player then
+                AimStrongLockedTarget = nil
+                AimStrongLockedPart = nil
+                AimStrongLockEnabled = false
+            end
+        end)
+
+        -- 角色重生时清除缓存
+        local AimCharAddedConn = AimLocalPlayer.CharacterAdded:Connect(function()
+            table.clear(AimCharCache)
+        end)
+
+        -- ============================================================
+        -- 3.9 F4 快捷键
+        -- ============================================================
+        local AimKeybindConn = AimUserInputService.InputBegan:Connect(function(input, processed)
+            if processed then return end
+            if input.KeyCode == Enum.KeyCode.F4 then
+                AimConfig.Enabled = not AimConfig.Enabled
+                if not AimConfig.Enabled then
+                    AimCurrentTarget = nil
+                    AimCurrentPart = nil
+                end
+                pcall(function()
+                    WindUI:Notify({Title = "自瞄", Content = AimConfig.Enabled and "已启用" or "已关闭", Duration = 2})
+                end)
+            end
+        end)
+
+        -- ============================================================
+        -- 3.10 渲染主循环（每帧 pcall 保护）
+        -- ============================================================
+        local AimRenderConnection = nil
+        local AimLockUpdateCounter = 0
+
+        AimRenderConnection = AimRunService.RenderStepped:Connect(function(deltaTime)
+            pcall(function()
+                local camera = AimWorkspace.CurrentCamera
+                if not camera then return end
+
+                -- v5：每帧只计算一次视口中心，供 FOV圈/准心/AimScreenDistance 复用
+                AimViewportCenterX = camera.ViewportSize.X * 0.5
+                AimViewportCenterY = camera.ViewportSize.Y * 0.5
+
+                -- v5：每帧只获取一次本地玩家部件，供动态准心等复用
+                local myParts = AimGetCharParts(AimLocalPlayer)
+
+                -- --- FOV 圆圈（ZIndex=500）---
+                if AimFOVDrawing then
+                    AimFOVDrawing.Visible = AimConfig.ShowFOVCircle
+                    if AimConfig.ShowFOVCircle then
+                        AimFOVDrawing.Position = Vector2.new(AimViewportCenterX, AimViewportCenterY)
+                        AimFOVDrawing.Radius = AimConfig.FOV
+                    end
+                end
+
+                -- --- 动态准心（ZIndex=501）---
+                if AimCrossLines then
+                    local showCross = AimConfig.DynamicCrosshair
+                    local center = Vector2.new(AimViewportCenterX, AimViewportCenterY)
+                    local moveSpeed = 0
+                    if myParts and myParts.Root then
+                        moveSpeed = myParts.Root.AssemblyLinearVelocity.Magnitude
+                    end
+                    local gap = 6 + (moveSpeed * 0.5)
+                    local length = 10
+                    AimCrossLines.Top.From = center + Vector2.new(0, -gap - length)
+                    AimCrossLines.Top.To = center + Vector2.new(0, -gap)
+                    AimCrossLines.Bottom.From = center + Vector2.new(0, gap)
+                    AimCrossLines.Bottom.To = center + Vector2.new(0, gap + length)
+                    AimCrossLines.Left.From = center - Vector2.new(gap + length, 0)
+                    AimCrossLines.Left.To = center - Vector2.new(gap, 0)
+                    AimCrossLines.Right.From = center + Vector2.new(gap, 0)
+                    AimCrossLines.Right.To = center + Vector2.new(gap + length, 0)
+                    for _, line in pairs(AimCrossLines) do
+                        line.Visible = showCross
+                    end
+                end
+
+                -- --- ESP 更新（降频）---
+                AimUpdateESP()
+
+                -- --- 强锁悬浮窗状态更新（降频到每3帧）---
+                AimLockUpdateCounter = AimLockUpdateCounter + 1
+                if AimLockUpdateCounter >= 3 and AimLockWindowGui and AimLockWindowGui.Parent then
+                    AimLockUpdateCounter = 0
+                    if AimStrongLockEnabled and AimStrongLockedTarget then
+                        if AimStrongValidTarget(AimStrongLockedTarget) then
+                            if AimLockStatusLabel then
+                                AimLockStatusLabel.Text = "状态：强锁中"
+                                AimLockStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+                            end
+                            if AimLockTargetLabel then
+                                AimLockTargetLabel.Text = "目标：" .. (AimStrongLockedTarget.DisplayName or AimStrongLockedTarget.Name)
+                            end
+                        else
+                            AimStrongLockedTarget = nil
+                            AimStrongLockedPart = nil
+                            AimStrongLockEnabled = false
+                            if AimLockStatusLabel then
+                                AimLockStatusLabel.Text = "状态：目标丢失"
+                                AimLockStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+                            end
+                            if AimLockTargetLabel then AimLockTargetLabel.Text = "目标：无" end
+                        end
+                    else
+                        if AimLockStatusLabel then
+                            AimLockStatusLabel.Text = "状态：未锁定"
+                            AimLockStatusLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+                        end
+                        if AimLockTargetLabel then
+                            if AimCurrentTarget then
+                                AimLockTargetLabel.Text = "当前：" .. (AimCurrentTarget.DisplayName or AimCurrentTarget.Name)
+                            else
+                                AimLockTargetLabel.Text = "目标：无"
+                            end
+                        end
+                    end
+                end
+
+                -- --- 自瞄逻辑 ---
+                if not AimConfig.Enabled then
+                    AimCurrentTarget = nil
+                    AimCurrentPart = nil
+                    return
+                end
+
+                -- 强锁分支
+                if AimStrongLockEnabled and AimStrongLockedTarget then
+                    if not AimStrongValidTarget(AimStrongLockedTarget) then
+                        AimStrongLockedTarget = nil
+                        AimStrongLockedPart = nil
+                        AimStrongLockEnabled = false
+                        return
+                    end
+                    local char = AimStrongLockedTarget.Character
+                    if not char then AimStrongLockedTarget = nil return end
+                    local part = AimGetAimPart(char) or char:FindFirstChild("HumanoidRootPart")
+                    if not part then AimStrongLockedTarget = nil return end
+                    AimStrongLockedPart = part
+                    AimCurrentTarget = AimStrongLockedTarget
+                    AimCurrentPart = AimStrongLockedPart
+                else
+                    -- 普通瞄准分支（目标搜索降频到30fps）
+                    AimScanTimer = AimScanTimer + deltaTime
+                    if AimScanTimer >= 0.033 then
+                        AimScanTimer = 0
+                        if AimConfig.TargetLock then
+                            if not AimTargetStillValid() then
+                                AimCurrentTarget, AimCurrentPart = AimFindTarget()
+                            end
+                        else
+                            AimCurrentTarget, AimCurrentPart = AimFindTarget()
+                        end
+                    end
+                    if not AimCurrentTarget or not AimCurrentPart then return end
+                    if not AimTargetStillValid() then
+                        AimCurrentTarget = nil
+                        AimCurrentPart = nil
+                        return
+                    end
+                end
+
+                if not AimCurrentTarget then return end
+
+                -- 预判
+                local aimPosition = AimCurrentPart.Position
+                if AimConfig.Prediction then
+                    local velocity = AimCurrentPart.AssemblyLinearVelocity
+                    if velocity and velocity.Magnitude > 0.5 then
+                        aimPosition = aimPosition + velocity * AimConfig.PredictionTime
+                    end
+                end
+
+                -- 相机插值瞄准
+                local desired = CFrame.lookAt(camera.CFrame.Position, aimPosition)
+                local speed = (AimConfig.Mode == "Rage") and AimConfig.RageSpeed or (1 + (AimConfig.Smoothness / 100) * AimConfig.LegitSpeed)
+                local alpha = 1 - math.exp(-speed * deltaTime)
+                camera.CFrame = camera.CFrame:Lerp(desired, alpha)
+            end)
+        end)
+
+        -- ============================================================
+        -- 3.11 清理函数
+        -- ============================================================
+        _G.__XLHubAimCleanup = function()
+            pcall(function()
+                if AimRenderConnection then AimRenderConnection:Disconnect() end
+                if AimPlayerAddedConn then AimPlayerAddedConn:Disconnect() end
+                if AimPlayerRemovingConn then AimPlayerRemovingConn:Disconnect() end
+                if AimCharAddedConn then AimCharAddedConn:Disconnect() end
+                if AimKeybindConn then AimKeybindConn:Disconnect() end
+                AimDestroyLockWindow()
+                if AimFOVDrawing then
+                    AimFOVDrawing.Visible = false
+                    pcall(function() AimFOVDrawing:Remove() end)
+                end
+                if AimCrossLines then
+                    for _, line in pairs(AimCrossLines) do
+                        line.Visible = false
+                        pcall(function() line:Remove() end)
+                    end
+                end
+                for _, obj in pairs(AimESPObjects) do
+                    pcall(function() obj:Destroy() end)
+                end
+                table.clear(AimESPObjects)
+                table.clear(AimCharCache)
+                table.clear(AimPlayerList)
+                -- v5：清除新增的缓存
+                AimCachedRayParams = nil
+                AimCachedRayParamsChar = nil
+                AimCachedRayParamsCamera = nil
+                AimViewportCenterX = 0
+                AimViewportCenterY = 0
+                AimCurrentTarget = nil
+                AimCurrentPart = nil
+                AimStrongLockedTarget = nil
+                AimStrongLockedPart = nil
+                AimStrongLockEnabled = false
+            end)
+            _G.__XLHubAimCleanup = nil
+        end
+
+        end) -- end of pcall
+
+        if not AimCoreOk then
+            warn("[XL Hub] 瞄准模块核心逻辑初始化失败: " .. tostring(AimCoreErr))
+            pcall(function()
+                WindUI:Notify({Title = "瞄准模块", Content = "核心逻辑初始化失败，UI 仍可用", Duration = 5})
+            end)
+        end
+
         -- ========== 14. FE Tab：自由摄像头与外部脚本 ==========
         local FETab = Window:Tab({
             Title = "FE",
@@ -3598,6 +4743,10 @@ end
                         TeleportState[connectionName] = nil
                     end
                 end
+            end
+            if _G.__XLHubAimCleanup then
+                pcall(_G.__XLHubAimCleanup)
+                _G.__XLHubAimCleanup = nil
             end
             if PhantomCleanup then
                 pcall(PhantomCleanup)
