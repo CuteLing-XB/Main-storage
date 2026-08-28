@@ -1720,6 +1720,7 @@ local function PhantomCleanupImpl()
 end
         PhantomCleanup = PhantomCleanupImpl
 if HasDrawing then
+local PhantomESPFrameCount = 0
 PhantomRenderConnection = PhantomRunService.RenderStepped:Connect(function()
     if PhantomDestroyed then return end
     if not PhantomConfig.Enabled and not PhantomConfig.ShowWatermark then return end
@@ -1738,6 +1739,13 @@ PhantomRenderConnection = PhantomRunService.RenderStepped:Connect(function()
     if not HasDrawing then return end
 
     if not PhantomConfig.Enabled then
+        return
+    end
+
+    -- 性能优化：ESP渲染降频到每2帧一次，水印/全局更新保持每帧
+    -- 减少50%的Drawing属性设置开销，玩家多时显著降低卡顿
+    PhantomESPFrameCount = PhantomESPFrameCount + 1
+    if PhantomESPFrameCount % 2 ~= 0 then
         return
     end
 
@@ -3266,6 +3274,153 @@ end
         })
 
         -- ================================================================
+        -- 反作弊绕过核心模块 (BypassCore Lite v2.0)
+        -- 基于底层反作弊独立模块精简版
+        -- 功能：属性欺骗、GUI保护、反踢出、事件屏蔽、隐藏错误
+        -- ================================================================
+        local BypassCore = {
+            _VERSION = "2.0-Lite",
+            State = {
+                PropertyOverrides = {},
+                OldIndexHook = nil,
+                Initialized = false,
+            }
+        }
+
+        -- [1] 属性欺骗：反作弊读取 obj.key 时返回 fakeValue
+        function BypassCore:SetPropertyOverride(obj, key, fakeValue)
+            if not obj then return end
+            if not self.State.PropertyOverrides[obj] then
+                self.State.PropertyOverrides[obj] = {}
+            end
+            self.State.PropertyOverrides[obj][key] = fakeValue
+
+            if not self.State.OldIndexHook then
+                pcall(function()
+                    if hookmetamethod and checkcaller then
+                        self.State.OldIndexHook = hookmetamethod(game, "__index", function(self_obj, k)
+                            if not checkcaller() then
+                                local ov = BypassCore.State.PropertyOverrides[self_obj]
+                                if ov and ov[k] ~= nil then
+                                    return ov[k]
+                                end
+                                pcall(function()
+                                    if self_obj and self_obj.IsA and self_obj:IsA("Humanoid") then
+                                        if k == "WalkSpeed" then return 16 end
+                                        if k == "JumpPower" then return 50 end
+                                    elseif self_obj and self_obj.IsA and self_obj:IsA("BasePart") then
+                                        if k == "Velocity" or k == "AssemblyLinearVelocity" then
+                                            return Vector3.new(0, 0, 0)
+                                        end
+                                    end
+                                end)
+                            end
+                            return BypassCore.State.OldIndexHook(self_obj, k)
+                        end)
+                    end
+                end)
+            end
+        end
+
+        -- 清除属性欺骗
+        function BypassCore:ClearPropertyOverride(obj, key)
+            if self.State.PropertyOverrides[obj] then
+                if key then
+                    self.State.PropertyOverrides[obj][key] = nil
+                else
+                    self.State.PropertyOverrides[obj] = nil
+                end
+            end
+        end
+
+        -- [2] GUI保护：保护UI免受反作弊扫描
+        function BypassCore:ProtectGUI(instance)
+            pcall(function()
+                if syn and syn.protect_gui then
+                    syn.protect_gui(instance)
+                elseif protect_gui then
+                    protect_gui(instance)
+                elseif gethui then
+                    instance.Parent = gethui()
+                else
+                    instance.Parent = game:GetService("CoreGui")
+                end
+            end)
+        end
+
+        -- [3] 反踢出：拦截服务器踢出请求
+        function BypassCore:ProtectFromKick()
+            pcall(function()
+                local player = game:GetService("Players").LocalPlayer
+                local oldKick = player.Kick
+                player.Kick = function(self, ...)
+                    warn("[BypassCore] 拦截到踢出请求:", ...)
+                    return
+                end
+            end)
+        end
+
+        -- [4] 事件屏蔽：屏蔽反作弊 RemoteEvent 接收器
+        function BypassCore:DisableAntiCheatEvents()
+            pcall(function()
+                if not getconnections then return end
+                local eventNames = {"AntiCheat", "AntiExploit", "AntiSpeed", "AntiFling", "SpeedCheck", "KillFeed", "AC_Remote", "ExploitDetector"}
+                local rs = game:GetService("ReplicatedStorage")
+                for _, name in ipairs(eventNames) do
+                    local ev = rs:FindFirstChild(name)
+                    if ev and ev:IsA("RemoteEvent") then
+                        for _, c in ipairs(getconnections(ev.OnClientEvent)) do
+                            if c.Disable then pcall(c.Disable, c) end
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- [5] 隐藏错误：防止堆栈信息泄露
+        function BypassCore:HideErrors(keywords)
+            keywords = keywords or {"AntiCheat", "Fling", "Bypass", "Exploit"}
+            pcall(function()
+                local oldError = error
+                error = function(msg, level)
+                    if type(msg) == "string" then
+                        for _, kw in ipairs(keywords) do
+                            if msg:find(kw, 1, true) then return end
+                        end
+                    end
+                    oldError(msg, level)
+                end
+            end)
+        end
+
+        -- [6] 安全发送远程事件（自动权限伪装）
+        function BypassCore:SafeFireServer(remoteObj, ...)
+            local args = {...}
+            return pcall(function()
+                local old = getthreadidentity and getthreadidentity() or 2
+                if setthreadidentity then setthreadidentity(2) end
+                remoteObj:FireServer(unpack(args))
+                if setthreadidentity then setthreadidentity(old) end
+            end)
+        end
+
+        -- 快速初始化全部核心防护
+        function BypassCore:InitializeAll()
+            if self.State.Initialized then return end
+            self.State.Initialized = true
+            self:ProtectFromKick()
+            self:HideErrors()
+            self:DisableAntiCheatEvents()
+            print("[BypassCore Lite] 反作弊防护系统已启动：反踢出+事件屏蔽+错误隐藏")
+        end
+
+        -- 启动反作弊防护（脚本加载1秒后自动执行）
+        task.spawn(function()
+            task.wait(1)
+            BypassCore:InitializeAll()
+        end)
+
+        -- ================================================================
         -- 瞄准 Tab：算法自瞄引擎 v5
         -- 修复：墙壁检测（双向射线+减小偏移+RespectCanCollide）
         -- 修复：队伍检查（Attribute+自定义属性+TeamColor默认色排除）
@@ -3284,9 +3439,9 @@ end
         local AimConfig = {
             Enabled = false,
             Mode = "Legit",
-            TeamCheck = true,
-            WallCheck = true,
-            TargetLock = true,
+            TeamCheck = false,
+            WallCheck = false,
+            TargetLock = false,
             FOV = 150,
             Smoothness = 35,
             MaxDistance = 1000,
@@ -3498,7 +3653,6 @@ end
             Desc = "在屏幕中心显示瞄准范围圆圈（最上层渲染）",
             Icon = "solar:plain-3-bold-duotone",
             Value = AimConfig.ShowFOVCircle,
-            Flag = "Aim_ShowFOVCircle",
             Callback = function(value)
                 AimConfig.ShowFOVCircle = value == true
             end,
@@ -3508,7 +3662,6 @@ end
             Desc = "显示随移动速度扩散的十字准心（最上层渲染）",
             Icon = "solar:widget-5-bold-duotone",
             Value = AimConfig.DynamicCrosshair,
-            Flag = "Aim_DynamicCrosshair",
             Callback = function(value)
                 AimConfig.DynamicCrosshair = value == true
             end,
@@ -4200,6 +4353,7 @@ end
         -- ============================================================
         local AimRenderConnection = nil
         local AimLockUpdateCounter = 0
+        local AimDrawFrameCount = 0
 
         AimRenderConnection = AimRunService.RenderStepped:Connect(function(deltaTime)
             pcall(function()
@@ -4213,8 +4367,13 @@ end
                 -- v5：每帧只获取一次本地玩家部件，供动态准心等复用
                 local myParts = AimGetCharParts(AimLocalPlayer)
 
-                -- --- FOV 圆圈（ZIndex=500）---
-                if AimFOVDrawing then
+                -- 性能优化：FOV圈+动态准心降频到每2帧一次
+                -- 视口中心/自瞄逻辑保持每帧，不影响瞄准精度
+                AimDrawFrameCount = AimDrawFrameCount + 1
+                local drawFrame = AimDrawFrameCount % 2 == 0
+
+                -- --- FOV 圆圈（ZIndex=500，降频）---
+                if AimFOVDrawing and drawFrame then
                     AimFOVDrawing.Visible = AimConfig.ShowFOVCircle
                     if AimConfig.ShowFOVCircle then
                         AimFOVDrawing.Position = Vector2.new(AimViewportCenterX, AimViewportCenterY)
@@ -4222,8 +4381,8 @@ end
                     end
                 end
 
-                -- --- 动态准心（ZIndex=501）---
-                if AimCrossLines then
+                -- --- 动态准心（ZIndex=501，降频）---
+                if AimCrossLines and drawFrame then
                     local showCross = AimConfig.DynamicCrosshair
                     local center = Vector2.new(AimViewportCenterX, AimViewportCenterY)
                     local moveSpeed = 0
@@ -4510,7 +4669,7 @@ end
             })
             tab:Section({ Title = "脚本列表" })
             for _, scriptInfo in ipairs(server.Scripts) do
-                tab:Button({
+                local btn = tab:Button({
                     Title = scriptInfo.Name,
                     Desc = "点击直接执行",
                     Icon = "solar:bolt-bold-duotone",
@@ -4518,8 +4677,14 @@ end
                         SafeExecute(scriptInfo.Name, scriptInfo.Url)
                     end,
                 })
+                if scriptInfo.Name == "执行自动农场" then
+                    btn.LockedTitle = "" -- 清空锁旁边同行文字，不想要右边那行
+                    btn:SetDesc("暂时无法使用")
+                    btn:Lock()
+                end
             end
         end
+
 
         -- ========== 16. 设置 Tab ==========
         local SettingTab = Window:Tab({
