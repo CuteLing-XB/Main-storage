@@ -428,7 +428,7 @@ local function safeStartup()
                 Name = "最强战场",
                 Icon = "solar:bolt-bold-duotone",
                 Scripts = {
-                    {Name = "执行自动农场", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E8%87%AA%E5%8A%A8%E5%86%9C%E5%9C%BA.txt"},
+                    {Name = "执行自动农场", Url = "https://raw.githubusercontent.com/zyke425/PARA_KANINOKA/refs/heads/main/BlackHOle.lua"},
                     {Name = "TSB 脚本 1", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%201"},
                     {Name = "TSB 脚本 2", Url = "https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/tbs%20%202"},
                 },
@@ -4678,9 +4678,15 @@ end
                     end,
                 })
                 if scriptInfo.Name == "执行自动农场" then
-                    btn.LockedTitle = "" -- 清空锁旁边同行文字，不想要右边那行
-                    btn:SetDesc("暂时无法使用")
-                    btn:Lock()
+                    btn:SetDesc("感谢各位的理解已经替换了")
+                    tab:Button({
+                        Title = "复制卡密",
+                        Desc = "点击复制 GXLY_FREE_DEMOKEY_7",
+                        Icon = "solar:copy-bold-duotone",
+                        Callback = function()
+                            pcall(setclipboard, "GXLY_FREE_DEMOKEY_7")
+                        end,
+                    })
                 end
             end
         end
