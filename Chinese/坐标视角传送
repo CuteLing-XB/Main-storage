@@ -1,9 +1,9 @@
 --[[
-	自由视角增强版 V4 (FREE CAM) + 摇杆屏障区 + 丝滑回弹 + 自动保存
-	• [新] 摇杆专属屏障区：摇杆内控制移动，摇杆外任意空白处滑动旋转视角
-	• [新] 摇杆带有 TweenService 弹力回中缓冲效果
-	• [新] 设置面板顶部栏支持随意拖拽移动
-	• [新] 自动配置持久化保存系统（自动记录主题颜色与XYZ实体偏移量）
+	• [极致性能优化] 去除每帧高频 UI 轮询开销，彻底解决移动端卡顿、掉帧问题。
+	• [输入完美支持] 保证自定义数值输入、平滑更新与保存，同时兼顾不被系统强制覆盖。
+	• [摇杆阻尼] 支持摇杆推力比例控速：小推慢走、中推中速、满推全速。
+	• [箭头修复] 独立的 D-Pad 触摸判定，完美修复无法拖动游戏内人物视角的问题。
+	• [平滑传送] 升级传送逻辑，角色独立或乘坐车辆/载具均可平滑 Tween 传送。
 ]]
 
 local Players = game:GetService("Players")
@@ -22,17 +22,44 @@ local pcMode = false
 local dragging = false
 local lastInputPos = nil
 local dragInput = nil
-
 local ignoredControlTouches = {}
 
 local camPos = Vector3.zero
 local velocity = Vector3.zero
 local yaw, pitch = 0, 0
-
 local moveDir = { Up = false, Down = false, Left = false, Right = false }
 local joystickVector = Vector2.zero
 local joystickTouchId = nil
 local joystickReturnTween = nil
+
+-- 角色引用缓存
+local cachedCharacter = nil
+local cachedHumanoid = nil
+local cachedHumanoidRootPart = nil
+local cachedAssemblyRootPart = nil
+
+local function refreshCharacterCache(char)
+	cachedCharacter = char
+	cachedHumanoid = char and char:FindFirstChildOfClass("Humanoid") or nil
+	cachedHumanoidRootPart = char and char:FindFirstChild("HumanoidRootPart") or nil
+	cachedAssemblyRootPart = cachedHumanoidRootPart and (cachedHumanoidRootPart.AssemblyRootPart or cachedHumanoidRootPart) or nil
+end
+
+local function getCachedRootPart()
+	local hrp = cachedHumanoidRootPart
+	if not hrp or not hrp.Parent then
+		if cachedCharacter and cachedCharacter.Parent then
+			refreshCharacterCache(cachedCharacter)
+		else
+			local char = player.Character
+			if char then refreshCharacterCache(char) end
+		end
+	end
+	if cachedHumanoidRootPart then
+		cachedAssemblyRootPart = cachedHumanoidRootPart.AssemblyRootPart or cachedHumanoidRootPart
+	end
+	return cachedHumanoidRootPart, cachedAssemblyRootPart, cachedHumanoid
+end
 
 -- === 基础设置 ===
 local speed = 120
@@ -44,39 +71,47 @@ local SPEED_MIN, SPEED_STEP = 1, 20
 local SMOOTH_MIN, SMOOTH_MAX, SMOOTH_STEP = 0.05, 1, 0.1
 local SENSITIVITY_MIN_PERCENT, SENSITIVITY_MAX_PERCENT, SENSITIVITY_STEP_PERCENT = 20, 500, 20
 
--- === 摇杆设置 ===
-local joystickSize = 160
-local joystickShape = 1 -- 1: 圆形, 2: 方块
-local joystickTransparency = 45 -- 0-100
-
 -- === 吸附设置 ===
 local magnetActive = false
 local offsetX, offsetY, offsetZ = 0, 0, 0
 local OFFSET_STEP = 1
 
--- === 主题设置 ===
-local currentThemeColor = Color3.fromRGB(255, 0, 50) -- 默认 ROG 红
-local activeIcons = {}
-local tabButtons = {}
-local tabs = {}
+-- === 控制与主题设置 ===
+local controlStyle = 1
+local joystickSize = 160
+local joystickShape = 1
+local joystickTransparency = 45
+local currentThemeColor = Color3.fromRGB(255, 0, 50)
+
+-- === 布局与专属偏移设置 ===
+local joystickOffsetX = 0
+local joystickOffsetY = 0
+local dpadOffsetX = 0
+local dpadOffsetY = 0
+local dpadSize = 80
+local dpadGap = 85
+
+local arrowOffset = {
+	Up = {x=0, y=0}, Down = {x=0, y=0},
+	Left = {x=0, y=0}, Right = {x=0, y=0}
+}
+local uiEditTarget = 1
+
+local activeIcons, tabButtons, tabs = {}, {}, {}
 
 -- ========== 配置保存与读取模块 ==========
-local CONFIG_FILE_NAME = "FreeCamSettings_V4.json"
+local CONFIG_FILE_NAME = "XQVIP888_Settings.json"
 
 local function saveConfig()
 	local configData = {
-		r = currentThemeColor.R,
-		g = currentThemeColor.G,
-		b = currentThemeColor.B,
-		offsetX = offsetX,
-		offsetY = offsetY,
-		offsetZ = offsetZ
+		r = currentThemeColor.R, g = currentThemeColor.G, b = currentThemeColor.B,
+		offsetX = offsetX, offsetY = offsetY, offsetZ = offsetZ,
+		controlStyle = controlStyle, joystickSize = joystickSize, joystickShape = joystickShape, joystickTransparency = joystickTransparency,
+		joystickOffsetX = joystickOffsetX, joystickOffsetY = joystickOffsetY,
+		dpadOffsetX = dpadOffsetX, dpadOffsetY = dpadOffsetY,
+		dpadSize = dpadSize, dpadGap = dpadGap, arrowOffset = arrowOffset
 	}
-	pcall(function()
-		if writefile then
-			writefile(CONFIG_FILE_NAME, HttpService:JSONEncode(configData))
-		end
-	end)
+	pcall(function() if writefile then writefile(CONFIG_FILE_NAME, HttpService:JSONEncode(configData)) end end)
 end
 
 local function loadConfig()
@@ -85,174 +120,161 @@ local function loadConfig()
 			local data = readfile(CONFIG_FILE_NAME)
 			local decoded = HttpService:JSONDecode(data)
 			if decoded then
-				if decoded.r and decoded.g and decoded.b then
-					currentThemeColor = Color3.new(decoded.r, decoded.g, decoded.b)
+				if decoded.r then currentThemeColor = Color3.new(decoded.r, decoded.g, decoded.b) end
+				offsetX = decoded.offsetX or 0; offsetY = decoded.offsetY or 0; offsetZ = decoded.offsetZ or 0
+				controlStyle = decoded.controlStyle or 1
+				joystickSize = decoded.joystickSize or 160
+				joystickShape = decoded.joystickShape or 1
+				joystickTransparency = decoded.joystickTransparency or 45
+				joystickOffsetX = decoded.joystickOffsetX or 0; joystickOffsetY = decoded.joystickOffsetY or 0
+				dpadOffsetX = decoded.dpadOffsetX or 0; dpadOffsetY = decoded.dpadOffsetY or 0
+				dpadSize = decoded.dpadSize or 80; dpadGap = decoded.dpadGap or 85
+				if decoded.arrowOffset then
+					arrowOffset.Up = decoded.arrowOffset.Up or {x=0,y=0}
+					arrowOffset.Down = decoded.arrowOffset.Down or {x=0,y=0}
+					arrowOffset.Left = decoded.arrowOffset.Left or {x=0,y=0}
+					arrowOffset.Right = decoded.arrowOffset.Right or {x=0,y=0}
 				end
-				offsetX = decoded.offsetX or 0
-				offsetY = decoded.offsetY or 0
-				offsetZ = decoded.offsetZ or 0
 			end
 		end
 	end)
 end
+loadConfig()
 
-loadConfig() -- 运行立刻尝试加载本地保存的数据
-
--- ========== 防检测模块 ==========
-local AntiDetect = {
-	MAX_TELEPORT_DISTANCE = 150,
-	TELEPORT_TWEEN_TIME = 0.15,
-	VELOCITY_CLEAR_INTERVAL = 2,
-	VELOCITY_RESIDUAL = 0.01,
-	_cameraTypeCached = nil,
-	_frameCount = 0,
-}
-
-local function safeSetCameraType(camType)
-	if AntiDetect._cameraTypeCached ~= camType then
-		camera.CameraType = camType
-		AntiDetect._cameraTypeCached = camType
-	end
-end
+-- ========== 防检测与平滑传送模块 ==========
+local AntiDetect = { MAX_TELEPORT_DISTANCE = 150, TELEPORT_TWEEN_TIME = 0.15, VELOCITY_CLEAR_INTERVAL = 2, VELOCITY_RESIDUAL = 0.01, _cameraTypeCached = nil, _frameCount = 0 }
+local function safeSetCameraType(camType) if AntiDetect._cameraTypeCached ~= camType then camera.CameraType = camType; AntiDetect._cameraTypeCached = camType end end
 
 local function safeTeleport(rootPart, targetCFrame)
 	if not rootPart or not rootPart.Parent then return end
-	local startPos = rootPart.Position
-	local targetPos = targetCFrame.Position
-	local distance = (targetPos - startPos).Magnitude
+	local startPos = rootPart.Position; local distance = (targetCFrame.Position - startPos).Magnitude
 	if distance <= AntiDetect.MAX_TELEPORT_DISTANCE then
 		TweenService:Create(rootPart, TweenInfo.new(AntiDetect.TELEPORT_TWEEN_TIME, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { CFrame = targetCFrame }):Play()
 	else
 		local segments = math.ceil(distance / AntiDetect.MAX_TELEPORT_DISTANCE)
-		local direction = (targetPos - startPos).Unit
+		local direction = (targetCFrame.Position - startPos).Unit
 		task.spawn(function()
 			for i = 1, segments do
 				if not rootPart or not rootPart.Parent then break end
-				local segmentTarget = i == segments and targetPos or (startPos + direction * (AntiDetect.MAX_TELEPORT_DISTANCE * i))
-				local segmentCFrame = CFrame.new(segmentTarget) * targetCFrame.Rotation
-				local tween = TweenService:Create(rootPart, TweenInfo.new(AntiDetect.TELEPORT_TWEEN_TIME, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { CFrame = segmentCFrame })
-				tween:Play()
-				tween.Completed:Wait()
+				local segmentTarget = i == segments and targetCFrame.Position or (startPos + direction * (AntiDetect.MAX_TELEPORT_DISTANCE * i))
+				local tween = TweenService:Create(rootPart, TweenInfo.new(AntiDetect.TELEPORT_TWEEN_TIME, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { CFrame = CFrame.new(segmentTarget) * targetCFrame.Rotation })
+				tween:Play(); tween.Completed:Wait()
 			end
 		end)
 	end
 end
 
--- ========== 原版控制禁用模块 ==========
 local controls = nil
 local function getControls()
-	local playerScripts = player:FindFirstChild("PlayerScripts")
-	if not playerScripts then return nil end
-	local playerModule = playerScripts:FindFirstChild("PlayerModule")
-	if not playerModule then return nil end
-	local success, module = pcall(require, playerModule)
-	if not success or typeof(module) ~= "table" or typeof(module.GetControls) ~= "function" then return nil end
-	local ok, ctrl = pcall(module.GetControls, module)
-	return (ok and ctrl) and ctrl or nil
+	local ps = player:FindFirstChild("PlayerScripts"); if not ps then return nil end
+	local pm = ps:FindFirstChild("PlayerModule"); if not pm then return nil end
+	local s, m = pcall(require, pm); if not s or typeof(m) ~= "table" then return nil end
+	local ok, ctrl = pcall(m.GetControls, m); return (ok and ctrl) and ctrl or nil
 end
-
-local function disableCharacterControls()
-	if not controls then controls = getControls() end
-	if controls and typeof(controls.Disable) == "function" then controls:Disable() end
-	ContextActionService:BindActionAtPriority("FreeCamSinkControls", function() return Enum.ContextActionResult.Sink end, false, Enum.ContextActionPriority.High.Value + 100, Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right, Enum.KeyCode.Space)
-end
-
-local function enableCharacterControls()
-	if controls and typeof(controls.Enable) == "function" then controls:Enable() end
-	ContextActionService:UnbindAction("FreeCamSinkControls")
-end
-
 local function updateCharacterControls()
-	if freeCamActive then disableCharacterControls() else enableCharacterControls() end
+	if not controls then controls = getControls() end
+	if freeCamActive and pcMode then
+		if controls and typeof(controls.Disable) == "function" then controls:Disable() end
+		ContextActionService:BindActionAtPriority("FreeCamSink", function() return Enum.ContextActionResult.Sink end, false, Enum.ContextActionPriority.High.Value + 100, Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.Space)
+	else
+		if controls and typeof(controls.Enable) == "function" then controls:Enable() end
+		ContextActionService:UnbindAction("FreeCamSink")
+	end
 end
 
 -- ========== UI 搭建 ==========
 local gui = Instance.new("ScreenGui")
-gui.Name = "FreeCamGuiV4"
+gui.Name = "XQVIP😈"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.DisplayOrder = 999
 gui.Parent = playerGui
-
 local ROUNDY_FONT = Enum.Font.FredokaOne
 
--- ============ 虚拟摇杆 UI (专属屏障区) ============
+local BASE_POS_X, BASE_POS_Y = 130, -160
+
+-- 虚拟摇杆
 local joystickFrame = Instance.new("Frame")
-joystickFrame.Name = "VirtualJoystick"
-joystickFrame.Size = UDim2.new(0, joystickSize, 0, joystickSize)
 joystickFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-joystickFrame.Position = UDim2.new(0, 130, 1, -160)
 joystickFrame.BackgroundColor3 = Color3.fromRGB(15, 10, 20)
-joystickFrame.BackgroundTransparency = joystickTransparency / 100
 joystickFrame.Active = true
 joystickFrame.Visible = false
 joystickFrame.ZIndex = 5
 joystickFrame.Parent = gui
 
-local jsBgCorner = Instance.new("UICorner")
-jsBgCorner.CornerRadius = UDim.new(1, 0)
-jsBgCorner.Parent = joystickFrame
+local jsBgCorner = Instance.new("UICorner", joystickFrame)
+local jsBgStroke = Instance.new("UIStroke", joystickFrame); jsBgStroke.Thickness = 1.5; jsBgStroke.Color = Color3.fromRGB(255, 255, 255); jsBgStroke.Transparency = 0.85
+local joystickThumb = Instance.new("Frame", joystickFrame)
+joystickThumb.Size = UDim2.new(0.35, 0, 0.35, 0); joystickThumb.Position = UDim2.new(0.5, 0, 0.5, 0); joystickThumb.AnchorPoint = Vector2.new(0.5, 0.5)
+joystickThumb.BackgroundTransparency = 0.15; joystickThumb.ZIndex = 6
+local jsThumbCorner = Instance.new("UICorner", joystickThumb)
 
-local jsBgStroke = Instance.new("UIStroke")
-jsBgStroke.Thickness = 1.5
-jsBgStroke.Color = Color3.fromRGB(255, 255, 255)
-jsBgStroke.Transparency = 0.85
-jsBgStroke.Parent = joystickFrame
+-- 方向键容器 (D-Pad)
+local dpadContainer = Instance.new("Frame")
+dpadContainer.Size = UDim2.new(0, 360, 0, 360)
+dpadContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+dpadContainer.BackgroundTransparency = 1
+dpadContainer.Active = false
+dpadContainer.Visible = false
+dpadContainer.ZIndex = 5
+dpadContainer.Parent = gui
 
-local joystickThumb = Instance.new("Frame")
-joystickThumb.Size = UDim2.new(0.35, 0, 0.35, 0)
-joystickThumb.Position = UDim2.new(0.5, 0, 0.5, 0)
-joystickThumb.AnchorPoint = Vector2.new(0.5, 0.5)
-joystickThumb.BackgroundColor3 = currentThemeColor
-joystickThumb.BackgroundTransparency = 0.15
-joystickThumb.ZIndex = 6
-joystickThumb.Parent = joystickFrame
-
-local jsThumbCorner = Instance.new("UICorner")
-jsThumbCorner.CornerRadius = UDim.new(1, 0)
-jsThumbCorner.Parent = joystickThumb
-
-local function updateJoystickUI()
-	joystickFrame.Size = UDim2.new(0, joystickSize, 0, joystickSize)
-	joystickFrame.BackgroundTransparency = joystickTransparency / 100
-	local radiusGoal = (joystickShape == 1) and UDim.new(1, 0) or UDim.new(0.2, 0)
-	jsBgCorner.CornerRadius = radiusGoal
-	jsThumbCorner.CornerRadius = radiusGoal
+local dpadBtns = {}
+local DPAD_IMAGE = "rbxthumb://type=Asset&id=124372870787270&w=150&h=150"
+local function makeArrowButton(name, rotation)
+	local btn = Instance.new("ImageButton")
+	btn.Name = name; btn.AnchorPoint = Vector2.new(0.5, 0.5)
+	btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20); btn.BackgroundTransparency = 0.45
+	btn.AutoButtonColor = false; btn.Image = DPAD_IMAGE
+	btn.Rotation = rotation; btn.ScaleType = Enum.ScaleType.Fit; btn.ZIndex = 6
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+	btn.Parent = dpadContainer
+	dpadBtns[name] = btn
+	return btn
 end
 
--- ============ 图标按钮 ============
+local upBtn = makeArrowButton("Up", 0)
+local downBtn = makeArrowButton("Down", 180)
+local leftBtn = makeArrowButton("Left", -90)
+local rightBtn = makeArrowButton("Right", 90)
+
+local function bindHold(button, key)
+	button.MouseButton1Down:Connect(function()
+		if freeCamActive and not pcMode then moveDir[key] = true end
+	end)
+	button.MouseButton1Up:Connect(function() moveDir[key] = false end)
+	button.MouseLeave:Connect(function() moveDir[key] = false end)
+end
+
+bindHold(upBtn, "Up"); bindHold(downBtn, "Down"); bindHold(leftBtn, "Left"); bindHold(rightBtn, "Right")
+
+local function updateControlLayout()
+	joystickFrame.Position = UDim2.new(0, BASE_POS_X + joystickOffsetX, 1, BASE_POS_Y + joystickOffsetY)
+	dpadContainer.Position = UDim2.new(0, BASE_POS_X + dpadOffsetX, 1, BASE_POS_Y + dpadOffsetY)
+	
+	joystickFrame.Size = UDim2.new(0, joystickSize, 0, joystickSize)
+	local radiusGoal = (joystickShape == 1) and UDim.new(1, 0) or UDim.new(0.2, 0)
+	jsBgCorner.CornerRadius = radiusGoal; jsThumbCorner.CornerRadius = radiusGoal
+	joystickFrame.BackgroundTransparency = joystickTransparency / 100
+	
+	for name, btn in pairs(dpadBtns) do
+		btn.Size = UDim2.new(0, dpadSize, 0, dpadSize)
+		btn.BackgroundTransparency = (joystickTransparency / 100) * 0.8 + 0.1
+	end
+	
+	upBtn.Position = UDim2.new(0.5, arrowOffset.Up.x, 0.5, -dpadGap + arrowOffset.Up.y)
+	downBtn.Position = UDim2.new(0.5, arrowOffset.Down.x, 0.5, dpadGap + arrowOffset.Down.y)
+	leftBtn.Position = UDim2.new(0.5, -dpadGap + arrowOffset.Left.x, 0.5, arrowOffset.Left.y)
+	rightBtn.Position = UDim2.new(0.5, dpadGap + arrowOffset.Right.x, 0.5, arrowOffset.Right.y)
+end
+
+-- 图标按钮
 local function buildIconButton(assetId, size, pos, imageScale)
 	local btn = Instance.new("ImageButton")
-	btn.AnchorPoint = Vector2.new(0.5, 0.5)
-	btn.Size = size
-	btn.Position = pos
-	btn.BackgroundColor3 = Color3.fromRGB(45, 52, 71)
-	btn.BackgroundTransparency = 0.05
-	btn.AutoButtonColor = false
-	btn.Image = ""
-	btn.ZIndex = 6
-	btn.Parent = gui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(1, 0)
-	corner.Parent = btn
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Name = "ActiveGlow"
-	stroke.Thickness = 1
-	stroke.Color = Color3.fromRGB(255, 255, 255)
-	stroke.Transparency = 0.6
-	stroke.Parent = btn
-
-	local icon = Instance.new("ImageLabel")
-	icon.BackgroundTransparency = 1
-	icon.AnchorPoint = Vector2.new(0.5, 0.5)
-	icon.Position = UDim2.new(0.5, 0, 0.5, 0)
-	icon.Size = UDim2.new(imageScale, 0, imageScale, 0)
-	icon.Image = "rbxthumb://type=Asset&id=" .. assetId .. "&w=150&h=150"
-	icon.ScaleType = Enum.ScaleType.Fit
-	icon.ZIndex = 7
-	icon.Parent = btn
+	btn.AnchorPoint = Vector2.new(0.5, 0.5); btn.Size = size; btn.Position = pos; btn.BackgroundColor3 = Color3.fromRGB(45, 52, 71); btn.BackgroundTransparency = 0.05; btn.Image = ""; btn.ZIndex = 6; btn.Parent = gui
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+	local stroke = Instance.new("UIStroke", btn); stroke.Name = "ActiveGlow"; stroke.Thickness = 1; stroke.Color = Color3.fromRGB(255, 255, 255); stroke.Transparency = 0.6
+	local icon = Instance.new("ImageLabel", btn); icon.BackgroundTransparency = 1; icon.AnchorPoint = Vector2.new(0.5, 0.5); icon.Position = UDim2.new(0.5, 0, 0.5, 0); icon.Size = UDim2.new(imageScale, 0, imageScale, 0); icon.Image = "rbxthumb://type=Asset&id=" .. assetId .. "&w=150&h=150"; icon.ScaleType = Enum.ScaleType.Fit; icon.ZIndex = 7
 	return btn
 end
 
@@ -264,403 +286,338 @@ local magnetIcon = buildIconButton("7485051715", UDim2.new(0, 42, 0, 42), UDim2.
 
 local function setIconGlow(button, enabled)
 	local stroke = button:FindFirstChild("ActiveGlow")
-	if not stroke then return end
 	activeIcons[button] = enabled
-	local goal = enabled and { Color = currentThemeColor, Transparency = 0.05, Thickness = 2 }
-		or { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.6, Thickness = 1 }
+	local goal = enabled and { Color = currentThemeColor, Transparency = 0.05, Thickness = 2 } or { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.6, Thickness = 1 }
 	TweenService:Create(stroke, TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), goal):Play()
 end
 
 -- ============ 设置面板 ============
 local settingsPanel = Instance.new("Frame")
-settingsPanel.Name = "SettingsPanel"
-settingsPanel.AnchorPoint = Vector2.new(0.5, 0.5)
-settingsPanel.Position = UDim2.new(0.5, 0, 0.45, 0)
-settingsPanel.Size = UDim2.new(0, 320, 0, 420)
-settingsPanel.BackgroundColor3 = Color3.fromRGB(18, 13, 27)
-settingsPanel.BackgroundTransparency = 0.08
-settingsPanel.BorderSizePixel = 0
-settingsPanel.Active = true
-settingsPanel.Visible = false
-settingsPanel.ZIndex = 10
-settingsPanel.ClipsDescendants = true
-settingsPanel.Parent = gui
+settingsPanel.Name = "XQVIP888_SettingsPanel"; settingsPanel.AnchorPoint = Vector2.new(0.5, 0.5); settingsPanel.Position = UDim2.new(0.5, 0, 0.45, 0)
+settingsPanel.Size = UDim2.new(0, 340, 0, 450)
+settingsPanel.BackgroundColor3 = Color3.fromRGB(18, 13, 27); settingsPanel.BackgroundTransparency = 0.08
+settingsPanel.Active = true; settingsPanel.Visible = false; settingsPanel.ZIndex = 10; settingsPanel.ClipsDescendants = false; settingsPanel.Parent = gui
+Instance.new("UICorner", settingsPanel).CornerRadius = UDim.new(0, 14)
+local bgGradient = Instance.new("UIGradient", settingsPanel); bgGradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(29, 19, 43)), ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 11, 20)) }); bgGradient.Rotation = 25
 
-local panelCorner = Instance.new("UICorner")
-panelCorner.CornerRadius = UDim.new(0, 14)
-panelCorner.Parent = settingsPanel
-
-local bgGradient = Instance.new("UIGradient")
-bgGradient.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Color3.fromRGB(29, 19, 43)), ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 11, 20)) })
-bgGradient.Rotation = 25
-bgGradient.Parent = settingsPanel
-
-local topBar = Instance.new("Frame")
-topBar.Size = UDim2.new(1, 0, 0, 45)
-topBar.BackgroundColor3 = currentThemeColor
-topBar.BorderSizePixel = 0
-topBar.ZIndex = 20
-topBar.Active = true
-topBar.Parent = settingsPanel
+local topBar = Instance.new("Frame", settingsPanel); topBar.Size = UDim2.new(1, 0, 0, 45); topBar.BackgroundColor3 = currentThemeColor; topBar.ZIndex = 20; topBar.Active = true
 Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 14)
+local topBarMask = Instance.new("Frame", topBar); topBarMask.Size = UDim2.new(1, 0, 0, 14); topBarMask.Position = UDim2.new(0, 0, 1, -14); topBarMask.BackgroundColor3 = currentThemeColor; topBarMask.BorderSizePixel = 0; topBarMask.ZIndex = 20
 
-local topBarMask = Instance.new("Frame")
-topBarMask.Size = UDim2.new(1, 0, 0, 14)
-topBarMask.Position = UDim2.new(0, 0, 1, -14)
-topBarMask.BackgroundColor3 = currentThemeColor
-topBarMask.BorderSizePixel = 0
-topBarMask.ZIndex = 20
-topBarMask.Parent = topBar
+local titleLabel = Instance.new("TextLabel", topBar); titleLabel.BackgroundTransparency = 1; titleLabel.Size = UDim2.new(0, 200, 1, 0); titleLabel.Position = UDim2.new(0, 14, 0, 0); titleLabel.Text = "控制面板"; titleLabel.TextXAlignment = Enum.TextXAlignment.Left; titleLabel.Font = ROUNDY_FONT; titleLabel.TextSize = 16; titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255); titleLabel.ZIndex = 21
+local closeBtn = Instance.new("TextButton", topBar); closeBtn.Size = UDim2.new(0, 32, 0, 32); closeBtn.AnchorPoint = Vector2.new(1, 0.5); closeBtn.Position = UDim2.new(1, -6, 0.5, 0); closeBtn.BackgroundTransparency = 1; closeBtn.Text = "X"; closeBtn.Font = ROUNDY_FONT; closeBtn.TextSize = 20; closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255); closeBtn.ZIndex = 22
 
-local titleLabel = Instance.new("TextLabel")
-titleLabel.BackgroundTransparency = 1
-titleLabel.Size = UDim2.new(0, 150, 1, 0)
-titleLabel.Position = UDim2.new(0, 14, 0, 0)
-titleLabel.Text = "增强设置"
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Font = ROUNDY_FONT
-titleLabel.TextSize = 16
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.ZIndex = 21
-titleLabel.Parent = topBar
-
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 32, 0, 32)
-closeBtn.AnchorPoint = Vector2.new(1, 0.5)
-closeBtn.Position = UDim2.new(1, -6, 0.5, 0)
-closeBtn.BackgroundTransparency = 1
-closeBtn.Text = "X"
-closeBtn.Font = ROUNDY_FONT
-closeBtn.TextSize = 20
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.AutoButtonColor = false
-closeBtn.ZIndex = 22
-closeBtn.Parent = topBar
-
--- 顶部拖拽面板逻辑
 local draggingUI = false
 local dragInputUI, mousePos, frameStartPos
-topBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingUI = true
-		dragInputUI = input
-		mousePos = input.Position
-		frameStartPos = settingsPanel.Position
-	end
-end)
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInputUI and draggingUI then
-		local delta = input.Position - mousePos
-		settingsPanel.Position = UDim2.new(frameStartPos.X.Scale, frameStartPos.X.Offset + delta.X, frameStartPos.Y.Scale, frameStartPos.Y.Offset + delta.Y)
-	end
-end)
-UserInputService.InputEnded:Connect(function(input)
-	if input == dragInputUI then draggingUI = false end
-end)
+topBar.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then draggingUI = true; dragInputUI = input; mousePos = input.Position; frameStartPos = settingsPanel.Position end end)
+UserInputService.InputChanged:Connect(function(input) if input == dragInputUI and draggingUI then local delta = input.Position - mousePos; settingsPanel.Position = UDim2.new(frameStartPos.X.Scale, frameStartPos.X.Offset + delta.X, frameStartPos.Y.Scale, frameStartPos.Y.Offset + delta.Y) end end)
+UserInputService.InputEnded:Connect(function(input) if input == dragInputUI then draggingUI = false end end)
 
--- ============ Tab 导航 ============
-local tabNav = Instance.new("Frame")
-tabNav.Size = UDim2.new(1, -28, 0, 32)
-tabNav.Position = UDim2.new(0, 14, 0, 55)
-tabNav.BackgroundTransparency = 1
-tabNav.ZIndex = 20
-tabNav.Parent = settingsPanel
-
-local tabLayout = Instance.new("UIListLayout")
-tabLayout.FillDirection = Enum.FillDirection.Horizontal
-tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-tabLayout.Padding = UDim.new(0, 6)
-tabLayout.Parent = tabNav
-
-local tabContentArea = Instance.new("Frame")
-tabContentArea.Size = UDim2.new(1, 0, 0, 240)
-tabContentArea.Position = UDim2.new(0, 0, 0, 95)
-tabContentArea.BackgroundTransparency = 1
-tabContentArea.ZIndex = 20
-tabContentArea.Parent = settingsPanel
+local tabNav = Instance.new("Frame", settingsPanel); tabNav.Size = UDim2.new(1, -20, 0, 32); tabNav.Position = UDim2.new(0, 10, 0, 55); tabNav.BackgroundTransparency = 1; tabNav.ZIndex = 20
+local tabLayout = Instance.new("UIListLayout", tabNav); tabLayout.FillDirection = Enum.FillDirection.Horizontal; tabLayout.SortOrder = Enum.SortOrder.LayoutOrder; tabLayout.Padding = UDim.new(0, 4)
+local tabContentArea = Instance.new("Frame", settingsPanel); tabContentArea.Size = UDim2.new(1, 0, 0, 270); tabContentArea.Position = UDim2.new(0, 0, 0, 95); tabContentArea.BackgroundTransparency = 1; tabContentArea.ZIndex = 20; tabContentArea.ClipsDescendants = false
 
 local function switchTab(index)
 	for i, tab in ipairs(tabs) do tab.Visible = (i == index) end
 	for i, btn in ipairs(tabButtons) do
-		if i == index then
-			btn.BackgroundColor3 = currentThemeColor
-			btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		else
-			btn.BackgroundColor3 = Color3.fromRGB(35, 30, 45)
-			btn.TextColor3 = Color3.fromRGB(180, 180, 180)
-		end
+		if i == index then btn.BackgroundColor3 = currentThemeColor; btn.TextColor3 = Color3.fromRGB(255, 255, 255) else btn.BackgroundColor3 = Color3.fromRGB(35, 30, 45); btn.TextColor3 = Color3.fromRGB(180, 180, 180) end
 	end
 end
 
 local function createTabBtn(index, name)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0.25, -4.5, 1, 0)
-	btn.BackgroundColor3 = Color3.fromRGB(35, 30, 45)
-	btn.Text = name
-	btn.Font = ROUNDY_FONT
-	btn.TextSize = 13
-	btn.TextColor3 = Color3.fromRGB(180, 180, 180)
-	btn.AutoButtonColor = false
-	btn.ZIndex = 21
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
-	btn.Parent = tabNav
-	btn.MouseButton1Click:Connect(function() switchTab(index) end)
-	table.insert(tabButtons, btn)
-	
-	local content = Instance.new("Frame")
-	content.Size = UDim2.new(1, -28, 1, 0)
-	content.Position = UDim2.new(0, 14, 0, 0)
-	content.BackgroundTransparency = 1
-	content.Visible = false
-	content.ZIndex = 20
-	content.Parent = tabContentArea
-	table.insert(tabs, content)
+	local btn = Instance.new("TextButton", tabNav); btn.Size = UDim2.new(0.2, -3.2, 1, 0); btn.BackgroundColor3 = Color3.fromRGB(35, 30, 45); btn.Text = name; btn.Font = ROUNDY_FONT; btn.TextSize = 13; btn.TextColor3 = Color3.fromRGB(180, 180, 180); btn.ZIndex = 21; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+	btn.MouseButton1Click:Connect(function() switchTab(index) end); table.insert(tabButtons, btn)
+	local content = Instance.new("Frame", tabContentArea); content.Size = UDim2.new(1, -28, 1, 0); content.Position = UDim2.new(0, 14, 0, 0); content.BackgroundTransparency = 1; content.Visible = false; content.ZIndex = 20; table.insert(tabs, content)
 	return content
 end
 
 local baseTab = createTabBtn(1, "基础")
 local offsetTab = createTabBtn(2, "偏移")
-local joyTab = createTabBtn(3, "摇杆")
-local themeTab = createTabBtn(4, "主题")
+local controlTab = createTabBtn(3, "操控") 
+local layoutTab = createTabBtn(4, "布局")
+local themeTab = createTabBtn(5, "主题")
 
--- ============ 构建通用控制行 ============
 local function buildAdjustRow(parent, labelText, yPos, initialDisplay, cbMinus, cbPlus, cbInput)
-	local row = Instance.new("Frame")
-	row.BackgroundTransparency = 1
-	row.Size = UDim2.new(1, 0, 0, 40)
-	row.Position = UDim2.new(0, 0, 0, yPos)
-	row.ZIndex = 20
-	row.Parent = parent
-
-	local label = Instance.new("TextLabel")
-	label.BackgroundTransparency = 1
-	label.Size = UDim2.new(0.4, 0, 1, 0)
-	label.Text = labelText
-	label.Font = ROUNDY_FONT
-	label.TextSize = 14
-	label.TextColor3 = Color3.fromRGB(230, 230, 230)
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.ZIndex = 20
-	label.Parent = row
-
-	local minusBtn = Instance.new("TextButton")
-	minusBtn.Size = UDim2.new(0, 36, 0, 36)
-	minusBtn.Position = UDim2.new(0.45, 0, 0, 2)
-	minusBtn.BackgroundColor3 = Color3.fromRGB(38, 32, 45)
-	minusBtn.Text = "-"
-	minusBtn.Font = ROUNDY_FONT
-	minusBtn.TextSize = 20
-	minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	minusBtn.AutoButtonColor = false
-	minusBtn.ZIndex = 21
-	Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 8)
-	minusBtn.Parent = row
-
-	local valueBox = Instance.new("TextBox")
-	valueBox.Size = UDim2.new(0, 75, 0, 36)
-	valueBox.Position = UDim2.new(0.45, 42, 0, 2)
-	valueBox.BackgroundColor3 = Color3.fromRGB(27, 22, 34)
-	valueBox.BackgroundTransparency = 0.2
-	valueBox.Text = initialDisplay
-	valueBox.Font = ROUNDY_FONT
-	valueBox.TextSize = 15
-	valueBox.TextColor3 = Color3.fromRGB(150, 190, 255)
-	valueBox.ZIndex = 21
+	local row = Instance.new("Frame", parent); row.BackgroundTransparency = 1; row.Size = UDim2.new(1, 0, 0, 40); row.Position = UDim2.new(0, 0, 0, yPos); row.ZIndex = 20
+	local label = Instance.new("TextLabel", row); label.BackgroundTransparency = 1; label.Size = UDim2.new(0.38, 0, 1, 0); label.Text = labelText; label.Font = ROUNDY_FONT; label.TextSize = 14; label.TextColor3 = Color3.fromRGB(230, 230, 230); label.TextXAlignment = Enum.TextXAlignment.Left; label.ZIndex = 20
+	local minusBtn = Instance.new("TextButton", row); minusBtn.Size = UDim2.new(0, 36, 0, 36); minusBtn.Position = UDim2.new(0.40, 0, 0, 2); minusBtn.BackgroundColor3 = Color3.fromRGB(38, 32, 45); minusBtn.Text = "-"; minusBtn.Font = ROUNDY_FONT; minusBtn.TextSize = 20; minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255); minusBtn.ZIndex = 21; Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 8)
+	
+	local valueBox = Instance.new("TextBox", row); 
+	valueBox.Size = UDim2.new(0, 75, 0, 36); valueBox.Position = UDim2.new(0.40, 42, 0, 2); valueBox.BackgroundColor3 = Color3.fromRGB(27, 22, 34); valueBox.BackgroundTransparency = 0.2; 
+	valueBox.Text = initialDisplay; valueBox.Font = ROUNDY_FONT; valueBox.TextSize = 15; valueBox.TextColor3 = Color3.fromRGB(150, 190, 255); valueBox.ZIndex = 21; 
+	valueBox.ClearTextOnFocus = false
 	Instance.new("UICorner", valueBox).CornerRadius = UDim.new(0, 8)
-	valueBox.Parent = row
-
-	local plusBtn = Instance.new("TextButton")
-	plusBtn.Size = UDim2.new(0, 36, 0, 36)
-	plusBtn.Position = UDim2.new(0.45, 123, 0, 2)
-	plusBtn.BackgroundColor3 = Color3.fromRGB(38, 32, 45)
-	plusBtn.Text = "+"
-	plusBtn.Font = ROUNDY_FONT
-	plusBtn.TextSize = 20
-	plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	plusBtn.AutoButtonColor = false
-	plusBtn.ZIndex = 21
-	Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 8)
-	plusBtn.Parent = row
-
-	minusBtn.MouseButton1Click:Connect(cbMinus)
-	plusBtn.MouseButton1Click:Connect(cbPlus)
-	if cbInput then valueBox.FocusLost:Connect(function() cbInput(valueBox.Text) end) end
+	
+	local plusBtn = Instance.new("TextButton", row); plusBtn.Size = UDim2.new(0, 36, 0, 36); plusBtn.Position = UDim2.new(0.40, 123, 0, 2); plusBtn.BackgroundColor3 = Color3.fromRGB(38, 32, 45); plusBtn.Text = "+"; plusBtn.Font = ROUNDY_FONT; plusBtn.TextSize = 20; plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255); plusBtn.ZIndex = 21; Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 8)
+	
+	minusBtn.MouseButton1Click:Connect(cbMinus); plusBtn.MouseButton1Click:Connect(cbPlus)
+	
+	if cbInput then 
+		valueBox.FocusLost:Connect(function() 
+			local numStr = valueBox.Text:gsub("[^%d%.%-]", "")
+			local num = tonumber(numStr)
+			if num then cbInput(num) end 
+		end) 
+	end
+	
 	return valueBox
 end
 
--- --- 1. 基础 Tab 内容 ---
-local speedVal = buildAdjustRow(baseTab, "飞行速度", 10, tostring(speed),
-	function() speed = math.max(SPEED_MIN, speed - SPEED_STEP) end,
-	function() speed = speed + SPEED_STEP end,
-	function(txt) speed = tonumber((txt:gsub("[^%d%.%-]", ""))) or speed end)
-	
-local smoothVal = buildAdjustRow(baseTab, "平滑程度", 60, tostring(math.floor(smoothness*100)).."%",
-	function() smoothness = math.clamp(smoothness - SMOOTH_STEP, SMOOTH_MIN, SMOOTH_MAX) end,
-	function() smoothness = math.clamp(smoothness + SMOOTH_STEP, SMOOTH_MIN, SMOOTH_MAX) end,
-	function(txt) local n=tonumber((txt:gsub("[^%d%.]", ""))) if n then smoothness=math.clamp(n/100, SMOOTH_MIN, SMOOTH_MAX) end end)
+-- ==================== 1. 基础 Tab ====================
+local speedVal = buildAdjustRow(baseTab, "飞行速度", 10, tostring(speed), 
+	function() speed = math.max(SPEED_MIN, speed - SPEED_STEP); saveConfig() end, 
+	function() speed = speed + SPEED_STEP; saveConfig() end, 
+	function(v) speed = math.max(SPEED_MIN, v); saveConfig() end)
 
-local sensVal = buildAdjustRow(baseTab, "滑屏灵敏", 110, tostring(math.floor((sensitivity/SENSITIVITY_BASE)*100)).."%",
-	function() sensitivity = math.max(SENSITIVITY_BASE*(SENSITIVITY_MIN_PERCENT/100), sensitivity - SENSITIVITY_BASE*(SENSITIVITY_STEP_PERCENT/100)) end,
-	function() sensitivity = math.min(SENSITIVITY_BASE*(SENSITIVITY_MAX_PERCENT/100), sensitivity + SENSITIVITY_BASE*(SENSITIVITY_STEP_PERCENT/100)) end,
-	function(txt) local n=tonumber((txt:gsub("[^%d%.]", ""))) if n then sensitivity=math.clamp(n, SENSITIVITY_MIN_PERCENT, SENSITIVITY_MAX_PERCENT)/100*SENSITIVITY_BASE end end)
+local smoothVal = buildAdjustRow(baseTab, "平滑程度", 60, tostring(math.floor(smoothness*100)).."%", 
+	function() smoothness = math.clamp(smoothness - SMOOTH_STEP, SMOOTH_MIN, SMOOTH_MAX); saveConfig() end, 
+	function() smoothness = math.clamp(smoothness + SMOOTH_STEP, SMOOTH_MIN, SMOOTH_MAX); saveConfig() end, 
+	function(v) smoothness = math.clamp(v/100, SMOOTH_MIN, SMOOTH_MAX); saveConfig() end)
 
-local function updateBaseLabels()
-	speedVal.Text = tostring(math.floor(speed))
-	smoothVal.Text = tostring(math.floor(smoothness*100)).."%"
-	sensVal.Text = tostring(math.floor((sensitivity/SENSITIVITY_BASE)*100)).."%"
+local sensVal = buildAdjustRow(baseTab, "滑屏灵敏", 110, tostring(math.floor((sensitivity/SENSITIVITY_BASE)*100)).."%", 
+	function() sensitivity = math.max(SENSITIVITY_BASE*(SENSITIVITY_MIN_PERCENT/100), sensitivity - SENSITIVITY_BASE*(SENSITIVITY_STEP_PERCENT/100)); saveConfig() end, 
+	function() sensitivity = math.min(SENSITIVITY_BASE*(SENSITIVITY_MAX_PERCENT/100), sensitivity + SENSITIVITY_BASE*(SENSITIVITY_STEP_PERCENT/100)); saveConfig() end, 
+	function(v) sensitivity = SENSITIVITY_BASE * math.clamp(v, SENSITIVITY_MIN_PERCENT, SENSITIVITY_MAX_PERCENT) / 100; saveConfig() end)
+
+-- ==================== 2. 偏移 Tab ====================
+local xVal = buildAdjustRow(offsetTab, "视角偏移 X", 10, tostring(offsetX), 
+	function() offsetX -= OFFSET_STEP; saveConfig() end, 
+	function() offsetX += OFFSET_STEP; saveConfig() end, 
+	function(v) offsetX = v; saveConfig() end)
+
+local yVal = buildAdjustRow(offsetTab, "视角偏移 Y", 60, tostring(offsetY), 
+	function() offsetY -= OFFSET_STEP; saveConfig() end, 
+	function() offsetY += OFFSET_STEP; saveConfig() end, 
+	function(v) offsetY = v; saveConfig() end)
+
+local zVal = buildAdjustRow(offsetTab, "视角偏移 Z", 110, tostring(offsetZ), 
+	function() offsetZ -= OFFSET_STEP; saveConfig() end, 
+	function() offsetZ += OFFSET_STEP; saveConfig() end, 
+	function(v) offsetZ = v; saveConfig() end)
+
+-- ==================== 3. 操控 Tab ====================
+local function updateControlVisibility()
+	local show = freeCamActive and not pcMode
+	joystickFrame.Visible = show and (controlStyle == 1)
+	dpadContainer.Visible = show and (controlStyle == 2)
 end
-RunService.Heartbeat:Connect(updateBaseLabels)
 
--- --- 2. 偏移 Tab 内容 (触发本地保存) ---
-local xVal = buildAdjustRow(offsetTab, "左右偏移 X", 10, tostring(offsetX), function() offsetX -= OFFSET_STEP; saveConfig() end, function() offsetX += OFFSET_STEP; saveConfig() end, function(t) offsetX = tonumber((t:gsub("[^%d%.%-]",""))) or offsetX; saveConfig() end)
-local yVal = buildAdjustRow(offsetTab, "上下偏移 Y", 60, tostring(offsetY), function() offsetY -= OFFSET_STEP; saveConfig() end, function() offsetY += OFFSET_STEP; saveConfig() end, function(t) offsetY = tonumber((t:gsub("[^%d%.%-]",""))) or offsetY; saveConfig() end)
-local zVal = buildAdjustRow(offsetTab, "前后偏移 Z", 110, tostring(offsetZ), function() offsetZ -= OFFSET_STEP; saveConfig() end, function() offsetZ += OFFSET_STEP; saveConfig() end, function(t) offsetZ = tonumber((t:gsub("[^%d%.%-]",""))) or offsetZ; saveConfig() end)
-RunService.Heartbeat:Connect(function() xVal.Text=tostring(math.floor(offsetX*10)/10); yVal.Text=tostring(math.floor(offsetY*10)/10); zVal.Text=tostring(math.floor(offsetZ*10)/10) end)
+local controlPanelLabel = Instance.new("TextLabel", controlTab)
+controlPanelLabel.BackgroundTransparency = 1; controlPanelLabel.Size = UDim2.new(1, 0, 0, 30); controlPanelLabel.Position = UDim2.new(0, 0, 0, 5)
+controlPanelLabel.Text = "移动操控模式切换"; controlPanelLabel.Font = ROUNDY_FONT; controlPanelLabel.TextSize = 15; controlPanelLabel.TextColor3 = Color3.fromRGB(255, 255, 255); controlPanelLabel.TextXAlignment = Enum.TextXAlignment.Left; controlPanelLabel.ZIndex = 25
 
--- --- 3. 摇杆 Tab 内容 ---
-local sizeVal = buildAdjustRow(joyTab, "摇杆尺寸", 10, tostring(joystickSize), 
-	function() joystickSize = math.max(80, joystickSize - 10); updateJoystickUI() end, 
-	function() joystickSize = math.min(300, joystickSize + 10); updateJoystickUI() end, 
-	function(t) local n=tonumber(t); if n then joystickSize = math.clamp(n, 80, 300); updateJoystickUI() end end)
-	
-local transVal = buildAdjustRow(joyTab, "摇杆透明", 60, tostring(joystickTransparency).."%", 
-	function() joystickTransparency = math.max(0, joystickTransparency - 5); updateJoystickUI() end, 
-	function() joystickTransparency = math.min(100, joystickTransparency + 5); updateJoystickUI() end, 
-	function(t) local n=tonumber((t:gsub("[^%d]",""))); if n then joystickTransparency = math.clamp(n, 0, 100); updateJoystickUI() end end)
+local bigSwitchBtn = Instance.new("TextButton", controlTab)
+bigSwitchBtn.Size = UDim2.new(1, 0, 0, 55); bigSwitchBtn.Position = UDim2.new(0, 0, 0, 45)
+bigSwitchBtn.BackgroundColor3 = Color3.fromRGB(48, 42, 55); bigSwitchBtn.Font = ROUNDY_FONT; bigSwitchBtn.ZIndex = 25; bigSwitchBtn.TextSize = 18; bigSwitchBtn.TextColor3 = Color3.fromRGB(255, 230, 100)
+Instance.new("UICorner", bigSwitchBtn).CornerRadius = UDim.new(0, 10)
 
-local shapeRow = Instance.new("Frame")
-shapeRow.BackgroundTransparency = 1
-shapeRow.Size = UDim2.new(1, 0, 0, 40)
-shapeRow.Position = UDim2.new(0, 0, 0, 110)
-shapeRow.Parent = joyTab
-local shapeLabel = Instance.new("TextLabel", shapeRow)
-shapeLabel.BackgroundTransparency = 1; shapeLabel.Size = UDim2.new(0.4, 0, 1, 0); shapeLabel.Text = "摇杆形状"; shapeLabel.Font = ROUNDY_FONT; shapeLabel.TextSize = 14; shapeLabel.TextColor3 = Color3.fromRGB(230,230,230); shapeLabel.TextXAlignment = Enum.TextXAlignment.Left
-local shapeBtn = Instance.new("TextButton", shapeRow)
-shapeBtn.Size = UDim2.new(0, 160, 0, 36); shapeBtn.Position = UDim2.new(0.45, 0, 0, 2); shapeBtn.BackgroundColor3 = Color3.fromRGB(38, 32, 45); shapeBtn.Font = ROUNDY_FONT; shapeBtn.TextSize = 14; shapeBtn.TextColor3 = Color3.fromRGB(255,255,255); Instance.new("UICorner", shapeBtn).CornerRadius = UDim.new(0, 8)
-RunService.Heartbeat:Connect(function() sizeVal.Text = tostring(joystickSize); transVal.Text = tostring(joystickTransparency).."%"; shapeBtn.Text = (joystickShape==1) and "圆形 (Circle)" or "方块 (Square)" end)
-shapeBtn.MouseButton1Click:Connect(function() joystickShape = (joystickShape == 1) and 2 or 1; updateJoystickUI() end)
+local function refreshBigSwitchText()
+	if controlStyle == 1 then
+		bigSwitchBtn.Text = "当前模式：虚拟摇杆 (点击切换)"
+	else
+		bigSwitchBtn.Text = "当前模式：方向箭头 (点击切换)"
+	end
+end
 
--- --- 4. 主题 Tab 内容 (触发本地保存) ---
+bigSwitchBtn.MouseButton1Click:Connect(function()
+	controlStyle = (controlStyle == 1) and 2 or 1
+	refreshBigSwitchText()
+	updateControlVisibility()
+	saveConfig()
+end)
+refreshBigSwitchText()
+
+local sizeVal = buildAdjustRow(controlTab, "摇杆大小", 120, tostring(joystickSize), 
+	function() joystickSize = math.max(80, joystickSize - 10); updateControlLayout(); saveConfig() end, 
+	function() joystickSize = math.min(300, joystickSize + 10); updateControlLayout(); saveConfig() end, 
+	function(v) joystickSize = math.clamp(v, 80, 300); updateControlLayout(); saveConfig() end)
+
+local transVal = buildAdjustRow(controlTab, "透明度", 175, tostring(joystickTransparency).."%", 
+	function() joystickTransparency = math.max(0, joystickTransparency - 5); updateControlLayout(); saveConfig() end, 
+	function() joystickTransparency = math.min(100, joystickTransparency + 5); updateControlLayout(); saveConfig() end, 
+	function(v) joystickTransparency = math.clamp(v, 0, 100); updateControlLayout(); saveConfig() end)
+
+-- ==================== 4. 布局 Tab ====================
+local arrSizeVal = buildAdjustRow(layoutTab, "箭头大小", 10, tostring(dpadSize), 
+	function() dpadSize = math.max(30, dpadSize - 5); updateControlLayout(); saveConfig() end, 
+	function() dpadSize = math.min(150, dpadSize + 5); updateControlLayout(); saveConfig() end, 
+	function(v) dpadSize = math.clamp(v, 30, 150); updateControlLayout(); saveConfig() end)
+
+local arrGapVal = buildAdjustRow(layoutTab, "箭头空隙", 60, tostring(dpadGap), 
+	function() dpadGap = dpadGap - 5; updateControlLayout(); saveConfig() end, 
+	function() dpadGap = dpadGap + 5; updateControlLayout(); saveConfig() end, 
+	function(v) dpadGap = v; updateControlLayout(); saveConfig() end)
+
+local ddRow = Instance.new("Frame", layoutTab); ddRow.BackgroundTransparency = 1; ddRow.Size = UDim2.new(1, 0, 0, 40); ddRow.Position = UDim2.new(0, 0, 0, 110); ddRow.ZIndex = 20
+local ddLabel = Instance.new("TextLabel", ddRow); ddLabel.BackgroundTransparency = 1; ddLabel.Size = UDim2.new(0.38, 0, 1, 0); ddLabel.Text = "选择偏移目标"; ddLabel.Font = ROUNDY_FONT; ddLabel.TextSize = 14; ddLabel.TextColor3 = Color3.fromRGB(230,230,230); ddLabel.TextXAlignment = Enum.TextXAlignment.Left
+local ddBtn = Instance.new("TextButton", ddRow); ddBtn.Size = UDim2.new(0, 160, 0, 36); ddBtn.Position = UDim2.new(0.40, 0, 0, 2); ddBtn.BackgroundColor3 = Color3.fromRGB(48, 42, 55); ddBtn.Font = ROUNDY_FONT; ddBtn.TextSize = 13; ddBtn.TextColor3 = Color3.fromRGB(255, 230, 100); ddBtn.ZIndex = 30; Instance.new("UICorner", ddBtn).CornerRadius = UDim.new(0, 8)
+
+local targetNames = {"虚拟摇杆", "箭头整体(D-Pad)", "单独: 上箭头", "单独: 下箭头", "单独: 左箭头", "单独: 右箭头"}
+ddBtn.Text = targetNames[uiEditTarget] .. " ▼"
+
+local ddList = Instance.new("Frame", layoutTab); ddList.Size = UDim2.new(0, 160, 0, #targetNames * 30); ddList.Position = UDim2.new(0.40, 0, 0, 148); ddList.BackgroundColor3 = Color3.fromRGB(30, 25, 38); ddList.Visible = false; ddList.ZIndex = 50; Instance.new("UICorner", ddList).CornerRadius = UDim.new(0, 8)
+local ddLayout = Instance.new("UIListLayout", ddList); ddLayout.SortOrder = Enum.SortOrder.LayoutOrder
+for i, name in ipairs(targetNames) do
+	local optBtn = Instance.new("TextButton", ddList); optBtn.Size = UDim2.new(1, 0, 0, 30); optBtn.BackgroundTransparency = (i%2==0) and 0.8 or 1; optBtn.BackgroundColor3 = Color3.fromRGB(0,0,0); optBtn.Text = name; optBtn.Font = ROUNDY_FONT; optBtn.TextSize = 12; optBtn.TextColor3 = Color3.fromRGB(200,200,200); optBtn.ZIndex = 51
+	optBtn.MouseButton1Click:Connect(function() uiEditTarget = i; ddBtn.Text = name .. " ▼"; ddList.Visible = false; end)
+end
+ddBtn.MouseButton1Click:Connect(function() ddList.Visible = not ddList.Visible end)
+
+local function getTargetX()
+	if uiEditTarget == 1 then return joystickOffsetX elseif uiEditTarget == 2 then return dpadOffsetX elseif uiEditTarget == 3 then return arrowOffset.Up.x elseif uiEditTarget == 4 then return arrowOffset.Down.x elseif uiEditTarget == 5 then return arrowOffset.Left.x elseif uiEditTarget == 6 then return arrowOffset.Right.x end
+end
+local function getTargetY()
+	if uiEditTarget == 1 then return joystickOffsetY elseif uiEditTarget == 2 then return dpadOffsetY elseif uiEditTarget == 3 then return arrowOffset.Up.y elseif uiEditTarget == 4 then return arrowOffset.Down.y elseif uiEditTarget == 5 then return arrowOffset.Left.y elseif uiEditTarget == 6 then return arrowOffset.Right.y end
+end
+local function setTargetXY(isX, delta)
+	if uiEditTarget == 1 then if isX then joystickOffsetX += delta else joystickOffsetY += delta end
+	elseif uiEditTarget == 2 then if isX then dpadOffsetX += delta else dpadOffsetY += delta end
+	elseif uiEditTarget == 3 then if isX then arrowOffset.Up.x += delta else arrowOffset.Up.y += delta end
+	elseif uiEditTarget == 4 then if isX then arrowOffset.Down.x += delta else arrowOffset.Down.y += delta end
+	elseif uiEditTarget == 5 then if isX then arrowOffset.Left.x += delta else arrowOffset.Left.y += delta end
+	elseif uiEditTarget == 6 then if isX then arrowOffset.Right.x += delta else arrowOffset.Right.y += delta end
+	end
+	updateControlLayout(); saveConfig()
+end
+local function setTargetAbsoluteXY(isX, val)
+	if uiEditTarget == 1 then if isX then joystickOffsetX = val else joystickOffsetY = val end
+	elseif uiEditTarget == 2 then if isX then dpadOffsetX = val else dpadOffsetY = val end
+	elseif uiEditTarget == 3 then if isX then arrowOffset.Up.x = val else arrowOffset.Up.y = val end
+	elseif uiEditTarget == 4 then if isX then arrowOffset.Down.x = val else arrowOffset.Down.y = val end
+	elseif uiEditTarget == 5 then if isX then arrowOffset.Left.x = val else arrowOffset.Left.y = val end
+	elseif uiEditTarget == 6 then if isX then arrowOffset.Right.x = val else arrowOffset.Right.y = val end
+	end
+	updateControlLayout(); saveConfig()
+end
+
+local uiXVal = buildAdjustRow(layoutTab, "位置偏移 X", 160, "0", 
+	function() setTargetXY(true, -5) end, 
+	function() setTargetXY(true, 5) end, 
+	function(v) setTargetAbsoluteXY(true, v) end)
+local uiYVal = buildAdjustRow(layoutTab, "位置偏移 Y", 210, "0", 
+	function() setTargetXY(false, -5) end, 
+	function() setTargetXY(false, 5) end, 
+	function(v) setTargetAbsoluteXY(false, v) end)
+
+-- ==================== 5. 主题 Tab ====================
 local function ApplyThemeColor()
-	topBar.BackgroundColor3 = currentThemeColor
-	topBarMask.BackgroundColor3 = currentThemeColor
-	joystickThumb.BackgroundColor3 = currentThemeColor
+	topBar.BackgroundColor3 = currentThemeColor; topBarMask.BackgroundColor3 = currentThemeColor; joystickThumb.BackgroundColor3 = currentThemeColor
+	for _, btn in pairs(dpadBtns) do btn.ImageColor3 = currentThemeColor end
 	for i, btn in ipairs(tabButtons) do if tabs[i].Visible then btn.BackgroundColor3 = currentThemeColor end end
 	for btn, active in pairs(activeIcons) do if active then setIconGlow(btn, true) end end
 end
 
-local rVal = buildAdjustRow(themeTab, "红色 (R)", 10, "255", function() currentThemeColor=Color3.new(math.max(0, currentThemeColor.R-0.1), currentThemeColor.G, currentThemeColor.B); ApplyThemeColor(); saveConfig() end, function() currentThemeColor=Color3.new(math.min(1, currentThemeColor.R+0.1), currentThemeColor.G, currentThemeColor.B); ApplyThemeColor(); saveConfig() end, function(t) local n=tonumber(t); if n then currentThemeColor=Color3.fromRGB(math.clamp(n,0,255), math.floor(currentThemeColor.G*255), math.floor(currentThemeColor.B*255)); ApplyThemeColor(); saveConfig() end end)
-local gVal = buildAdjustRow(themeTab, "绿色 (G)", 60, "0", function() currentThemeColor=Color3.new(currentThemeColor.R, math.max(0, currentThemeColor.G-0.1), currentThemeColor.B); ApplyThemeColor(); saveConfig() end, function() currentThemeColor=Color3.new(currentThemeColor.R, math.min(1, currentThemeColor.G+0.1), currentThemeColor.B); ApplyThemeColor(); saveConfig() end, function(t) local n=tonumber(t); if n then currentThemeColor=Color3.fromRGB(math.floor(currentThemeColor.R*255), math.clamp(n,0,255), math.floor(currentThemeColor.B*255)); ApplyThemeColor(); saveConfig() end end)
-local bVal = buildAdjustRow(themeTab, "蓝色 (B)", 110, "50", function() currentThemeColor=Color3.new(currentThemeColor.R, currentThemeColor.G, math.max(0, currentThemeColor.B-0.1)); ApplyThemeColor(); saveConfig() end, function() currentThemeColor=Color3.new(currentThemeColor.R, currentThemeColor.G, math.min(1, currentThemeColor.B+0.1)); ApplyThemeColor(); saveConfig() end, function(t) local n=tonumber(t); if n then currentThemeColor=Color3.fromRGB(math.floor(currentThemeColor.R*255), math.floor(currentThemeColor.G*255), math.clamp(n,0,255)); ApplyThemeColor(); saveConfig() end end)
-RunService.Heartbeat:Connect(function() rVal.Text=tostring(math.floor(currentThemeColor.R*255)); gVal.Text=tostring(math.floor(currentThemeColor.G*255)); bVal.Text=tostring(math.floor(currentThemeColor.B*255)) end)
+local rVal = buildAdjustRow(themeTab, "红色 (R)", 10, "255", 
+	function() currentThemeColor=Color3.new(math.max(0, currentThemeColor.R-0.1), currentThemeColor.G, currentThemeColor.B); ApplyThemeColor(); saveConfig() end, 
+	function() currentThemeColor=Color3.new(math.min(1, currentThemeColor.R+0.1), currentThemeColor.G, currentThemeColor.B); ApplyThemeColor(); saveConfig() end, 
+	function(v) currentThemeColor=Color3.new(math.clamp(v,0,255)/255, currentThemeColor.G, currentThemeColor.B); ApplyThemeColor(); saveConfig() end)
+local gVal = buildAdjustRow(themeTab, "绿色 (G)", 60, "0", 
+	function() currentThemeColor=Color3.new(currentThemeColor.R, math.max(0, currentThemeColor.G-0.1), currentThemeColor.B); ApplyThemeColor(); saveConfig() end, 
+	function() currentThemeColor=Color3.new(currentThemeColor.R, math.min(1, currentThemeColor.G+0.1), currentThemeColor.B); ApplyThemeColor(); saveConfig() end, 
+	function(v) currentThemeColor=Color3.new(currentThemeColor.R, math.clamp(v,0,255)/255, currentThemeColor.B); ApplyThemeColor(); saveConfig() end)
+local bVal = buildAdjustRow(themeTab, "蓝色 (B)", 110, "50", 
+	function() currentThemeColor=Color3.new(currentThemeColor.R, currentThemeColor.G, math.max(0, currentThemeColor.B-0.1)); ApplyThemeColor(); saveConfig() end, 
+	function() currentThemeColor=Color3.new(currentThemeColor.R, currentThemeColor.G, math.min(1, currentThemeColor.B+0.1)); ApplyThemeColor(); saveConfig() end, 
+	function(v) currentThemeColor=Color3.new(currentThemeColor.R, currentThemeColor.G, math.clamp(v,0,255)/255); ApplyThemeColor(); saveConfig() end)
 
-local presetRow = Instance.new("Frame", themeTab)
-presetRow.BackgroundTransparency = 1; presetRow.Size = UDim2.new(1, 0, 0, 40); presetRow.Position = UDim2.new(0, 0, 0, 160)
-local presetLabel = Instance.new("TextLabel", presetRow)
-presetLabel.BackgroundTransparency = 1; presetLabel.Size = UDim2.new(0.25, 0, 1, 0); presetLabel.Text = "色彩预设"; presetLabel.Font = ROUNDY_FONT; presetLabel.TextSize = 14; presetLabel.TextColor3 = Color3.fromRGB(230,230,230); presetLabel.TextXAlignment = Enum.TextXAlignment.Left
-
+local presetRow = Instance.new("Frame", themeTab); presetRow.BackgroundTransparency = 1; presetRow.Size = UDim2.new(1, 0, 0, 40); presetRow.Position = UDim2.new(0, 0, 0, 160)
+local presetLabel = Instance.new("TextLabel", presetRow); presetLabel.BackgroundTransparency = 1; presetLabel.Size = UDim2.new(0.25, 0, 1, 0); presetLabel.Text = "色彩预设"; presetLabel.Font = ROUNDY_FONT; presetLabel.TextSize = 14; presetLabel.TextColor3 = Color3.fromRGB(230,230,230); presetLabel.TextXAlignment = Enum.TextXAlignment.Left
 local presets = { Color3.fromRGB(255, 0, 50), Color3.fromRGB(180, 80, 235), Color3.fromRGB(0, 150, 255), Color3.fromRGB(0, 255, 120) }
 for i, col in ipairs(presets) do
-	local pBtn = Instance.new("TextButton", presetRow)
-	pBtn.Size = UDim2.new(0, 36, 0, 36); pBtn.Position = UDim2.new(0.3 + (i-1)*0.16, 0, 0, 2); pBtn.BackgroundColor3 = col; pBtn.Text = ""; Instance.new("UICorner", pBtn).CornerRadius = UDim.new(1, 0)
+	local pBtn = Instance.new("TextButton", presetRow); pBtn.Size = UDim2.new(0, 36, 0, 36); pBtn.Position = UDim2.new(0.3 + (i-1)*0.16, 0, 0, 2); pBtn.BackgroundColor3 = col; pBtn.Text = ""; Instance.new("UICorner", pBtn).CornerRadius = UDim.new(1, 0)
 	local pStr = Instance.new("UIStroke", pBtn) pStr.Thickness = 2; pStr.Color = Color3.new(1,1,1); pStr.Transparency = 0.5
 	pBtn.MouseButton1Click:Connect(function() currentThemeColor = col; ApplyThemeColor(); saveConfig() end)
 end
 
--- ============ 底部社交媒体 ============
-local divider = Instance.new("Frame")
-divider.BackgroundColor3 = Color3.fromRGB(55, 48, 65)
-divider.BorderSizePixel = 0
-divider.Position = UDim2.new(0, 14, 1, -60)
-divider.Size = UDim2.new(1, -28, 0, 2)
-divider.ZIndex = 20
-divider.Parent = settingsPanel
-
-local function makeSocialLine(text, yOff)
-	local line = Instance.new("TextLabel")
-	line.BackgroundTransparency = 1
-	line.Position = UDim2.new(0, 14, 1, -55 + yOff)
-	line.Size = UDim2.new(1, -28, 0, 16)
-	line.Text = text
-	line.Font = ROUNDY_FONT
-	line.TextSize = 13
-	line.TextColor3 = Color3.fromRGB(175, 175, 175)
-	line.TextXAlignment = Enum.TextXAlignment.Center
-	line.ZIndex = 20
-	line.Parent = settingsPanel
+-- 【性能优化关键】：利用 FocusLost 事件来更新对应字段的状态，不再每 0.1 秒高频轮询 IsFocused() 消耗 CPU
+local function bindTextSync(textBox, getterFunc)
+	textBox.Focused:Connect(function() textBox:SetAttribute("IsEditing", true) end)
+	textBox.FocusLost:Connect(function() textBox:SetAttribute("IsEditing", false) end)
 end
-makeSocialLine("Spotify: DuaKNo | Insta: Me_DuaKNo", 10)
-makeSocialLine("Discord: _duakno_ | Barrier Zone v4", 28)
 
-switchTab(1) -- 初始化Tab
-ApplyThemeColor() -- 应用读取到的主题色
+bindTextSync(speedVal, function() return speed end)
+bindTextSync(smoothVal, function() return smoothness end)
+bindTextSync(sensVal, function() return sensitivity end)
+bindTextSync(xVal, function() return offsetX end)
+bindTextSync(yVal, function() return offsetY end)
+bindTextSync(zVal, function() return offsetZ end)
+bindTextSync(sizeVal, function() return joystickSize end)
+bindTextSync(transVal, function() return joystickTransparency end)
+bindTextSync(arrSizeVal, function() return dpadSize end)
+bindTextSync(arrGapVal, function() return dpadGap end)
+bindTextSync(uiXVal, function() return getTargetX() end)
+bindTextSync(uiYVal, function() return getTargetY() end)
+bindTextSync(rVal, function() return math.floor(currentThemeColor.R * 255) end)
+bindTextSync(gVal, function() return math.floor(currentThemeColor.G * 255) end)
+bindTextSync(bVal, function() return math.floor(currentThemeColor.B * 255) end)
+
+-- 低频安全刷新循环（频率降低为 0.5 秒，且只有当用户没在输入时才更新，极大减少性能卡顿）
+task.spawn(function()
+	while gui and gui.Parent do
+		if settingsPanel.Visible then
+			if not speedVal:GetAttribute("IsEditing") then speedVal.Text = tostring(math.floor(speed)) end
+			if not smoothVal:GetAttribute("IsEditing") then smoothVal.Text = tostring(math.floor(smoothness * 100)) .. "%" end
+			if not sensVal:GetAttribute("IsEditing") then sensVal.Text = tostring(math.floor((sensitivity / SENSITIVITY_BASE) * 100)) .. "%" end
+			if not xVal:GetAttribute("IsEditing") then xVal.Text = tostring(math.floor(offsetX * 10) / 10) end
+			if not yVal:GetAttribute("IsEditing") then yVal.Text = tostring(math.floor(offsetY * 10) / 10) end
+			if not zVal:GetAttribute("IsEditing") then zVal.Text = tostring(math.floor(offsetZ * 10) / 10) end
+			if not sizeVal:GetAttribute("IsEditing") then sizeVal.Text = tostring(joystickSize) end
+			if not transVal:GetAttribute("IsEditing") then transVal.Text = tostring(joystickTransparency) .. "%" end
+			if not arrSizeVal:GetAttribute("IsEditing") then arrSizeVal.Text = tostring(dpadSize) end
+			if not arrGapVal:GetAttribute("IsEditing") then arrGapVal.Text = tostring(dpadGap) end
+			if not uiXVal:GetAttribute("IsEditing") then uiXVal.Text = tostring(getTargetX()) end
+			if not uiYVal:GetAttribute("IsEditing") then uiYVal.Text = tostring(getTargetY()) end
+			if not rVal:GetAttribute("IsEditing") then rVal.Text = tostring(math.floor(currentThemeColor.R * 255)) end
+			if not gVal:GetAttribute("IsEditing") then gVal.Text = tostring(math.floor(currentThemeColor.G * 255)) end
+			if not bVal:GetAttribute("IsEditing") then bVal.Text = tostring(math.floor(currentThemeColor.B * 255)) end
+		end
+		task.wait(0.5)
+	end
+end)
+
+local divider = Instance.new("Frame", settingsPanel); divider.BackgroundColor3 = Color3.fromRGB(55, 48, 65); divider.BorderSizePixel = 0; divider.Position = UDim2.new(0, 14, 1, -60); divider.Size = UDim2.new(1, -28, 0, 2); divider.ZIndex = 20
+local function makeSocialLine(text, yOff)
+	local line = Instance.new("TextLabel", settingsPanel); line.BackgroundTransparency = 1; line.Position = UDim2.new(0, 14, 1, -55 + yOff); line.Size = UDim2.new(1, -28, 0, 16); line.Text = text; line.Font = ROUNDY_FONT; line.TextSize = 13; line.TextColor3 = Color3.fromRGB(175, 175, 175); line.TextXAlignment = Enum.TextXAlignment.Center; line.ZIndex = 20
+end
+
+makeSocialLine("XQVIP", 10); makeSocialLine("Ultimate Control Tab - XQVIP888", 28)
+
+switchTab(3); updateControlLayout(); ApplyThemeColor()
 
 -- ============ 逻辑控制 ============
 local settingsOpen = false
-gearIcon.MouseButton1Click:Connect(function()
-	settingsOpen = not settingsOpen
-	settingsPanel.Visible = settingsOpen
-	setIconGlow(gearIcon, settingsOpen)
-end)
-closeBtn.MouseButton1Click:Connect(function() settingsOpen = false; settingsPanel.Visible = false; setIconGlow(gearIcon, false) end)
+gearIcon.MouseButton1Click:Connect(function() settingsOpen = not settingsOpen; settingsPanel.Visible = settingsOpen; ddList.Visible = false; setIconGlow(gearIcon, settingsOpen) end)
+closeBtn.MouseButton1Click:Connect(function() settingsOpen = false; settingsPanel.Visible = false; ddList.Visible = false; setIconGlow(gearIcon, false) end)
 
 local function setMagnetState(state)
-	magnetActive = state
-	setIconGlow(magnetIcon, magnetActive)
-	local char = player.Character
-	if char then
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if hum and magnetActive then
-			local rootPart = hrp and (hrp.AssemblyRootPart or hrp) or nil
-			if rootPart == hrp then
-				hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
-				hum.AutoRotate = false
-			else
-				hum:ChangeState(Enum.HumanoidStateType.Landed)
-			end
-		end
-		if not state and hum then hum.AutoRotate = true; hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
-		if not state and hrp then
-			local rootPart = hrp.AssemblyRootPart or hrp
-			rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-			rootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-		end
+	magnetActive = state; setIconGlow(magnetIcon, magnetActive)
+	local hrp, rootPart, hum = getCachedRootPart()
+	if hum and magnetActive then
+		if rootPart == hrp then hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics); hum.AutoRotate = false else hum:ChangeState(Enum.HumanoidStateType.Landed) end
+	end
+	if not state and hum then hum.AutoRotate = true; hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+	if not state and rootPart then
+		rootPart.AssemblyLinearVelocity = Vector3.zero
+		rootPart.AssemblyAngularVelocity = Vector3.zero
 	end
 end
 
-local function updateControlVisibility()
-	joystickFrame.Visible = freeCamActive and not pcMode
-end
-
 local function enterFreeCam()
-	freeCamActive = true
-	updateControlVisibility()
-	updateCharacterControls()
+	freeCamActive = true; updateControlVisibility(); updateCharacterControls()
 	local cf = camera.CFrame
-	camPos = cf.Position
-	velocity = Vector3.zero
-	local look = cf.LookVector
-	yaw = math.atan2(-look.X, -look.Z)
-	pitch = math.asin(math.clamp(look.Y, -1, 1))
-	safeSetCameraType(Enum.CameraType.Scriptable)
-	camera.CameraSubject = nil
-	setIconGlow(camIcon, true)
+	camPos = cf.Position; velocity = Vector3.zero; local look = cf.LookVector
+	yaw = math.atan2(-look.X, -look.Z); pitch = math.asin(math.clamp(look.Y, -1, 1))
+	safeSetCameraType(Enum.CameraType.Scriptable); camera.CameraSubject = nil; setIconGlow(camIcon, true)
 end
 
 local function exitFreeCam()
-	freeCamActive = false
-	updateControlVisibility()
-	enableCharacterControls()
-	settingsOpen = false; settingsPanel.Visible = false
-	dragging = false; dragInput = nil; lastInputPos = nil
-	joystickTouchId = nil; joystickVector = Vector2.zero; joystickThumb.Position = UDim2.new(0.5, 0, 0.5, 0)
+	freeCamActive = false; updateControlVisibility(); updateCharacterControls()
+	settingsOpen = false; settingsPanel.Visible = false; ddList.Visible = false
+	dragging = false; dragInput = nil; lastInputPos = nil; joystickTouchId = nil; joystickVector = Vector2.zero; joystickThumb.Position = UDim2.new(0.5, 0, 0.5, 0)
 	if joystickReturnTween then joystickReturnTween:Cancel() end
-	table.clear(ignoredControlTouches)
-	for k in pairs(moveDir) do moveDir[k] = false end
+	table.clear(ignoredControlTouches); for k in pairs(moveDir) do moveDir[k] = false end
 	safeSetCameraType(Enum.CameraType.Custom)
-	local char = player.Character
-	if char then local hum = char:FindFirstChildOfClass("Humanoid") if hum then camera.CameraSubject = hum end end
+	local char = player.Character; if char then local hum = char:FindFirstChildOfClass("Humanoid") if hum then camera.CameraSubject = hum end end
 	if magnetActive then setMagnetState(false) end
 	setIconGlow(camIcon, false); setIconGlow(gearIcon, false); setIconGlow(pcIcon, false); setIconGlow(tpIcon, false)
 	pcMode = false; updateControlVisibility()
@@ -669,6 +626,7 @@ end
 camIcon.MouseButton1Click:Connect(function() if freeCamActive then exitFreeCam() else enterFreeCam() end end)
 pcIcon.MouseButton1Click:Connect(function() if not freeCamActive then return end pcMode = not pcMode; updateControlVisibility(); updateCharacterControls(); setIconGlow(pcIcon, pcMode) end)
 magnetIcon.MouseButton1Click:Connect(function() if not freeCamActive then return end setMagnetState(not magnetActive) end)
+
 tpIcon.MouseButton1Click:Connect(function()
 	if not freeCamActive then return end
 	local char = player.Character
@@ -677,31 +635,46 @@ tpIcon.MouseButton1Click:Connect(function()
 		local hrp = char:FindFirstChild("HumanoidRootPart")
 		if hrp then
 			local rootPart = hrp.AssemblyRootPart or hrp
-			if rootPart ~= hrp then safeTeleport(rootPart, newCFrame) else char:PivotTo(newCFrame) end
-		else char:PivotTo(newCFrame) end
-		setIconGlow(tpIcon, true)
-		task.delay(0.2, function() if freeCamActive then setIconGlow(tpIcon, false) end end)
+			safeTeleport(rootPart, newCFrame)
+		else
+			safeTeleport(char.PrimaryPart or char:FindFirstChildWhichIsA("BasePart"), newCFrame)
+		end
+		setIconGlow(tpIcon, true); task.delay(0.2, function() if freeCamActive then setIconGlow(tpIcon, false) end end)
 	end
 end)
 
--- ============ 屏障区与防冲突判断 ============
+-- ============ 屏障与摇杆防冲突 ============
 local function withinAbs(guiObj, pos)
 	local abs, size = guiObj.AbsolutePosition, guiObj.AbsoluteSize
 	return pos.X >= abs.X and pos.X <= abs.X + size.X and pos.Y >= abs.Y and pos.Y <= abs.Y + size.Y
 end
 
 local function isOverAnyButton(pos)
-	-- 如果点到了右侧功能按钮或设置面板，不触发滑屏
-	if withinAbs(camIcon, pos) then return true end
-	if withinAbs(gearIcon, pos) then return true end
-	if withinAbs(pcIcon, pos) then return true end
-	if withinAbs(tpIcon, pos) then return true end
-	if withinAbs(magnetIcon, pos) then return true end
+	if withinAbs(camIcon, pos) or withinAbs(gearIcon, pos) or withinAbs(pcIcon, pos) or withinAbs(tpIcon, pos) or withinAbs(magnetIcon, pos) then return true end
 	if settingsPanel.Visible and withinAbs(settingsPanel, pos) then return true end
+	
+	if dpadContainer.Visible then
+		for _, btn in pairs(dpadBtns) do
+			if withinAbs(btn, pos) then return true end
+		end
+	end
+	
 	return false
 end
 
--- ============ 摇杆计算与滑屏旋转逻辑 ============
+local function findOriginalJoystick()
+	local touchGui = playerGui:FindFirstChild("TouchGui"); if not touchGui then return nil end
+	for _, name in ipairs({"ThumbstickFrame", "DynamicThumbstickFrame", "Thumbstick", "DynamicThumbstick"}) do
+		for _, obj in ipairs(touchGui:GetDescendants()) do if obj:IsA("GuiObject") and obj.Visible and obj.Name == name then return obj end end
+	end return nil
+end
+
+local function isInsideOriginalJoystick(pos)
+	local js = findOriginalJoystick(); if not js then return false end
+	local abs, size, pad = js.AbsolutePosition, js.AbsoluteSize, 15
+	return pos.X >= abs.X - pad and pos.X <= abs.X + size.X + pad and pos.Y >= abs.Y - pad and pos.Y <= abs.Y + size.Y + pad
+end
+
 local function calculateJoystick(pos)
 	if joystickReturnTween then joystickReturnTween:Cancel() end
 	local center = joystickFrame.AbsolutePosition + joystickFrame.AbsoluteSize / 2
@@ -712,45 +685,41 @@ local function calculateJoystick(pos)
 	joystickVector = Vector2.new(delta.X / radius, -delta.Y / radius)
 end
 
--- 摇杆专属区域触摸开始
-joystickFrame.InputBegan:Connect(function(input)
-	if not freeCamActive or pcMode then return end
-	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-		if not joystickTouchId then
-			joystickTouchId = input.UserInputType == Enum.UserInputType.Touch and input or "Mouse"
-			calculateJoystick(input.Position)
-		end
-	end
-end)
-
--- 全局屏幕触摸开始（摇杆以外的空白处用来旋转视角）
 UserInputService.InputBegan:Connect(function(input, gp)
 	if not freeCamActive then return end
-	if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.MouseButton2 then return end
+	local inputType = input.UserInputType
+	if inputType ~= Enum.UserInputType.Touch and inputType ~= Enum.UserInputType.MouseButton1 and inputType ~= Enum.UserInputType.MouseButton2 then return end
+
 	local pos = Vector2.new(input.Position.X, input.Position.Y)
-	
-	-- 如果按在摇杆区域内，留给摇杆处理，不在空白处触发旋转
-	if joystickFrame.Visible and withinAbs(joystickFrame, pos) then return end
-	-- 如果按在按钮上，忽略
+
+	if joystickFrame.Visible and withinAbs(joystickFrame, pos) then
+		joystickTouchId = (inputType == Enum.UserInputType.Touch) and input or "Mouse"
+		calculateJoystick(pos)
+		return
+	end
+
+	if inputType == Enum.UserInputType.Touch and isInsideOriginalJoystick(pos) then
+		ignoredControlTouches[input] = true
+		return
+	end
+
 	if isOverAnyButton(pos) then return end
 
 	if not dragging then
-		dragging = true; dragInput = input; lastInputPos = pos
+		dragging = true
+		dragInput = input
+		lastInputPos = pos
 	end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
 	if not freeCamActive then return end
-	
-	-- 1. 处理摇杆拖动
 	if joystickTouchId then
 		if (input.UserInputType == Enum.UserInputType.Touch and input == joystickTouchId) or (input.UserInputType == Enum.UserInputType.MouseMovement and joystickTouchId == "Mouse") then
-			calculateJoystick(input.Position)
-			return
+			calculateJoystick(input.Position); return
 		end
 	end
-	
-	-- 2. 处理摇杆以外区域的滑屏视角旋转
+	if input.UserInputType == Enum.UserInputType.Touch and ignoredControlTouches[input] then return end
 	if not dragging then return end
 	if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
 	if input.UserInputType == Enum.UserInputType.Touch and input ~= dragInput then return end
@@ -758,45 +727,33 @@ UserInputService.InputChanged:Connect(function(input)
 	local pos = Vector2.new(input.Position.X, input.Position.Y)
 	if lastInputPos then
 		local delta = pos - lastInputPos
-		yaw = yaw - delta.X * sensitivity
-		pitch = math.clamp(pitch - delta.Y * sensitivity, -maxPitch, maxPitch)
+		yaw = yaw - delta.X * sensitivity; pitch = math.clamp(pitch - delta.Y * sensitivity, -maxPitch, maxPitch)
 	end
 	lastInputPos = pos
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	-- 摇杆松手弹性回中
 	if joystickTouchId then
 		if (input.UserInputType == Enum.UserInputType.Touch and input == joystickTouchId) or (input.UserInputType == Enum.UserInputType.MouseButton1 and joystickTouchId == "Mouse") then
-			joystickTouchId = nil
-			joystickVector = Vector2.zero
-			
-			joystickReturnTween = TweenService:Create(
-				joystickThumb, 
-				TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), 
-				{Position = UDim2.new(0.5, 0, 0.5, 0)}
-			)
+			joystickTouchId = nil; joystickVector = Vector2.zero
+			joystickReturnTween = TweenService:Create(joystickThumb, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, 0, 0.5, 0)})
 			joystickReturnTween:Play()
 		end
 	end
-	
+	if ignoredControlTouches[input] then ignoredControlTouches[input] = nil; return end
 	if input == dragInput then dragging = false; dragInput = nil; lastInputPos = nil end
 end)
 
--- ============ PC 控制 ============
 UserInputService.InputBegan:Connect(function(input, gp)
 	if not freeCamActive or not pcMode or input.UserInputType ~= Enum.UserInputType.Keyboard then return end
-	local kc = input.KeyCode
-	if gp and not (kc == Enum.KeyCode.W or kc == Enum.KeyCode.S or kc == Enum.KeyCode.A or kc == Enum.KeyCode.D) then return end
+	local kc = input.KeyCode; if gp and not (kc == Enum.KeyCode.W or kc == Enum.KeyCode.S or kc == Enum.KeyCode.A or kc == Enum.KeyCode.D) then return end
 	if kc == Enum.KeyCode.W then moveDir.Up = true elseif kc == Enum.KeyCode.S then moveDir.Down = true elseif kc == Enum.KeyCode.A then moveDir.Left = true elseif kc == Enum.KeyCode.D then moveDir.Right = true end
 end)
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
-	local kc = input.KeyCode
-	if kc == Enum.KeyCode.W then moveDir.Up = false elseif kc == Enum.KeyCode.S then moveDir.Down = false elseif kc == Enum.KeyCode.A then moveDir.Left = false elseif kc == Enum.KeyCode.D then moveDir.Right = false end
+	local kc = input.KeyCode; if kc == Enum.KeyCode.W then moveDir.Up = false elseif kc == Enum.KeyCode.S then moveDir.Down = false elseif kc == Enum.KeyCode.A then moveDir.Left = false elseif kc == Enum.KeyCode.D then moveDir.Right = false end
 end)
 
--- ============ 核心渲染循环 ============
 RunService.RenderStepped:Connect(function(dt)
 	if not freeCamActive then return end
 	safeSetCameraType(Enum.CameraType.Scriptable)
@@ -806,18 +763,16 @@ RunService.RenderStepped:Connect(function(dt)
 	local rightVector = rotationCFrame.RightVector
 	local inputDir = Vector3.zero
 
-	-- PC键盘输入
 	if moveDir.Up then inputDir += lookVector end
 	if moveDir.Down then inputDir -= lookVector end
 	if moveDir.Left then inputDir -= rightVector end
 	if moveDir.Right then inputDir += rightVector end
 	
-	-- 摇杆输入
-	if joystickVector.Magnitude > 0.05 then
-		inputDir += (lookVector * joystickVector.Y) + (rightVector * joystickVector.X)
+	if inputDir.Magnitude > 0 then
+		inputDir = inputDir.Unit
+	elseif controlStyle == 1 and joystickVector.Magnitude > 0.02 then
+		inputDir = (lookVector * joystickVector.Y) + (rightVector * joystickVector.X)
 	end
-
-	if inputDir.Magnitude > 0 then inputDir = inputDir.Unit end
 
 	local targetVelocity = inputDir * speed
 	local rampAlpha = math.clamp(smoothness * dt * 60, 0, 1)
@@ -827,37 +782,36 @@ RunService.RenderStepped:Connect(function(dt)
 
 	AntiDetect._frameCount += 1
 
-	-- 完美吸附逻辑
 	if magnetActive then
-		local char = player.Character
-		if char then
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				local rootPart = hrp.AssemblyRootPart or hrp
-				rootPart.CFrame = camera.CFrame * CFrame.new(offsetX, offsetY, offsetZ)
-
-				if AntiDetect._frameCount % AntiDetect.VELOCITY_CLEAR_INTERVAL == 0 then
-					local res = AntiDetect.VELOCITY_RESIDUAL
-					rootPart.AssemblyLinearVelocity = Vector3.new(res, res, res)
-					rootPart.AssemblyAngularVelocity = Vector3.new(res, res, res)
-				end
-
-				if rootPart == hrp then
-					local hum2 = char:FindFirstChildOfClass("Humanoid")
-					if hum2 and hum2:GetState() ~= Enum.HumanoidStateType.RunningNoPhysics then
-						hum2:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
-					end
-				end
+		local hrp, rootPart, hum2 = getCachedRootPart()
+		if rootPart then
+			local targetCFrame = camera.CFrame * CFrame.new(offsetX, offsetY, offsetZ)
+			if rootPart.CFrame ~= targetCFrame then
+				rootPart.CFrame = targetCFrame
+			end
+			if AntiDetect._frameCount % AntiDetect.VELOCITY_CLEAR_INTERVAL == 0 then
+				local res = AntiDetect.VELOCITY_RESIDUAL
+				rootPart.AssemblyLinearVelocity = Vector3.new(res, res, res)
+				rootPart.AssemblyAngularVelocity = Vector3.new(res, res, res)
+			end
+			if rootPart == hrp and hum2 and hum2:GetState() ~= Enum.HumanoidStateType.RunningNoPhysics then
+				hum2:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
 			end
 		end
 	end
 end)
 
 player.CharacterAdded:Connect(function(char)
+	refreshCharacterCache(char)
+	local hrp = char:WaitForChild("HumanoidRootPart")
+	cachedHumanoid = char:FindFirstChildOfClass("Humanoid") or cachedHumanoid
+	cachedHumanoidRootPart = hrp
+	cachedAssemblyRootPart = hrp.AssemblyRootPart or hrp
 	if freeCamActive then safeSetCameraType(Enum.CameraType.Scriptable); camera.CameraSubject = nil end
-	task.spawn(function()
-		char:WaitForChild("HumanoidRootPart")
-		if magnetActive then setMagnetState(true) end
-	end)
+	if magnetActive then setMagnetState(true) end
 end)
+
+if player.Character then
+	refreshCharacterCache(player.Character)
+end
 
