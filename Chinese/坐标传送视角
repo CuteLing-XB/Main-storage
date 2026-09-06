@@ -2,7 +2,8 @@
 	• [极致性能优化] 去除每帧高频 UI 轮询开销，彻底解决移动端卡顿、掉帧问题。
 	• [无缝视角平移] 退出时完全以当前自由摄像机位置平移对接，并在过渡期跟随角色移动，丝滑无比。
 	• [瞬时UI响应] 关闭自由视角瞬间隐藏操控按钮，无视觉残留。
-	• [输入完美支持] 保证自定义数值输入、平滑更新与保存，同时兼顾不被系统强制覆盖。
+	• [完美摄像机接管] 【优化版】退出时利用底层渲染拦截，完美兼容玩家坐车、游戏魔改镜头。修复广角恢复。
+	• [四次方阻尼曲线] 镜头恢复前期速度极快不拖泥带水，后期极度柔和完美贴合。
 ]]
 
 local Players = game:GetService("Players")
@@ -76,8 +77,16 @@ local FOV_DEFAULT = 90
 local FOV_MIN, FOV_MAX = 20, 120 
 local fovTarget = FOV_DEFAULT
 local fovCurrent = FOV_DEFAULT
+
+-- 摄像机恢复核心状态缓存，保证能够还原游戏原生任何复杂设置。
 local savedGameFOV = nil
 local savedGameCFrame = nil
+local savedGameCameraType = nil
+local savedGameCameraSubject = nil
+
+-- 退出过渡可被再次点击中断。中断后立即以当前镜头位置重新进入自由视角。
+local cameraTransitionConnection = nil
+local cameraTransitionToken = 0
 
 -- === 吸附设置 ===
 local magnetActive = false
@@ -297,7 +306,6 @@ local function updateControlLayout()
 	rightBtn.Position = UDim2.new(0.5, dpadGap + arrowOffset.Right.x, 0.5, arrowOffset.Right.y)
 end
 
--- 图标按钮
 local function buildIconButton(assetId, size, pos, imageScale)
 	local btn = Instance.new("ImageButton")
 	btn.AnchorPoint = Vector2.new(0.5, 0.5); btn.Size = size; btn.Position = pos; btn.BackgroundColor3 = Color3.fromRGB(45, 52, 71); btn.BackgroundTransparency = 0.05; btn.Image = ""; btn.ZIndex = 6; btn.Parent = gui
@@ -512,7 +520,6 @@ local function buildSlider(parent, labelText, yPos, minValue, maxValue, initialV
 	}
 end
 
--- ==================== 1. 基础 Tab ====================
 local speedVal = buildAdjustRow(baseTab, "飞行速度", 10, tostring(speed), 
 	function() speed = math.max(SPEED_MIN, speed - SPEED_STEP); saveConfig() end, 
 	function() speed = speed + SPEED_STEP; saveConfig() end, 
@@ -533,7 +540,6 @@ local fovSlider = buildSlider(baseTab, "广角 / FOV", 165, FOV_MIN, FOV_MAX, fo
 	saveConfig()
 end)
 
--- ==================== 2. 偏移 Tab ====================
 local xVal = buildAdjustRow(offsetTab, "视角偏移 X", 10, tostring(offsetX), 
 	function() offsetX -= OFFSET_STEP; saveConfig() end, 
 	function() offsetX += OFFSET_STEP; saveConfig() end, 
@@ -549,7 +555,6 @@ local zVal = buildAdjustRow(offsetTab, "视角偏移 Z", 110, tostring(offsetZ),
 	function() offsetZ += OFFSET_STEP; saveConfig() end, 
 	function(v) offsetZ = v; saveConfig() end)
 
--- ==================== 3. 操控 Tab ====================
 local function updateControlVisibility()
 	local show = freeCamActive and not pcMode
 	joystickFrame.Visible = show and (controlStyle == 1)
@@ -591,7 +596,6 @@ local transVal = buildAdjustRow(controlTab, "透明度", 175, tostring(joystickT
 	function() joystickTransparency = math.min(100, joystickTransparency + 5); updateControlLayout(); saveConfig() end, 
 	function(v) joystickTransparency = math.clamp(v, 0, 100); updateControlLayout(); saveConfig() end)
 
--- 人物传送方式：车辆/载具传送不受此设置影响。
 local teleportModeBtn = Instance.new("TextButton", controlTab)
 teleportModeBtn.Size = UDim2.new(1, 0, 0, 42)
 teleportModeBtn.Position = UDim2.new(0, 0, 0, 225)
@@ -616,7 +620,6 @@ teleportModeBtn.MouseButton1Click:Connect(function()
 end)
 refreshTeleportModeText()
 
--- ==================== 4. 布局 Tab ====================
 local arrSizeVal = buildAdjustRow(layoutTab, "箭头大小", 10, tostring(dpadSize), 
 	function() dpadSize = math.max(30, dpadSize - 5); updateControlLayout(); saveConfig() end, 
 	function() dpadSize = math.min(150, dpadSize + 5); updateControlLayout(); saveConfig() end, 
@@ -678,7 +681,6 @@ local uiYVal = buildAdjustRow(layoutTab, "位置偏移 Y", 210, "0",
 	function() setTargetXY(false, 5) end, 
 	function(v) setTargetAbsoluteXY(false, v) end)
 
--- ==================== 5. 主题 Tab ====================
 local function ApplyThemeColor()
 	topBar.BackgroundColor3 = currentThemeColor; topBarMask.BackgroundColor3 = currentThemeColor; joystickThumb.BackgroundColor3 = currentThemeColor
 	for _, btn in pairs(dpadBtns) do btn.ImageColor3 = currentThemeColor end
@@ -765,7 +767,6 @@ makeSocialLine("XQVIP", 10); makeSocialLine("Ultimate Control Tab - XQVIP888", 2
 
 switchTab(3); updateControlLayout(); ApplyThemeColor()
 
--- ============ 设置面板：从右侧滑入，向下滑出（无Q弹） ============
 local settingsOpen = false
 local settingsHomePosition = UDim2.new(0.5, 0, 0.45, 0)
 local settingsHiddenRightPosition = UDim2.new(1, settingsPanel.AbsoluteSize.X * 0.65, 0.45, 0)
@@ -822,11 +823,54 @@ local function setMagnetState(state)
 	end
 end
 
+-- ==============================================
+-- 【核心优化】完美贴合各种情况的相机恢复逻辑
+-- ==============================================
+
+-- 辅助函数：打断正在执行的退出过渡（如在退出时又点开自由视角）
+local function interruptCameraTransition()
+	if not isTransitioningCam then return false end
+
+	cameraTransitionToken += 1
+	pcall(function() RunService:UnbindFromRenderStep("XQVIP_FreeCamExit") end)
+
+	isTransitioningCam = false
+	freeCamActive = true
+
+	local cf = camera.CFrame
+	camPos = cf.Position
+	velocity = Vector3.zero
+
+	local look = cf.LookVector
+	yaw = math.atan2(-look.X, -look.Z)
+	pitch = math.asin(math.clamp(look.Y, -1, 1))
+	fovCurrent = math.clamp(camera.FieldOfView, FOV_MIN, FOV_MAX)
+
+	-- 重新进入 Scriptable 控制模式
+	safeSetCameraType(Enum.CameraType.Scriptable)
+	camera.CameraSubject = nil
+	camera.CFrame = cf
+
+	updateControlVisibility()
+	updateCharacterControls()
+	setIconGlow(camIcon, true)
+
+	return true
+end
+
+-- 进入自由视角
 local function enterFreeCam()
-	if isTransitioningCam then return end
-	-- 在切换到 Scriptable 之前完整保存当前游戏镜头。退出时只认这一份快照，避免反复开关产生角度下抬/位置漂移。
+	if isTransitioningCam then
+		interruptCameraTransition()
+		return
+	end
+	if freeCamActive then return end
+
+	-- 关键：完整保存当前游戏状态，确保等下可以原样交还控制权
 	savedGameCFrame = camera.CFrame
 	savedGameFOV = camera.FieldOfView
+	savedGameCameraType = camera.CameraType
+	savedGameCameraSubject = camera.CameraSubject
 
 	freeCamActive = true
 	updateControlVisibility()
@@ -835,6 +879,7 @@ local function enterFreeCam()
 	local cf = savedGameCFrame
 	camPos = cf.Position
 	velocity = Vector3.zero
+
 	local look = cf.LookVector
 	yaw = math.atan2(-look.X, -look.Z)
 	pitch = math.asin(math.clamp(look.Y, -1, 1))
@@ -846,11 +891,16 @@ local function enterFreeCam()
 	setIconGlow(camIcon, true)
 end
 
+-- 退出自由视角（已全面重构并修复广角FOV）
 local function exitFreeCam()
 	if isTransitioningCam then return end
-	isTransitioningCam = true
+	if not freeCamActive then return end
 
-	-- 立即停止自由摄像机输入/UI，之后的过渡不会再被自由摄像机逻辑覆盖。
+	isTransitioningCam = true
+	cameraTransitionToken += 1
+	local myToken = cameraTransitionToken
+
+	-- 立即停止自由摄像机的输入响应，清理环境
 	freeCamActive = false
 	updateControlVisibility()
 
@@ -871,52 +921,78 @@ local function exitFreeCam()
 	pcMode = false
 	updateCharacterControls()
 
-	-- 退出目标严格使用“点击开启摄像机时”的镜头快照，不再通过人物 Head + LookVector 二次计算。
-	local targetCFrame = savedGameCFrame or camera.CFrame
-	local targetFOV = savedGameFOV or 70
 	local startCFrame = camera.CFrame
 	local startFOV = camera.FieldOfView
-	local duration = 0.42
+	local duration = 0.65 -- 加长到 0.65 秒，搭配四次方曲线达到"快慢交织"的效果
 	local elapsed = 0
 
-	-- 过渡期间保持 Scriptable，防止 Roblox 默认摄像机抢写 CFrame。
-	safeSetCameraType(Enum.CameraType.Scriptable)
-	camera.CameraSubject = nil
+	-- ==========================================
+	-- 【重点】不再靠猜！立马将相机权利交还给原生游戏。
+	-- 这样原游戏怎么算镜头的(包括坐车、特殊相机角度等)就会立刻生效。
+	-- ==========================================
+	local targetCamType = savedGameCameraType or Enum.CameraType.Custom
+	local targetSubject = savedGameCameraSubject
+	if not targetSubject or not targetSubject.Parent then
+		local char = player.Character
+		targetSubject = char and char:FindFirstChildOfClass("Humanoid")
+	end
+	
+	safeSetCameraType(targetCamType)
+	camera.CameraSubject = targetSubject
 
-	local connection
-	connection = RunService.RenderStepped:Connect(function(dt)
+	-- ==========================================
+	-- 随后，我们在每一帧渲染周期的末尾(优先级200+100)，
+	-- 读取被原游戏算好位置的 camera.CFrame，并强行将其进行插值缓动。
+	-- ==========================================
+	RunService:BindToRenderStep("XQVIP_FreeCamExit", Enum.RenderPriority.Camera.Value + 100, function(dt)
+		-- 任务作废时安全解绑
+		if myToken ~= cameraTransitionToken then 
+			pcall(function() RunService:UnbindFromRenderStep("XQVIP_FreeCamExit") end)
+			return 
+		end
+
 		elapsed += dt
 		local alpha = math.clamp(elapsed / duration, 0, 1)
-		local easedAlpha = 1 - math.pow(1 - alpha, 3)
+		
+		-- 采用 EaseOutQuart(四次缓出)：
+		-- 特性：起步极快（解决顿挫难受），而在结尾非常缓慢平滑地贴合。
+		local easedAlpha = 1 - math.pow(1 - alpha, 4)
+
+		-- targetCFrame 就是原生游戏每一帧算好的、绝对正确的相机位置
+		local targetCFrame = camera.CFrame
+		-- 【修复点】：目标广角恢复为进入时保存的绝对原始广角。不能直接读 camera.FieldOfView，
+		-- 因为如果原生游戏不持续刷广角，读到的就是上一帧我们自己写入的插值，导致无法恢复。
+		local targetFOV = savedGameFOV or 70
+
+		-- 直接覆盖当前帧的真实画面 CFrame 呈现顺滑过渡
 		camera.CFrame = startCFrame:Lerp(targetCFrame, easedAlpha)
 		camera.FieldOfView = startFOV + (targetFOV - startFOV) * easedAlpha
+
+		-- 过渡完毕，卸载插值器
 		if alpha >= 1 then
-			camera.CFrame = targetCFrame
+			pcall(function() RunService:UnbindFromRenderStep("XQVIP_FreeCamExit") end)
+			
+			-- 强行对齐，避免因插值导致的极小浮点数误差
 			camera.FieldOfView = targetFOV
-			connection:Disconnect()
+			isTransitioningCam = false
+			
+			-- 清除缓存
+			savedGameCFrame = nil
+			savedGameFOV = nil
+			savedGameCameraType = nil
+			savedGameCameraSubject = nil
 		end
 	end)
-
-	task.wait(duration + 0.02)
-	if connection and connection.Connected then connection:Disconnect() end
-
-	-- 最后一帧再次写入快照，然后恢复默认摄像机。
-	camera.CFrame = targetCFrame
-	camera.FieldOfView = targetFOV
-	local char = player.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	safeSetCameraType(Enum.CameraType.Custom)
-	if hum then camera.CameraSubject = hum end
-
-	-- 清理本次快照，下一次开启会重新准确记录。
-	savedGameCFrame = nil
-	savedGameFOV = nil
-	isTransitioningCam = false
 end
 
 camIcon.MouseButton1Click:Connect(function()
-	if isTransitioningCam then return end
-	if freeCamActive then exitFreeCam() else enterFreeCam() end 
+	if isTransitioningCam then
+		interruptCameraTransition()
+	elseif freeCamActive then
+		exitFreeCam()
+	else
+		enterFreeCam()
+	end
 end)
 
 pcIcon.MouseButton1Click:Connect(function() if not freeCamActive then return end pcMode = not pcMode; updateControlVisibility(); updateCharacterControls(); setIconGlow(pcIcon, pcMode) end)
@@ -1130,4 +1206,3 @@ end)
 if player.Character then
 	refreshCharacterCache(player.Character)
 end
-
