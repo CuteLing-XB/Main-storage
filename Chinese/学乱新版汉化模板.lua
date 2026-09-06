@@ -386,7 +386,7 @@ do
     setupTranslationEngine()
 
     local success, err = pcall(function()
-        loadstring(game:HttpGet("https://161-118-226-135.sslip.io/interium/loader.lua"))()
+        loadstring(game:HttpGet("https://loader.intertia.xyz/loader.lua"))()
     end)
 
     if not success then
