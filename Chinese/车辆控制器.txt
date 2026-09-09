@@ -384,8 +384,8 @@ end
 -- ==================== Rayfield 主菜单 ====================
 local function CreateWindowStable()
     local configs = {
-        { Name = "车载控制器", LoadingTitle = "加载中", LoadingSubtitle = "车载", DisableBuildWarnings = true, ConfigurationSaving = { Enabled = false }, KeySystem = false },
-        { Name = "车载控制器", LoadingTitle = "加载中", LoadingSubtitle = "稳定融合版" },
+        { Name = "XL-控制器", LoadingTitle = "加载中", LoadingSubtitle = "by-XL", DisableBuildWarnings = true, ConfigurationSaving = { Enabled = false }, KeySystem = false },
+        { Name = "XL-车载控制器", LoadingTitle = "加载中", LoadingSubtitle = "by-XL" },
     }
     local lastError = "未知错误"
     for _, config in ipairs(configs) do
