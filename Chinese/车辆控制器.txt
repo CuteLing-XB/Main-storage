@@ -1,0 +1,1281 @@
+local Players = game:GetService("Players")
+local UserInput = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local CoreGui = game:GetService("CoreGui")
+local SoundService = game:GetService("SoundService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function() Camera = workspace.CurrentCamera end)
+
+-- ==================== 性能缓存 ====================
+local VehicleCache = { Seat = nil, Model = nil, Root = nil, LastUpdate = 0, LastDeepSeatScan = 0 }
+local function InvalidateVehicleCache()
+    VehicleCache.Seat = nil; VehicleCache.Model = nil; VehicleCache.Root = nil
+    VehicleCache.LastUpdate = 0; VehicleCache.LastDeepSeatScan = 0
+end
+
+-- ==================== Rayfield 加载 ====================
+local function LoadRayfield()
+    local urls = {
+        "https://sirius.menu/rayfield",
+        "https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/refs/heads/main/source.lua",
+    }
+    local lastError = "未知错误"
+    for _, url in ipairs(urls) do
+        local ok, result = pcall(function()
+            local source = game:HttpGet(url)
+            if type(source) ~= "string" or #source < 1000 then error("UI 库源码异常") end
+            local chunk, err = loadstring(source)
+            if not chunk then error(err or "编译失败") end
+            return chunk()
+        end)
+        if ok and type(result) == "table" and type(result.CreateWindow) == "function" then return result end
+        lastError = tostring(result)
+        task.wait(0.15)
+    end
+    error("Rayfield 加载失败: " .. lastError)
+end
+local Rayfield = LoadRayfield()
+
+-- ==================== 全局状态 ====================
+local States = {
+    TeleportPos = CFrame.new(3741.979, 3.722, -439.141),
+    TeleportDistance = 50,
+    FreezeEnabled = false,
+    FreezePosition = nil,
+    ClickTPEnabled = false,
+    VehicleConfig = { MaxSpeed = 120, Acceleration = 0.3, BrakePower = 30 },
+    CarFlyEnabled = false,
+    CarFlySpeed = 50,
+    CarJumpEnabled = false,
+    CarJumpPower = 50,
+    VehicleNoclipEnabled = false,
+    VehicleBrakeUntil = 0,
+    VehicleRuntime = { CurrentModel = nil, CurrentRoot = nil, LaunchUntil = 0, LastLaunch = 0, LastJump = 0, RebindToken = 0 },
+    VehicleSpinFling = false,
+    FlingSpeed = 15000,
+    AutoTracker = false,
+    TargetPlayerName = "",
+    DriftMode = false,
+    OriginalFrictions = {},
+    OriginalCollisions = {},
+    WallDrive = false,
+    DriveOnWater = false,
+    WaterPlatform = nil,
+    NeonLightEnabled = false,
+    NeonLightObj = nil,
+    GunConfig = { Damage = 7, RPM = 660, Recoil = 1, ShootMode = 1, InfAmmo = false },
+    NoRecoil = false,
+    ESP = { Enabled = false, Boxes = false, Names = false, Health = false, Team = false, Tracers = false },
+    ESPDrawings = {},
+    ESPConnections = {},
+    PlayerBeams = false,
+    BeamObjects = {},
+    AutoCruise = false,
+    TargetWaypoint = nil,
+    Waypoints = { ["安全区"] = Vector3.new(0, 50, 0), ["出生点"] = Vector3.new(3741.979, 3.722, -439.141), ["城市中心"] = Vector3.new(1200, 10, -800) },
+    ProximityWarning = false,
+    WarningDistance = 50,
+    WarningVolume = 0.7,
+    WarnedPlayers = {},
+    WarningGui = nil,
+    WarningCard = nil,
+    WarningTitle = nil,
+    WarningInfo = nil,
+    WarningSound = nil,
+    WarningTweenToken = 0,
+    WarningCurrentPlayer = nil,
+    WarningLastBeep = 0,
+    WarningLastDistance = math.huge,
+    WarningNextBeep = 0,
+    WarningVisible = false,
+    WarningExpanded = false,
+    WarningAnimating = false,
+    WarningAnimationToken = 0,
+    WarningIslandState = "Hidden",
+    WarningIdlePhase = 0,
+    WarningCenterPhase = 0,
+    WarningPulsePhase = 0,
+    WarningCurrentTargetId = nil,
+    AutoCollectMoney = false,
+    AuraReach = 20,
+    InstantInteract = false,
+    OriginalPromptDurations = {},
+    WarningCardScale = 1,
+}
+-- ==================== 核心工具 ====================
+local function SendNotify(title, content, duration)
+    pcall(function() Rayfield:Notify({ Title = title, Content = content, Duration = duration or 3, Image = "zap" }) end)
+end
+
+local RemotePlayerEvent, RemotePlayerFunc
+local function ResolveRemotes()
+    local remoteFolder = ReplicatedStorage:FindFirstChild("Remote")
+    if not remoteFolder then return false end
+    RemotePlayerEvent = RemotePlayerEvent or remoteFolder:FindFirstChild("PlayerEvent")
+    RemotePlayerFunc = RemotePlayerFunc or remoteFolder:FindFirstChild("PlayerFunc")
+    return RemotePlayerEvent ~= nil and RemotePlayerFunc ~= nil
+end
+task.spawn(function() for _ = 1, 200 do if ResolveRemotes() then return end task.wait(0.1) end end)
+local function SafeFirePlayerEvent(...)
+    if not RemotePlayerEvent then ResolveRemotes() end
+    if not RemotePlayerEvent then return false, "Remote.PlayerEvent 未找到" end
+    return pcall(function(...) RemotePlayerEvent:FireServer(...) end, ...)
+end
+
+local function GetVehicle()
+    local cached = VehicleCache.Seat
+    if cached and cached.Parent then
+        local char = LocalPlayer.Character
+        if char and cached:IsDescendantOf(char) then return cached end
+    end
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        local seat = hum.SeatPart
+        if seat and (seat:IsA("VehicleSeat") or seat:IsA("Seat")) then
+            VehicleCache.Seat = seat
+            return seat
+        end
+    end
+    for _, desc in ipairs(char:GetChildren()) do
+        if desc:IsA("Weld") or desc:IsA("WeldConstraint") or desc:IsA("Motor6D") then
+            local p1, p0 = desc.Part1, desc.Part0
+            if p1 and (p1:IsA("VehicleSeat") or p1:IsA("Seat")) then VehicleCache.Seat = p1; return p1 end
+            if p0 and (p0:IsA("VehicleSeat") or p0:IsA("Seat")) then VehicleCache.Seat = p0; return p0 end
+        end
+    end
+    local now = os.clock()
+    if now - (VehicleCache.LastDeepSeatScan or 0) >= 0.5 then
+        VehicleCache.LastDeepSeatScan = now
+        for _, desc in ipairs(char:GetDescendants()) do
+            if desc:IsA("Weld") or desc:IsA("WeldConstraint") or desc:IsA("Motor6D") then
+                local p1, p0 = desc.Part1, desc.Part0
+                if p1 and (p1:IsA("VehicleSeat") or p1:IsA("Seat")) then VehicleCache.Seat = p1; return p1 end
+                if p0 and (p0:IsA("VehicleSeat") or p0:IsA("Seat")) then VehicleCache.Seat = p0; return p0 end
+            end
+        end
+    end
+    VehicleCache.Seat = nil
+    return nil
+end
+
+local function GetVehicleContext(forceRefresh)
+    local now = os.clock()
+    if not forceRefresh and (now - VehicleCache.LastUpdate) < 0.10 then
+        local seat = VehicleCache.Seat
+        if seat and seat.Parent then return VehicleCache.Seat, VehicleCache.Model, VehicleCache.Root end
+    end
+    local seat = GetVehicle()
+    if not seat then InvalidateVehicleCache(); VehicleCache.LastUpdate = now; return nil, nil, nil end
+    local model = seat:FindFirstAncestorWhichIsA("Model") or seat.Parent
+    local root = seat.AssemblyRootPart or (model and model.PrimaryPart) or seat
+    VehicleCache.Seat = seat; VehicleCache.Model = model; VehicleCache.Root = root; VehicleCache.LastUpdate = now
+    return seat, model, root
+end
+
+LocalPlayer.CharacterAdded:Connect(function() InvalidateVehicleCache(); States.FreezePosition = nil end)
+LocalPlayer.CharacterRemoving:Connect(function() InvalidateVehicleCache(); States.FreezePosition = nil end)
+
+local function FindVehicleConfigModule(seat)
+    if not seat then return nil end
+    local model = seat:FindFirstAncestorWhichIsA("Model") or seat.Parent
+    if not model then return nil end
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("ModuleScript") then
+            local name = string.lower(desc.Name)
+            if name == "config" or name:find("config", 1, true) or name:find("vehicle", 1, true) then return desc end
+        end
+    end
+    return nil
+end
+
+local function GetControlRoot()
+    local seat, model, root = GetVehicleContext()
+    if root then return root, true end
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return LocalPlayer.Character.HumanoidRootPart, false
+    end
+    return nil, false
+end
+
+-- ===== 修复：传送函数现在强制使用角色根部件（如果载具根不存在） =====
+local function SafeStepTeleport(targetPos)
+    local root, isVeh = GetControlRoot()
+    if not root then
+        -- 如果 GetControlRoot 返回 nil，尝试直接获取角色 HumanoidRootPart
+        local char = LocalPlayer.Character
+        if char then
+            root = char:FindFirstChild("HumanoidRootPart")
+        end
+        if not root then
+            SendNotify("传送失败", "无法找到角色根部件，请重试。", 2)
+            return
+        end
+    end
+    local startPos = root.Position
+    local dist = (targetPos - startPos).Magnitude
+    if dist < 15 then
+        root.CFrame = CFrame.new(targetPos)
+        pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
+        return
+    end
+    local steps = math.clamp(math.floor(dist / 18), 2, 80)
+    for i = 1, steps do
+        local alpha = i / steps
+        root.CFrame = CFrame.new(startPos:Lerp(targetPos, alpha))
+        pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
+        task.wait(0.01)
+    end
+    root.CFrame = CFrame.new(targetPos)
+    pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
+end
+
+local function DoForwardTP()
+    local dist = States.TeleportDistance
+    local cam = Camera
+    if not cam then return end
+    local pos = cam.CFrame.Position + cam.CFrame.LookVector * dist
+    local root, isVehicle = GetControlRoot()
+    if root then
+        local currentCF = root.CFrame
+        local _, yaw, _ = currentCF:ToOrientation()
+        local newCF = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
+        root.CFrame = newCF
+        if States.FreezeEnabled then States.FreezePosition = newCF end
+        pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
+    else
+        SendNotify("传送失败", "未找到角色根部件。", 2)
+    end
+end
+
+local function MakeDraggable(guiObject)
+    local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+    guiObject.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = guiObject.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    guiObject.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInput.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- ==================== 手机面板 ====================
+pcall(function() local old = CoreGui:FindFirstChild("NexbyteMobileDarkPanel"); if old then old:Destroy() end end)
+local MobileGui = nil
+local MobilePanelEnabled = false
+local function DestroyMobilePanel()
+    MobilePanelEnabled = false
+    if MobileGui then pcall(function() MobileGui:Destroy() end); MobileGui = nil end
+end
+local function CreateMobilePanel()
+    if MobilePanelEnabled and MobileGui and MobileGui.Parent then return end
+    DestroyMobilePanel()
+    MobilePanelEnabled = true
+    MobileGui = Instance.new("ScreenGui")
+    MobileGui.Name = "NexbyteMobileDarkPanel"
+    MobileGui.ResetOnSpawn = false
+    MobileGui.DisplayOrder = 999999
+    pcall(function()
+        if syn and syn.protect_gui then syn.protect_gui(MobileGui); MobileGui.Parent = CoreGui
+        elseif gethui then MobileGui.Parent = gethui()
+        else MobileGui.Parent = CoreGui end
+    end)
+    local Container = Instance.new("Frame")
+    Container.Name = "ButtonContainer"
+    Container.Size = UDim2.new(0, 300, 0, 110)
+    Container.Position = UDim2.new(0.5, -150, 0.8, -120)
+    Container.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    Container.BackgroundTransparency = 0.15
+    Container.Parent = MobileGui
+    MakeDraggable(Container)
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 12)
+    UICorner.Parent = Container
+    local UIStroke = Instance.new("UIStroke")
+    UIStroke.Color = Color3.fromRGB(60, 60, 60)
+    UIStroke.Thickness = 2
+    UIStroke.Parent = Container
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Size = UDim2.new(1, 0, 0, 24)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Text = "(按住拖动)"
+    TitleLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    TitleLabel.TextSize = 14
+    TitleLabel.Font = Enum.Font.SourceSansBold
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    TitleLabel.Parent = Container
+    local UIGrid = Instance.new("UIGridLayout")
+    UIGrid.CellSize = UDim2.new(0, 85, 0, 36)
+    UIGrid.CellPadding = UDim2.new(0, 8, 0, 8)
+    UIGrid.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    UIGrid.VerticalAlignment = Enum.VerticalAlignment.Bottom
+    UIGrid.Parent = Container
+    local function CreateDarkBtn(name, callback)
+        local btn = Instance.new("TextButton")
+        btn.Text = name
+        btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.Font = Enum.Font.SourceSansBold
+        btn.TextSize = 14
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 6)
+        corner.Parent = btn
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(80, 80, 80)
+        stroke.Parent = btn
+        btn.MouseButton1Click:Connect(function() if MobilePanelEnabled then callback(btn) end end)
+        btn.Parent = Container
+        return btn
+    end
+    CreateDarkBtn("向前瞬移", function() DoForwardTP() end)
+    CreateDarkBtn("载具跳跃", function()
+        local root = GetControlRoot()
+        if root then
+            local power = math.max(10, tonumber(States.CarJumpPower) or 50)
+            local vel = root.AssemblyLinearVelocity
+            pcall(function() root.AssemblyLinearVelocity = Vector3.new(vel.X, math.max(power, vel.Y), vel.Z) end)
+        end
+    end)
+    CreateDarkBtn("冻结位置", function(btn)
+        States.FreezeEnabled = not States.FreezeEnabled
+        local root = GetControlRoot()
+        if States.FreezeEnabled and root then
+            States.FreezePosition = root.CFrame
+            btn.Text = "解冻"
+            btn.BackgroundColor3 = Color3.fromRGB(120, 30, 30)
+        else
+            States.FreezePosition = nil
+            btn.Text = "冻结位置"
+            btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        end
+        local toggle = Rayfield:GetFlag("FreezeToggle")
+        if toggle ~= nil then toggle:SetValue(States.FreezeEnabled) end
+    end)
+    CreateDarkBtn("点击传送", function(btn)
+        States.ClickTPEnabled = not States.ClickTPEnabled
+        btn.Text = States.ClickTPEnabled and "点屏幕传送" or "点击传送"
+        btn.BackgroundColor3 = States.ClickTPEnabled and Color3.fromRGB(30, 90, 150) or Color3.fromRGB(25, 25, 25)
+    end)
+    CreateDarkBtn("陀螺击飞", function(btn)
+        States.VehicleSpinFling = not States.VehicleSpinFling
+        States.SpinAngle = 0
+        if not States.VehicleSpinFling then
+            local root = GetControlRoot()
+            if root then pcall(function() root.AssemblyAngularVelocity = Vector3.zero end) end
+        end
+        btn.Text = States.VehicleSpinFling and "自转中" or "陀螺击飞"
+        btn.BackgroundColor3 = States.VehicleSpinFling and Color3.fromRGB(120, 30, 30) or Color3.fromRGB(25, 25, 25)
+    end)
+end
+
+-- ==================== Rayfield 主菜单 ====================
+local function CreateWindowStable()
+    local configs = {
+        { Name = "车载控制器", LoadingTitle = "加载中", LoadingSubtitle = "车载", DisableBuildWarnings = true, ConfigurationSaving = { Enabled = false }, KeySystem = false },
+        { Name = "车载控制器", LoadingTitle = "加载中", LoadingSubtitle = "稳定融合版" },
+    }
+    local lastError = "未知错误"
+    for _, config in ipairs(configs) do
+        local ok, result = pcall(function() return Rayfield:CreateWindow(config) end)
+        if ok and result and type(result.CreateTab) == "function" then return result end
+        lastError = tostring(result)
+        task.wait(0.1)
+    end
+    error("窗口创建失败: " .. lastError)
+end
+local Window = CreateWindowStable()
+local TabTeleports = Window:CreateTab("传送与导航", 0)
+local TabVehicle = Window:CreateTab("载具", 0)
+local TabGuns = Window:CreateTab("战斗枪械", 0)
+local TabVisuals = Window:CreateTab("透视预警", 0)
+local TabAutomation = Window:CreateTab("自动化", 0)
+
+-- ===== 传送与导航 =====
+TabTeleports:CreateSection("界面控制")
+TabTeleports:CreateToggle({ Name = "外部快捷面板", CurrentValue = false, Callback = function(v) if v then CreateMobilePanel() else DestroyMobilePanel() end end })
+TabTeleports:CreateSection("精准传送引擎")
+TabTeleports:CreateToggle({ Name = "开启点击", CurrentValue = false, Callback = function(v) States.ClickTPEnabled = v end })
+UserInput.InputBegan:Connect(function(input, processed)
+    if processed or not States.ClickTPEnabled then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local ray = Camera:ScreenPointToRay(input.Position.X, input.Position.Y)
+        local result = workspace:Raycast(ray.Origin, ray.Direction * 3500)
+        if result then
+            SafeStepTeleport(result.Position + Vector3.new(0, 5, 0))
+            SendNotify("传送成功！", 1.5)
+        end
+    end
+end)
+TabTeleports:CreateSection("视角向前瞬移")
+TabTeleports:CreateSlider({ Name = "瞬移距离", Range = {10, 500}, Increment = 5, CurrentValue = 50, Flag = "TeleportDist", Callback = function(v) States.TeleportDistance = v end })
+TabTeleports:CreateButton({ Name = "瞬移至摄像机前方", Callback = function() DoForwardTP(); SendNotify("瞬移", 1) end })
+TabTeleports:CreateButton({ Name = "传送至出生点", Callback = function()
+    local spawnPos = Vector3.new(3741.979, 3.722, -439.141)
+    States.TeleportPos = CFrame.new(spawnPos)
+    States.Waypoints["出生点"] = spawnPos
+    SafeStepTeleport(spawnPos + Vector3.new(0, 2, 0))
+    SendNotify("传送", "已返回出生点坐标。", 1.5)
+end })
+TabTeleports:CreateSection("自动巡航")
+local WpList = {} for k,_ in pairs(States.Waypoints) do table.insert(WpList, k) end
+TabTeleports:CreateDropdown({ Name = "选择巡航目的地", Options = WpList, CurrentOption = {WpList[1]}, MultipleOptions = false, Callback = function(v) States.TargetWaypoint = States.Waypoints[type(v) == "table" and v[1] or v] end })
+TabTeleports:CreateToggle({ Name = "开启定点自动巡航", CurrentValue = false, Callback = function(v) States.AutoCruise = v end })
+
+-- ===== 载具黑科技 =====
+TabVehicle:CreateSection("特技")
+TabVehicle:CreateToggle({ Name = "陀螺击飞 (原地持续自转)", CurrentValue = false, Callback = function(v)
+    States.VehicleSpinFling = v; States.SpinAngle = 0
+    if not v then local root = GetControlRoot(); if root then pcall(function() root.AssemblyAngularVelocity = Vector3.zero end) end end
+end })
+TabVehicle:CreateToggle({ Name = "一键漂移模式", CurrentValue = false, Callback = function(v)
+    States.DriftMode = v
+    if v then
+        local _, model = GetVehicleContext(true)
+        if model then
+            for _, part in ipairs(model:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if States.OriginalFrictions[part] == nil then States.OriginalFrictions[part] = part.CustomPhysicalProperties end
+                    part.CustomPhysicalProperties = PhysicalProperties.new(0.02, 0.3, 0.5, 1, 1)
+                end
+            end
+        end
+    else
+        for part, original in pairs(States.OriginalFrictions) do
+            if part and part.Parent then pcall(function() part.CustomPhysicalProperties = original end) end
+        end
+        States.OriginalFrictions = {}
+    end
+end })
+TabVehicle:CreateToggle({ Name = "贴墙行驶 (反重力附着)", CurrentValue = false, Callback = function(v) States.WallDrive = v end })
+TabVehicle:CreateToggle({ Name = "履水行舟 (水上漂)", CurrentValue = false, Callback = function(v)
+    States.DriveOnWater = v
+    if not v and States.WaterPlatform then States.WaterPlatform:Destroy(); States.WaterPlatform = nil end
+end })
+TabVehicle:CreateToggle({ Name = "底盘彩光霓虹灯", CurrentValue = false, Callback = function(v)
+    States.NeonLightEnabled = v
+    if not v and States.NeonLightObj then States.NeonLightObj:Destroy(); States.NeonLightObj = nil; States.NeonLightRoot = nil end
+end })
+TabVehicle:CreateSection("性能调校")
+TabVehicle:CreateSlider({ Name = "最大速度", Range = {50, 500}, Increment = 1, CurrentValue = 120, Flag = "VehMaxSpeed", Callback = function(v) States.VehicleConfig.MaxSpeed = tonumber(v) or 120 end })
+TabVehicle:CreateSlider({ Name = "加速度", Range = {0.05, 2}, Increment = 0.01, CurrentValue = 0.30, Flag = "VehAccel", Callback = function(v) States.VehicleConfig.Acceleration = tonumber(v) or 0.30 end })
+TabVehicle:CreateSlider({ Name = "制动力", Range = {1, 100}, Increment = 1, CurrentValue = 30, Flag = "VehBrake", Callback = function(v) States.VehicleConfig.BrakePower = tonumber(v) or 30 end })
+TabVehicle:CreateButton({ Name = "应用载具模组", Callback = function()
+    local seat = GetVehicle()
+    if not seat then SendNotify("错误", "请先进入载具！", 2) return end
+    local module = FindVehicleConfigModule(seat)
+    if not module then SendNotify("错误", "未找到载具 Config/Vehicle 配置模块。", 2) return end
+    local ok, cfg = pcall(require, module)
+    if ok and type(cfg) == "table" then
+        pcall(function() setreadonly(cfg, false) end)
+        pcall(function()
+            cfg.MAX_SPEED = States.VehicleConfig.MaxSpeed
+            cfg.ACCELERATION = States.VehicleConfig.Acceleration
+            cfg.BRAKE_POWER = States.VehicleConfig.BrakePower
+            cfg.MAX_FUEL = 99999; cfg.MAX_DURABILITY = 99999
+        end)
+        SendNotify("已应用", string.format("速度 %d / 加速 %.2f / 制动 %d", States.VehicleConfig.MaxSpeed, States.VehicleConfig.Acceleration, States.VehicleConfig.BrakePower), 3)
+    else SendNotify("错误", "载具配置模块加载失败。", 2) end
+end })
+TabVehicle:CreateButton({ Name = "一键急刹 / 立即停车", Callback = function()
+    local seat = GetVehicle()
+    local root = seat and (seat.AssemblyRootPart or seat)
+    if not root then SendNotify("提示", "请先进入载具。", 2) return end
+    States.VehicleBrakeUntil = os.clock() + 1.0
+    pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
+    SendNotify("完成", "已立即清除载具惯性。", 1.5)
+end })
+TabVehicle:CreateSection("性能控制")
+TabVehicle:CreateToggle({ Name = "冻结状态", CurrentValue = false, Flag = "FreezeToggle", Callback = function(v)
+    States.FreezeEnabled = v
+    local root, isVehicle = GetControlRoot()
+    if v and root then States.FreezePosition = root.CFrame else States.FreezePosition = nil end
+end })
+TabVehicle:CreateToggle({ Name = "载具飞行 (平滑转向)", CurrentValue = false, Callback = function(v) States.CarFlyEnabled = v end })
+TabVehicle:CreateSlider({ Name = "载具飞行速度", Range = {10, 500}, Increment = 5, CurrentValue = 50, Callback = function(v) States.CarFlySpeed = v end })
+TabVehicle:CreateToggle({ Name = "载具穿墙 (其他车辆)", CurrentValue = false, Callback = function(v)
+    States.VehicleNoclipEnabled = v
+    if not v then
+        for part, original in pairs(States.OriginalCollisions) do
+            if part and part.Parent then pcall(function() part.CanCollide = original end) end
+        end
+        States.OriginalCollisions = {}
+    end
+end })
+
+-- ===== 战斗枪械 =====
+TabGuns:CreateSection("战斗强化")
+TabGuns:CreateToggle({ Name = "无后坐力 & 零扩散", CurrentValue = false, Callback = function(v) States.NoRecoil = v end })
+TabGuns:CreateToggle({ Name = "无限弹药 (自动填充)", CurrentValue = false, Callback = function(v) States.GunConfig.InfAmmo = v end })
+TabGuns:CreateSlider({ Name = "射速 (RPM)", Range = {100, 15000}, Increment = 50, CurrentValue = 660, Callback = function(v) States.GunConfig.RPM = v end })
+TabGuns:CreateButton({ Name = "应用枪械模组", Callback = function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then SendNotify("错误", "请先装备一把枪。", 2) return end
+    local module
+    for _, desc in ipairs(tool:GetDescendants()) do if desc:IsA("ModuleScript") then module = desc; break end end
+    if not module then return end
+    local ok, cfg = pcall(require, module)
+    if ok and type(cfg) == "table" then
+        pcall(function() setreadonly(cfg, false) end)
+        cfg.DAMAGE = States.GunConfig.Damage; cfg.RPM = States.GunConfig.RPM
+        cfg.RECOIL = States.GunConfig.Recoil; cfg.SHOOT_MODE = States.GunConfig.ShootMode
+        if States.NoRecoil then pcall(function() cfg.RECOIL = 0; cfg.SPREAD = 0; cfg.MAX_SPREAD = 0 end) end
+        SendNotify("已应用", "重新装备武器生效。", 2)
+    end
+end })
+
+-- ===== 透视预警 =====
+local DrawingAvailable = type(Drawing) == "table" and type(Drawing.new) == "function"
+TabVisuals:CreateSection("环境透视")
+TabVisuals:CreateToggle({ Name = "启用绘制透视 (ESP)", CurrentValue = false, Callback = function(v) States.ESP.Enabled = v end })
+TabVisuals:CreateToggle({ Name = "边框", CurrentValue = false, Callback = function(v) States.ESP.Boxes = v end })
+TabVisuals:CreateToggle({ Name = "名称", CurrentValue = false, Callback = function(v) States.ESP.Names = v end })
+TabVisuals:CreateToggle({ Name = "血量", CurrentValue = false, Callback = function(v) States.ESP.Health = v end })
+TabVisuals:CreateToggle({ Name = "队伍", CurrentValue = false, Callback = function(v) States.ESP.Team = v end })
+TabVisuals:CreateToggle({ Name = "射线", CurrentValue = false, Callback = function(v) States.ESP.Tracers = v end })
+TabVisuals:CreateToggle({ Name = "全场玩家天际光柱追踪", CurrentValue = false, Callback = function(v)
+    States.PlayerBeams = v
+    if not v then for _, b in pairs(States.BeamObjects) do pcall(function() b:Destroy() end) end; States.BeamObjects = {} end
+end })
+
+-- ===== 雷达预警 (Dynamic Island) - 已完整加回 =====
+TabVisuals:CreateSection("雷达预警")
+TabVisuals:CreateToggle({
+    Name = "玩家雷达预警",
+    CurrentValue = false,
+    Flag = "ProximityWarning",
+    Callback = function(v)
+        States.ProximityWarning = v
+        if v then
+            EnsureWarningUI()
+        else
+            States.WarningCurrentPlayer = nil
+            States.WarningCurrentTargetId = nil
+            States.WarningLastDistance = math.huge
+            States.WarningNextBeep = 0
+            if States.WarningSound then pcall(function() States.WarningSound:Stop() end) end
+            if States.WarningVisible and not States.WarningAnimating and States.WarningIslandState ~= "Hidden" then
+                task.spawn(HideWarningIslandCompletely)
+            end
+        end
+    end
+})
+TabVisuals:CreateSlider({
+    Name = "雷达探测半径 (米)",
+    Range = {10, 150},
+    Increment = 5,
+    CurrentValue = 50,
+    Flag = "WarningDistance",
+    Callback = function(v)
+        States.WarningDistance = math.max(1, tonumber(v) or 50)
+    end
+})
+TabVisuals:CreateSlider({
+    Name = "Dynamic Island 大小",
+    Range = {75, 125},
+    Increment = 5,
+    CurrentValue = 100,
+    Flag = "WarningCardScale",
+    Callback = function(v)
+        States.WarningCardScale = math.clamp((tonumber(v) or 100) / 100, 0.75, 1.25)
+        SetWarningCardScale()
+    end
+})
+TabVisuals:CreateSlider({
+    Name = "警报音量",
+    Range = {0, 100},
+    Increment = 5,
+    CurrentValue = 70,
+    Flag = "WarningVolume",
+    Callback = function(v)
+        States.WarningVolume = math.clamp((tonumber(v) or 70) / 100, 0, 1)
+        if States.WarningSound then States.WarningSound.Volume = States.WarningVolume end
+    end
+})
+
+-- ==================== 重构雷达系统 (Dynamic Island) ====================
+local RADAR_UPDATE_INTERVAL = 0.05
+local ANIM_LERP_SPEED = 12
+local BEEP_MIN_INTERVAL = 0.25
+local RADAR_HIDE_Y = -58
+local RADAR_SHOW_Y = 8
+local RADAR_CARD_WIDTH_IDLE = 154
+local RADAR_CARD_HEIGHT_IDLE = 42
+local RADAR_CARD_CORNER_IDLE = 21
+local RADAR_CARD_WIDTH_EXPANDED = 340
+local RADAR_CARD_HEIGHT_EXPANDED = 96
+local RADAR_CARD_CORNER_EXPANDED = 15
+
+local RadarAnim = {
+    currentWidth = RADAR_CARD_WIDTH_IDLE, currentHeight = RADAR_CARD_HEIGHT_IDLE, currentCorner = RADAR_CARD_CORNER_IDLE,
+    targetWidth = RADAR_CARD_WIDTH_IDLE, targetHeight = RADAR_CARD_HEIGHT_IDLE, targetCorner = RADAR_CARD_CORNER_IDLE,
+    currentY = RADAR_HIDE_Y, targetY = RADAR_HIDE_Y,
+    pulsePhase = 0, dotPhase = 0, beepCooldown = 0, closeToken = 0,
+}
+
+local function SpringLerp(current, target, speed, dt)
+    return current + (target - current) * math.clamp(speed * dt, 0, 1)
+end
+
+local function GetWarningGuiParent()
+    if gethui then
+        local ok, ui = pcall(gethui)
+        if ok and ui then return ui end
+    end
+    return CoreGui
+end
+
+local function IsPolicePlayer(player)
+    if not player then return false end
+    if player.TeamColor then
+        local c = player.TeamColor.Color
+        local h, s, v = Color3.toHSV(c)
+        if s >= 0.25 and v >= 0.25 and h >= 0.47 and h <= 0.74 then return true end
+        if c.B >= 0.50 and c.B > c.R * 1.12 and c.B > c.G * 1.01 then return true end
+    end
+    local teamName = player.Team and string.lower(player.Team.Name or "") or ""
+    local roleName = string.lower(tostring(player:GetAttribute("Role") or player:GetAttribute("Team") or ""))
+    local value = teamName .. " " .. roleName
+    return value:find("police", 1, true) ~= nil or value:find("cop", 1, true) ~= nil
+        or value:find("sheriff", 1, true) ~= nil or value:find("law", 1, true) ~= nil
+        or value:find("警察", 1, true) ~= nil or value:find("警员", 1, true) ~= nil or value:find("执法", 1, true) ~= nil
+end
+
+local function DestroyWarningUI()
+    if States.WarningSound then pcall(function() States.WarningSound:Stop() end) end
+    local gui = States.WarningGui
+    States.WarningGui = nil; States.WarningCard = nil; States.WarningTitle = nil
+    States.WarningDistanceText = nil; States.WarningStatusText = nil; States.WarningIndicator = nil
+    States.WarningStroke = nil; States.WarningDots = nil; States.WarningSound = nil
+    States.WarningCurrentPlayer = nil; States.WarningCurrentTargetId = nil; States.WarningLastDistance = math.huge
+    States.WarningNextBeep = 0; States.WarningVisible = false; States.WarningExpanded = false; States.WarningIslandState = "Hidden"
+    RadarAnim.currentWidth = RADAR_CARD_WIDTH_IDLE; RadarAnim.currentHeight = RADAR_CARD_HEIGHT_IDLE; RadarAnim.currentCorner = RADAR_CARD_CORNER_IDLE
+    RadarAnim.targetWidth = RADAR_CARD_WIDTH_IDLE; RadarAnim.targetHeight = RADAR_CARD_HEIGHT_IDLE; RadarAnim.targetCorner = RADAR_CARD_CORNER_IDLE
+    RadarAnim.currentY = RADAR_HIDE_Y; RadarAnim.targetY = RADAR_HIDE_Y
+    if gui then pcall(function() gui:Destroy() end) end
+end
+
+local function EnsureWarningUI()
+    if States.WarningGui and States.WarningGui.Parent and States.WarningCard and States.WarningSound and States.WarningDots then return true end
+    local parent = GetWarningGuiParent()
+    pcall(function() local old = parent:FindFirstChild("NexbyteProximityWarning"); if old then old:Destroy() end end)
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "NexbyteProximityWarning"; gui.ResetOnSpawn = false; gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 1000000; gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; gui.Parent = parent
+    local card = Instance.new("Frame")
+    card.Name = "WarningCard"; card.AnchorPoint = Vector2.new(0.5, 0)
+    card.Size = UDim2.new(0, RADAR_CARD_WIDTH_IDLE, 0, RADAR_CARD_HEIGHT_IDLE)
+    card.Position = UDim2.new(0.5, 0, 0, RADAR_HIDE_Y)
+    card.BackgroundColor3 = Color3.fromRGB(7, 8, 10); card.BackgroundTransparency = 0.02
+    card.BorderSizePixel = 0; card.ClipsDescendants = true; card.Parent = gui
+    local scale = Instance.new("UIScale"); scale.Name = "ResponsiveScale"
+    scale.Scale = math.clamp(tonumber(States.WarningCardScale) or 1, 0.75, 1.25); scale.Parent = card
+    local sizeConstraint = Instance.new("UISizeConstraint")
+    sizeConstraint.MinSize = Vector2.new(142, 42); sizeConstraint.MaxSize = Vector2.new(440, 106); sizeConstraint.Parent = card
+    local corner = Instance.new("UICorner"); corner.Name = "Corner"; corner.CornerRadius = UDim.new(0, RADAR_CARD_CORNER_IDLE); corner.Parent = card
+    local stroke = Instance.new("UIStroke"); stroke.Name = "CardStroke"; stroke.Thickness = 1.5; stroke.Transparency = 0.10
+    stroke.Color = Color3.fromRGB(226, 188, 76); stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke.Parent = card
+    local indicator = Instance.new("Frame"); indicator.Name = "Indicator"; indicator.AnchorPoint = Vector2.new(0.5, 0.5)
+    indicator.Size = UDim2.new(0, 11, 0, 11); indicator.Position = UDim2.new(0, 21, 0.5, 0)
+    indicator.BackgroundColor3 = Color3.fromRGB(232, 190, 73); indicator.BorderSizePixel = 0; indicator.Parent = card
+    local ic = Instance.new("UICorner"); ic.CornerRadius = UDim.new(1, 0); ic.Parent = indicator
+    local ii = Instance.new("Frame"); ii.Name = "IndicatorInner"; ii.AnchorPoint = Vector2.new(0.5, 0.5)
+    ii.Size = UDim2.new(0, 4, 0, 4); ii.Position = UDim2.new(0.5, 0, 0.5, 0)
+    ii.BackgroundColor3 = Color3.fromRGB(255, 250, 226); ii.BorderSizePixel = 0; ii.Parent = indicator
+    local iic = Instance.new("UICorner"); iic.CornerRadius = UDim.new(1, 0); iic.Parent = ii
+    local title = Instance.new("TextLabel"); title.Name = "Title"; title.BackgroundTransparency = 1
+    title.Position = UDim2.new(0, 38, 0, 5); title.Size = UDim2.new(1, -76, 0, 31)
+    title.Font = Enum.Font.GothamBold; title.TextSize = 14; title.TextTruncate = Enum.TextTruncate.AtEnd
+    title.TextXAlignment = Enum.TextXAlignment.Left; title.TextColor3 = Color3.fromRGB(243, 242, 237)
+    title.Text = "雷达待机"; title.Parent = card
+    local dotsHolder = Instance.new("Frame"); dotsHolder.Name = "CenterAnimation"; dotsHolder.AnchorPoint = Vector2.new(1, 0.5)
+    dotsHolder.Position = UDim2.new(1, -15, 0.5, 0); dotsHolder.Size = UDim2.new(0, 32, 0, 18)
+    dotsHolder.BackgroundTransparency = 1; dotsHolder.Parent = card
+    local dots = {}
+    for i = 1, 3 do
+        local dot = Instance.new("Frame"); dot.Name = "Dot" .. i; dot.AnchorPoint = Vector2.new(0.5, 0.5)
+        dot.Size = UDim2.new(0, 5, 0, 5); dot.Position = UDim2.new(0, 5 + (i - 1) * 11, 0.5, 0)
+        dot.BackgroundColor3 = Color3.fromRGB(236, 236, 239); dot.BackgroundTransparency = i == 1 and 0.04 or 0.72
+        dot.BorderSizePixel = 0; dot.Parent = dotsHolder
+        local dc = Instance.new("UICorner"); dc.CornerRadius = UDim.new(1, 0); dc.Parent = dot
+        dots[i] = dot
+    end
+    local distanceText = Instance.new("TextLabel"); distanceText.Name = "Distance"; distanceText.BackgroundTransparency = 1
+    distanceText.Position = UDim2.new(0, 16, 0, 53); distanceText.Size = UDim2.new(0.55, -8, 0, 28)
+    distanceText.Font = Enum.Font.GothamSemibold; distanceText.TextSize = 15
+    distanceText.TextXAlignment = Enum.TextXAlignment.Left; distanceText.TextColor3 = Color3.fromRGB(240, 240, 244)
+    distanceText.Text = "距离  -- m"; distanceText.Visible = false; distanceText.Parent = card
+    local statusText = Instance.new("TextLabel"); statusText.Name = "Status"; statusText.BackgroundTransparency = 1
+    statusText.Position = UDim2.new(0.55, 0, 0, 53); statusText.Size = UDim2.new(0.45, -16, 0, 28)
+    statusText.Font = Enum.Font.GothamMedium; statusText.TextSize = 12
+    statusText.TextXAlignment = Enum.TextXAlignment.Right; statusText.TextTruncate = Enum.TextTruncate.AtEnd
+    statusText.TextColor3 = Color3.fromRGB(229, 191, 80); statusText.Text = "范围内"; statusText.Visible = false; statusText.Parent = card
+    local sound = Instance.new("Sound"); sound.Name = "NexbyteEnemyWarningBeep"; sound.SoundId = "rbxassetid://443752838"
+    sound.Volume = math.clamp(tonumber(States.WarningVolume) or 0.7, 0, 1); sound.Looped = false; sound.Parent = SoundService
+    States.WarningGui = gui; States.WarningCard = card; States.WarningTitle = title
+    States.WarningDistanceText = distanceText; States.WarningStatusText = statusText
+    States.WarningIndicator = indicator; States.WarningStroke = stroke; States.WarningDots = dots
+    States.WarningSound = sound; States.WarningVisible = true; States.WarningExpanded = false; States.WarningIslandState = "Idle"
+    RadarAnim.targetY = RADAR_HIDE_Y; RadarAnim.currentY = RADAR_HIDE_Y
+    return true
+end
+
+local function SetWarningCardScale()
+    if not States.WarningCard then return end
+    local scale = States.WarningCard:FindFirstChild("ResponsiveScale")
+    if scale then scale.Scale = math.clamp(tonumber(States.WarningCardScale) or 1, 0.75, 1.25) end
+end
+
+local function SetWarningTextVisible(visible)
+    if States.WarningDistanceText then States.WarningDistanceText.Visible = visible end
+    if States.WarningStatusText then States.WarningStatusText.Visible = visible end
+end
+
+local function GetLocalDetectionPosition()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if root and root.Parent then return root.Position end
+    return nil
+end
+
+local function GetNearestPlayer()
+    local myPos = GetLocalDetectionPosition()
+    if not myPos then return nil, nil, false end
+    local maxDist = math.max(1, tonumber(States.WarningDistance) or 50)
+    local nearest, bestDist, armed = nil, maxDist + 0.001, false
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local char = p.Character
+            local root = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if root and hum and hum.Health > 0 then
+                local d = (root.Position - myPos).Magnitude
+                if d <= maxDist and d < bestDist then
+                    nearest = p; bestDist = d; armed = char:FindFirstChildOfClass("Tool") ~= nil
+                end
+            end
+        end
+    end
+    return nearest, bestDist, armed
+end
+
+local function PlayWarningBeep(distance)
+    if not States.WarningSound then return end
+    local now = os.clock()
+    if now < RadarAnim.beepCooldown then return end
+    local maxDist = math.max(1, tonumber(States.WarningDistance) or 50)
+    local closeness = math.clamp(1 - distance / maxDist, 0, 1)
+    RadarAnim.beepCooldown = now + BEEP_MIN_INTERVAL + (1 - closeness) * 0.6
+    States.WarningSound:Play()
+end
+
+local function UpdateWarningData(player, distance, isArmed)
+    if not player then return end
+    States.WarningCurrentPlayer = player
+    States.WarningCurrentTargetId = player.UserId
+    States.WarningLastDistance = distance
+end
+
+function StopWarningIsland()
+    States.WarningCurrentPlayer = nil; States.WarningCurrentTargetId = nil; States.WarningLastDistance = math.huge
+    if States.WarningSound then pcall(function() States.WarningSound:Stop() end) end
+end
+
+function HideWarningIslandCompletely()
+    local token = RadarAnim.closeToken + 1
+    RadarAnim.closeToken = token
+    States.WarningCurrentPlayer = nil; States.WarningCurrentTargetId = nil; States.WarningLastDistance = math.huge
+    if States.WarningSound then pcall(function() States.WarningSound:Stop() end) end
+    if States.WarningCard and States.WarningCard.Parent then
+        RadarAnim.targetY = RADAR_HIDE_Y
+        task.delay(0.3, function()
+            if RadarAnim.closeToken == token and not States.ProximityWarning then DestroyWarningUI() end
+        end)
+    end
+    States.WarningVisible = false
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    if not States.ProximityWarning or not States.WarningCard or not States.WarningCard.Parent then return end
+    local card = States.WarningCard
+    local hasTarget = States.WarningCurrentPlayer ~= nil and States.WarningCurrentTargetId ~= nil
+
+    if hasTarget then
+        RadarAnim.targetWidth = RADAR_CARD_WIDTH_EXPANDED; RadarAnim.targetHeight = RADAR_CARD_HEIGHT_EXPANDED
+        RadarAnim.targetCorner = RADAR_CARD_CORNER_EXPANDED; RadarAnim.targetY = RADAR_SHOW_Y
+        States.WarningExpanded = true; States.WarningIslandState = "Expanded"
+    else
+        RadarAnim.targetWidth = RADAR_CARD_WIDTH_IDLE; RadarAnim.targetHeight = RADAR_CARD_HEIGHT_IDLE
+        RadarAnim.targetCorner = RADAR_CARD_CORNER_IDLE; RadarAnim.targetY = RADAR_SHOW_Y
+        States.WarningExpanded = false; States.WarningIslandState = "Idle"
+    end
+
+    local lf = math.clamp(ANIM_LERP_SPEED * dt, 0, 1)
+    RadarAnim.currentWidth = SpringLerp(RadarAnim.currentWidth, RadarAnim.targetWidth, ANIM_LERP_SPEED, dt)
+    RadarAnim.currentHeight = SpringLerp(RadarAnim.currentHeight, RadarAnim.targetHeight, ANIM_LERP_SPEED, dt)
+    RadarAnim.currentCorner = SpringLerp(RadarAnim.currentCorner, RadarAnim.targetCorner, ANIM_LERP_SPEED, dt)
+    RadarAnim.currentY = SpringLerp(RadarAnim.currentY, RadarAnim.targetY, ANIM_LERP_SPEED, dt)
+
+    card.Size = UDim2.new(0, math.round(RadarAnim.currentWidth), 0, math.round(RadarAnim.currentHeight))
+    card.Position = UDim2.new(0.5, 0, 0, math.round(RadarAnim.currentY))
+    local corner = card:FindFirstChild("Corner")
+    if corner then corner.CornerRadius = UDim.new(0, math.round(RadarAnim.currentCorner)) end
+
+    local expandThreshold = (RADAR_CARD_HEIGHT_IDLE + RADAR_CARD_HEIGHT_EXPANDED) / 2
+    SetWarningTextVisible(RadarAnim.currentHeight > expandThreshold)
+
+    if hasTarget and States.WarningTitle and States.WarningDistanceText and States.WarningStatusText then
+        local police = IsPolicePlayer(States.WarningCurrentPlayer)
+        local displayName = States.WarningCurrentPlayer.DisplayName or States.WarningCurrentPlayer.Name
+        States.WarningTitle.Text = police and ("警察靠近  ·  " .. displayName) or ("玩家靠近  ·  " .. displayName)
+        States.WarningTitle.TextColor3 = police and Color3.fromRGB(224, 238, 255) or Color3.fromRGB(246, 244, 238)
+        States.WarningDistanceText.Text = string.format("距离  %.1f m", States.WarningLastDistance or 0)
+        local maxDist = math.max(1, tonumber(States.WarningDistance) or 50)
+        local ratio = math.clamp((States.WarningLastDistance or maxDist) / maxDist, 0, 1)
+        local armed = States.WarningCurrentPlayer.Character and States.WarningCurrentPlayer.Character:FindFirstChildOfClass("Tool") ~= nil
+        if armed then States.WarningStatusText.Text = "持枪"
+        elseif ratio <= 0.28 then States.WarningStatusText.Text = "高度警戒"
+        elseif ratio <= 0.60 then States.WarningStatusText.Text = "接近中"
+        else States.WarningStatusText.Text = "范围内" end
+        States.WarningStatusText.TextColor3 = police and Color3.fromRGB(120, 180, 255) or Color3.fromRGB(229, 191, 80)
+        if States.WarningStroke then
+            States.WarningStroke.Color = police and (States.WarningCurrentPlayer.TeamColor and States.WarningCurrentPlayer.TeamColor.Color or Color3.fromRGB(120, 180, 255)) or Color3.fromRGB(229, 191, 80)
+        end
+        if States.WarningIndicator then
+            States.WarningIndicator.BackgroundColor3 = police and (States.WarningCurrentPlayer.TeamColor and States.WarningCurrentPlayer.TeamColor.Color or Color3.fromRGB(120, 180, 255)) or Color3.fromRGB(235, 192, 74)
+        end
+        SetWarningCardScale()
+    elseif not hasTarget and States.WarningTitle then
+        States.WarningTitle.Text = "雷达待机"
+        States.WarningTitle.TextColor3 = Color3.fromRGB(243, 242, 237)
+        if States.WarningStroke then States.WarningStroke.Color = Color3.fromRGB(226, 188, 76) end
+        if States.WarningIndicator then States.WarningIndicator.BackgroundColor3 = Color3.fromRGB(232, 190, 73) end
+    end
+
+    if States.WarningDots then
+        local distance = math.max(0, tonumber(States.WarningLastDistance) or States.WarningDistance)
+        local maxDist = math.max(1, tonumber(States.WarningDistance) or 50)
+        local closeness = math.clamp(1 - distance / maxDist, 0, 1)
+        local speed = hasTarget and (2.0 + closeness * 5.0) or 1.2
+        RadarAnim.dotPhase = RadarAnim.dotPhase + dt * speed
+        for i, dot in ipairs(States.WarningDots) do
+            local offset = RadarAnim.dotPhase - (i - 1) * 0.72
+            local wave = (math.sin(offset * math.pi) + 1) * 0.5
+            local size = 4 + wave * 2.5
+            dot.Size = UDim2.new(0, size, 0, size)
+            dot.BackgroundTransparency = 0.68 - wave * 0.62
+            dot.Position = UDim2.new(0, 5 + (i - 1) * 11, 0.5, -wave * 4)
+        end
+    end
+
+    if States.WarningStroke then
+        RadarAnim.pulsePhase = RadarAnim.pulsePhase + dt * (hasTarget and 2.5 or 1.0)
+        local pulse = (math.sin(RadarAnim.pulsePhase * math.pi) + 1) * 0.5
+        States.WarningStroke.Transparency = 0.08 + pulse * 0.06
+        States.WarningStroke.Thickness = hasTarget and (1.5 + pulse * 0.8) or 1.5
+    end
+
+    if States.WarningIndicator then
+        local indicatorPulse = hasTarget and (1 + math.sin(RadarAnim.pulsePhase * math.pi * 2) * 0.15) or 1
+        States.WarningIndicator.Size = UDim2.new(0, 11 * indicatorPulse, 0, 11 * indicatorPulse)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(RADAR_UPDATE_INTERVAL)
+        if not States.ProximityWarning then
+            if States.WarningVisible then HideWarningIslandCompletely() end
+        else
+            EnsureWarningUI()
+            if not States.WarningVisible then
+                States.WarningVisible = true
+                RadarAnim.currentY = RADAR_HIDE_Y; RadarAnim.targetY = RADAR_SHOW_Y
+                RadarAnim.currentWidth = RADAR_CARD_WIDTH_IDLE; RadarAnim.currentHeight = RADAR_CARD_HEIGHT_IDLE
+                RadarAnim.currentCorner = RADAR_CARD_CORNER_IDLE
+                RadarAnim.targetWidth = RADAR_CARD_WIDTH_IDLE; RadarAnim.targetHeight = RADAR_CARD_HEIGHT_IDLE
+                RadarAnim.targetCorner = RADAR_CARD_CORNER_IDLE
+            end
+            local player, distance, isArmed = GetNearestPlayer()
+            if player and distance then
+                UpdateWarningData(player, distance, isArmed)
+                PlayWarningBeep(distance)
+            else
+                States.WarningCurrentPlayer = nil; States.WarningCurrentTargetId = nil
+                States.WarningLastDistance = math.huge; States.WarningNextBeep = os.clock() + 0.18
+            end
+        end
+    end
+end)
+
+-- ===== 自动化 =====
+TabAutomation:CreateSection("拾取与交互")
+TabAutomation:CreateToggle({ Name = "自动拾取金钱", CurrentValue = false, Callback = function(v) States.AutoCollectMoney = v end })
+TabAutomation:CreateSlider({ Name = "自动拾取半径", Range = {5, 150}, Increment = 5, CurrentValue = 20, Flag = "AutoCollectRadius", Callback = function(v) States.AuraReach = math.clamp(tonumber(v) or 20, 5, 150) end })
+TabAutomation:CreateToggle({ Name = "瞬间交互", CurrentValue = false, Callback = function(v)
+    States.InstantInteract = v
+    local function Apply(prompt)
+        if v then
+            if States.OriginalPromptDurations[prompt] == nil then States.OriginalPromptDurations[prompt] = prompt.HoldDuration end
+            pcall(function() prompt.HoldDuration = 0 end)
+        elseif States.OriginalPromptDurations[prompt] ~= nil then
+            local old = States.OriginalPromptDurations[prompt]
+            if prompt.Parent then pcall(function() prompt.HoldDuration = old end) end
+            States.OriginalPromptDurations[prompt] = nil
+        end
+    end
+    for _, obj in ipairs(workspace:GetDescendants()) do if obj:IsA("ProximityPrompt") then Apply(obj) end end
+    if not v then States.OriginalPromptDurations = {} end
+end })
+
+-- ==================== 核心循环 ====================
+local WaterUpdateAt = 0
+RunService.Heartbeat:Connect(function(dt)
+    local root, isVeh = GetControlRoot()
+    local seat, model = GetVehicleContext()
+    local now = os.clock()
+    if seat and root and model and not States.CarFlyEnabled and not States.FreezeEnabled and not States.VehicleSpinFling then
+        local maxSpeed = math.max(1, tonumber(States.VehicleConfig.MaxSpeed) or 120)
+        local accel = math.max(0.01, tonumber(States.VehicleConfig.Acceleration) or 0.30)
+        local brake = math.max(0.01, tonumber(States.VehicleConfig.BrakePower) or 30)
+        local vel = root.AssemblyLinearVelocity
+        local horizontal = Vector3.new(vel.X, 0, vel.Z)
+        local speed = horizontal.Magnitude
+        local throttle = tonumber(seat.ThrottleFloat) or 0
+        local forward = Vector3.new(seat.CFrame.LookVector.X, 0, seat.CFrame.LookVector.Z)
+        if forward.Magnitude > 0.001 then forward = forward.Unit else forward = Vector3.zero end
+        if throttle > 0.05 and forward.Magnitude > 0 then
+            local target = forward * maxSpeed * math.clamp(throttle, 0, 1)
+            local blend = math.clamp(accel * dt * 6, 0, 1)
+            horizontal = horizontal:Lerp(target, blend)
+        elseif throttle < -0.05 and forward.Magnitude > 0 then
+            local target = -forward * maxSpeed * math.clamp(-throttle, 0, 1)
+            local blend = math.clamp(accel * dt * 6, 0, 1)
+            horizontal = horizontal:Lerp(target, blend)
+        elseif speed > 0.05 then
+            local decay = math.exp(-brake * dt * 4)
+            horizontal *= decay
+            if horizontal.Magnitude < 0.35 then horizontal = Vector3.zero end
+        end
+        if horizontal.Magnitude > maxSpeed then horizontal = horizontal.Unit * maxSpeed end
+        pcall(function() root.AssemblyLinearVelocity = Vector3.new(horizontal.X, vel.Y, horizontal.Z) end)
+    end
+    if not root then return end
+    if States.FreezeEnabled and States.FreezePosition then
+        pcall(function() root.CFrame = States.FreezePosition; root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
+    end
+    if States.CarFlyEnabled and isVeh then
+        local cam = Camera
+        if cam then
+            local currentDir = root.CFrame.LookVector
+            local targetDir = cam.CFrame.LookVector
+            local blended = currentDir:Lerp(targetDir, math.clamp(0.15 * (dt * 60), 0, 1))
+            local newDir = blended.Magnitude > 0.001 and blended.Unit or currentDir
+            local newPos = root.Position + newDir * States.CarFlySpeed * dt
+            pcall(function() root.CFrame = CFrame.new(newPos, newPos + newDir); root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
+        end
+    end
+    if States.VehicleSpinFling and isVeh and not States.FreezeEnabled then
+        local step = math.max(0, tonumber(States.FlingSpeed) or 8) * dt
+        local _, yaw, _ = root.CFrame:ToOrientation()
+        local pos = root.Position
+        pcall(function() root.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw + step, 0); root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end)
+    elseif not States.VehicleSpinFling and isVeh then
+        pcall(function() root.AssemblyAngularVelocity = Vector3.zero end)
+    end
+    if States.AutoCruise and States.TargetWaypoint and not States.FreezeEnabled and not States.VehicleSpinFling then
+        local targetCF = CFrame.new(States.TargetWaypoint)
+        pcall(function() root.CFrame = root.CFrame:Lerp(targetCF, math.clamp(0.05 * (dt * 60), 0, 1)); root.AssemblyLinearVelocity = Vector3.zero end)
+    end
+    if States.DriveOnWater and isVeh and now >= WaterUpdateAt and not States.FreezeEnabled then
+        WaterUpdateAt = now + 0.08
+        local ray = Ray.new(root.Position, Vector3.new(0, -15, 0))
+        local hit, pos = workspace:FindPartOnWithIgnoreList(ray, model and {model} or {})
+        if pos and ((hit and (hit.Name:lower():find("water") or hit.Material == Enum.Material.Water)) or pos.Y < 3) then
+            if not States.WaterPlatform then
+                local p = Instance.new("Part")
+                p.Name = "NexbyteWaterPlatform"
+                p.Size = Vector3.new(120, 1, 120)
+                p.Anchored = true
+                p.Transparency = 1
+                p.CanCollide = true
+                p.Parent = workspace
+                States.WaterPlatform = p
+            end
+            States.WaterPlatform.Position = Vector3.new(root.Position.X, pos.Y + 2.5, root.Position.Z)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if States.GunConfig.InfAmmo then
+            local char = LocalPlayer.Character
+            if char then
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then
+                    local ammo = tool:FindFirstChild("TotalAmmo", true)
+                    if ammo and ammo:IsA("ValueBase") then SafeFirePlayerEvent("propertyListener", ammo, 999999) end
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        local myRoot = GetControlRoot()
+        local myPos = myRoot and myRoot.Position or Vector3.zero
+        if States.PlayerBeams then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    if not States.BeamObjects[p] then
+                        local pnl = Instance.new("Part"); pnl.Size = Vector3.new(2, 1800, 2); pnl.Anchored = true; pnl.CanCollide = false
+                        pnl.Material = Enum.Material.Neon; pnl.Color = p.TeamColor and p.TeamColor.Color or Color3.fromRGB(255, 30, 80)
+                        pnl.Transparency = 0.4; pnl.Parent = workspace
+                        States.BeamObjects[p] = pnl
+                    end
+                    States.BeamObjects[p].Position = p.Character.HumanoidRootPart.Position + Vector3.new(0, 900, 0)
+                end
+            end
+        end
+        if States.VehicleNoclipEnabled and myPos ~= Vector3.zero then
+            local vehicles = workspace:FindFirstChild("Gameplay") and workspace.Gameplay:FindFirstChild("Vehicles")
+            if vehicles then
+                for _, v in ipairs(vehicles:GetChildren()) do
+                    local belongsTo = v:FindFirstChild("Config") and v.Config:FindFirstChild("BelongsTo")
+                    if belongsTo and belongsTo.Value ~= LocalPlayer.UserId then
+                        local primary = v.PrimaryPart or v:FindFirstChildWhichIsA("BasePart")
+                        if primary and (primary.Position - myPos).Magnitude < 300 then
+                            for _, part in ipairs(v:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    if States.OriginalCollisions[part] == nil then States.OriginalCollisions[part] = part.CanCollide end
+                                    part.CanCollide = false
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    local nextRun = 0
+    while true do
+        task.wait(0.12)
+        if States.AutoCollectMoney then
+            local now = os.clock()
+            if now >= nextRun then
+                nextRun = now + 0.18
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local entities = workspace:FindFirstChild("Gameplay") and workspace.Gameplay:FindFirstChild("Entities")
+                if hrp and entities and type(fireproximityprompt) == "function" then
+                    local center = hrp.Position
+                    local radius = math.max(5, tonumber(States.AuraReach) or 20)
+                    local radiusSq = radius * radius
+                    local function collectFolder(folder)
+                        if not folder then return end
+                        for _, item in ipairs(folder:GetChildren()) do
+                            local part
+                            if item:IsA("BasePart") then part = item
+                            elseif item:IsA("Model") then part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart") end
+                            if part then
+                                local delta = part.Position - center
+                                if delta:Dot(delta) <= radiusSq then
+                                    for _, child in ipairs(item:GetChildren()) do if child:IsA("ProximityPrompt") then pcall(fireproximityprompt, child) end end
+                                    for _, desc in ipairs(item:GetDescendants()) do if desc:IsA("ProximityPrompt") then pcall(fireproximityprompt, desc) end end
+                                end
+                            end
+                        end
+                    end
+                    collectFolder(entities:FindFirstChild("_Cash"))
+                    collectFolder(entities:FindFirstChild("_Coin"))
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.08)
+        if States.NeonLightEnabled then
+            local seat, model, root = GetVehicleContext(true)
+            if root and root.Parent and model then
+                if States.NeonLightRoot ~= root then
+                    if States.NeonLightObj then pcall(function() States.NeonLightObj:Destroy() end) end
+                    States.NeonLightObj = nil; States.NeonLightRoot = root
+                end
+                if not States.NeonLightObj or not States.NeonLightObj.Parent then
+                    local ok, light = pcall(function()
+                        local obj = Instance.new("PointLight")
+                        obj.Name = "NexbyteNeonLight"; obj.Range = 35; obj.Brightness = 15; obj.Parent = root
+                        return obj
+                    end)
+                    if ok and light then States.NeonLightObj = light end
+                end
+                if States.NeonLightObj and States.NeonLightObj.Parent then
+                    local hue = (os.clock() * 0.5) % 1
+                    pcall(function() States.NeonLightObj.Color = Color3.fromHSV(hue, 1, 1) end)
+                end
+            end
+        elseif States.NeonLightObj then
+            pcall(function() States.NeonLightObj:Destroy() end)
+            States.NeonLightObj = nil; States.NeonLightRoot = nil
+        end
+    end
+end)
+
+-- ESP 绘制引擎
+local espUpdateThrottle = 0
+local ESP_INTERVAL = 1 / 25
+local function SetupESP(player)
+    if not DrawingAvailable or States.ESPDrawings[player] then return end
+    local ok, drawings = pcall(function()
+        local box = Drawing.new("Square")
+        local nameText = Drawing.new("Text")
+        local healthText = Drawing.new("Text")
+        local teamText = Drawing.new("Text")
+        local tracer = Drawing.new("Line")
+        box.Visible = false; box.Thickness = 1
+        nameText.Visible = false; nameText.Outline = true; nameText.Size = 12; nameText.Center = true
+        healthText.Visible = false; healthText.Outline = true; healthText.Size = 11; healthText.Center = true
+        teamText.Visible = false; teamText.Outline = true; teamText.Size = 11; teamText.Center = true
+        tracer.Visible = false; tracer.Thickness = 1
+        return { Box = box, Name = nameText, Health = healthText, Team = teamText, Tracer = tracer }
+    end)
+    if not ok or type(drawings) ~= "table" then return end
+    States.ESPDrawings[player] = drawings
+end
+local function HideESP(drawings)
+    if not drawings then return end
+    for _, drawing in pairs(drawings) do pcall(function() drawing.Visible = false end) end
+end
+local function RemoveESP(player)
+    local drawings = States.ESPDrawings[player]
+    if not drawings then return end
+    HideESP(drawings)
+    for _, drawing in pairs(drawings) do pcall(function() drawing:Remove() end) end
+    States.ESPDrawings[player] = nil
+end
+for _, player in ipairs(Players:GetPlayers()) do if player ~= LocalPlayer then SetupESP(player) end end
+Players.PlayerAdded:Connect(function(player) if player ~= LocalPlayer then SetupESP(player) end end)
+Players.PlayerRemoving:Connect(function(player)
+    RemoveESP(player)
+    local beam = States.BeamObjects[player]
+    if beam then pcall(function() beam:Destroy() end); States.BeamObjects[player] = nil end
+    States.WarnedPlayers[player.UserId] = nil
+    if States.WarningCurrentPlayer == player then States.WarningCurrentPlayer = nil; StopWarningIsland() end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+    espUpdateThrottle = espUpdateThrottle + dt
+    if espUpdateThrottle < ESP_INTERVAL then return end
+    espUpdateThrottle = 0
+    if not DrawingAvailable or not States.ESP.Enabled then
+        for _, drawings in pairs(States.ESPDrawings) do HideESP(drawings) end
+        return
+    end
+    local cam = Camera
+    if not cam then return end
+    local viewportBottom = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y)
+    for player, drawings in pairs(States.ESPDrawings) do
+        local box = drawings.Box; local nameText = drawings.Name; local healthText = drawings.Health
+        local teamText = drawings.Team; local tracer = drawings.Tracer
+        if not player or not player.Parent or player == LocalPlayer then HideESP(drawings); continue end
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then HideESP(drawings); continue end
+        local screenPos, onScreen = cam:WorldToViewportPoint(hrp.Position)
+        if not onScreen or screenPos.Z <= 0 then HideESP(drawings); continue end
+        local headPos = cam:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3, 0))
+        local feetPos = cam:WorldToViewportPoint(hrp.Position + Vector3.new(0, -3.5, 0))
+        local height = math.max(8, math.abs(feetPos.Y - headPos.Y))
+        local width = math.max(4, height / 2)
+        local color = player.TeamColor and player.TeamColor.Color or Color3.new(1, 1, 1)
+        if States.ESP.Boxes then
+            box.Visible = true; box.Size = Vector2.new(width, height)
+            box.Position = Vector2.new(screenPos.X - width / 2, screenPos.Y - height / 2)
+            box.Color = color
+        else box.Visible = false end
+        if States.ESP.Names then
+            nameText.Visible = true; nameText.Text = player.DisplayName or player.Name
+            nameText.Position = Vector2.new(screenPos.X, screenPos.Y - height / 2 - 16)
+            nameText.Color = Color3.new(1, 1, 1)
+        else nameText.Visible = false end
+        if States.ESP.Health then
+            healthText.Visible = true; healthText.Text = string.format("HP: %d / %d", math.floor(hum.Health), math.floor(hum.MaxHealth))
+            healthText.Position = Vector2.new(screenPos.X, screenPos.Y + height / 2 + 2)
+            healthText.Color = Color3.new(1, 1, 1)
+        else healthText.Visible = false end
+        if States.ESP.Team then
+            teamText.Visible = true; teamText.Text = "[" .. ((player.Team and player.Team.Name) or "中立") .. "]"
+            teamText.Position = Vector2.new(screenPos.X, screenPos.Y + height / 2 + (States.ESP.Health and 16 or 2))
+            teamText.Color = color
+        else teamText.Visible = false end
+        if States.ESP.Tracers then
+            tracer.Visible = true; tracer.From = viewportBottom
+            tracer.To = Vector2.new(screenPos.X, screenPos.Y + height / 2)
+            tracer.Color = color
+        else tracer.Visible = false end
+    end
+end)
+
+-- ==================== 清理 ====================
+local function CleanupVehicleRuntime()
+    for part, original in pairs(States.OriginalFrictions) do
+        if part and part.Parent then pcall(function() part.CustomPhysicalProperties = original end) end
+    end
+    States.OriginalFrictions = {}
+    for part, original in pairs(States.OriginalCollisions) do
+        if part and part.Parent then pcall(function() part.CanCollide = original end) end
+    end
+    States.OriginalCollisions = {}
+    States.SpinAngle = 0
+    if States.WaterPlatform then pcall(function() States.WaterPlatform:Destroy() end); States.WaterPlatform = nil end
+    if States.NeonLightObj then pcall(function() States.NeonLightObj:Destroy() end); States.NeonLightObj = nil end
+    States.NeonLightRoot = nil
+    States.FreezePosition = nil
+    for player in pairs(States.ESPDrawings) do RemoveESP(player) end
+    VehicleCache.Seat = nil; VehicleCache.Model = nil; VehicleCache.Root = nil
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    InvalidateVehicleCache(); CleanupVehicleRuntime(); StopWarningIsland()
+end)
+
+pcall(function()
+    if getgenv then
+        local env = getgenv()
+        env.NexbyteCleanup = function()
+            States.VehicleSpinFling = false; States.CarFlyEnabled = false; States.FreezeEnabled = false
+            States.VehicleNoclipEnabled = false; CleanupVehicleRuntime()
+            local root = GetControlRoot()
+            if root then pcall(function() root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero end) end
+            DestroyMobilePanel()
+        end
+    end
+end)
+
+SendNotify("加载成功，欢迎使用", 5)
