@@ -215,6 +215,128 @@ local function safeStartup()
             end)
         end
 
+        -- ========== 3.5 反作弊绕过核心模块（已移除反踢出） ==========
+        local BypassCore = {
+            _VERSION = "2.0-Lite",
+            State = {
+                PropertyOverrides = {},
+                OldIndexHook = nil,
+                Initialized = false,
+            }
+        }
+
+        function BypassCore:SetPropertyOverride(obj, key, fakeValue)
+            if not obj then return end
+            if not self.State.PropertyOverrides[obj] then
+                self.State.PropertyOverrides[obj] = {}
+            end
+            self.State.PropertyOverrides[obj][key] = fakeValue
+
+            if not self.State.OldIndexHook then
+                pcall(function()
+                    if hookmetamethod and checkcaller then
+                        self.State.OldIndexHook = hookmetamethod(game, "__index", function(self_obj, k)
+                            if not checkcaller() then
+                                local ov = BypassCore.State.PropertyOverrides[self_obj]
+                                if ov and ov[k] ~= nil then
+                                    return ov[k]
+                                end
+                                pcall(function()
+                                    if self_obj and self_obj.IsA and self_obj:IsA("Humanoid") then
+                                        if k == "WalkSpeed" then return 16 end
+                                        if k == "JumpPower" then return 50 end
+                                    elseif self_obj and self_obj.IsA and self_obj:IsA("BasePart") then
+                                        if k == "Velocity" or k == "AssemblyLinearVelocity" then
+                                            return Vector3.new(0, 0, 0)
+                                        end
+                                    end
+                                end)
+                            end
+                            return BypassCore.State.OldIndexHook(self_obj, k)
+                        end)
+                    end
+                end)
+            end
+        end
+
+        function BypassCore:ClearPropertyOverride(obj, key)
+            if self.State.PropertyOverrides[obj] then
+                if key then
+                    self.State.PropertyOverrides[obj][key] = nil
+                else
+                    self.State.PropertyOverrides[obj] = nil
+                end
+            end
+        end
+
+        function BypassCore:ProtectGUI(instance)
+            pcall(function()
+                if syn and syn.protect_gui then
+                    syn.protect_gui(instance)
+                elseif protect_gui then
+                    protect_gui(instance)
+                elseif gethui then
+                    instance.Parent = gethui()
+                else
+                    instance.Parent = game:GetService("CoreGui")
+                end
+            end)
+        end
+
+        function BypassCore:DisableAntiCheatEvents()
+            pcall(function()
+                if not getconnections then return end
+                local eventNames = {"AntiCheat", "AntiExploit", "AntiSpeed", "AntiFling", "SpeedCheck", "KillFeed", "AC_Remote", "ExploitDetector"}
+                local rs = game:GetService("ReplicatedStorage")
+                for _, name in ipairs(eventNames) do
+                    local ev = rs:FindFirstChild(name)
+                    if ev and ev:IsA("RemoteEvent") then
+                        for _, c in ipairs(getconnections(ev.OnClientEvent)) do
+                            if c.Disable then pcall(c.Disable, c) end
+                        end
+                    end
+                end
+            end)
+        end
+
+        function BypassCore:HideErrors(keywords)
+            keywords = keywords or {"AntiCheat", "Fling", "Bypass", "Exploit"}
+            pcall(function()
+                local oldError = error
+                error = function(msg, level)
+                    if type(msg) == "string" then
+                        for _, kw in ipairs(keywords) do
+                            if msg:find(kw, 1, true) then return end
+                        end
+                    end
+                    oldError(msg, level)
+                end
+            end)
+        end
+
+        function BypassCore:SafeFireServer(remoteObj, ...)
+            local args = {...}
+            return pcall(function()
+                local old = getthreadidentity and getthreadidentity() or 2
+                if setthreadidentity then setthreadidentity(2) end
+                remoteObj:FireServer(unpack(args))
+                if setthreadidentity then setthreadidentity(old) end
+            end)
+        end
+
+        function BypassCore:InitializeAll()
+            if self.State.Initialized then return end
+            self.State.Initialized = true
+            self:HideErrors()
+            self:DisableAntiCheatEvents()
+            print("[BypassCore Lite] 反作弊防护已启动：属性欺骗+事件屏蔽+错误隐藏（已关闭反踢出）")
+        end
+
+        task.spawn(function()
+            task.wait(1)
+            BypassCore:InitializeAll()
+        end)
+
         -- ========== 4. 樱花粉主题注册 ==========
         local ThemeOk, ThemeError = pcall(function()
             WindUI:AddTheme({
