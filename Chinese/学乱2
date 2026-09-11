@@ -1,0 +1,205 @@
+do
+    local Translations = {
+        -- ================= 侧边栏 / 选项卡 =================
+        ["Echelon Hub"] = "Echelon 中心",
+        ["Combat"] = "战斗",
+        ["Auto Atk"] = "自动攻击",
+        ["Player"] = "玩家",
+        ["Visuals"] = "视觉",
+        ["Emotes"] = "表情",
+        ["Animation"] = "动画",
+        ["Custom"] = "自定义",
+        ["Premium"] = "高级",
+        ["Utility"] = "实用工具",
+        ["Rhythm"] = "节奏",
+        ["Server"] = "服务器",
+        ["Settings"] = "设置",
+
+        -- ================= 加载界面 =================
+        ["Loader"] = "加载器",
+        ["LOADER · V1.0"] = "加载器 · V1.0",
+        ["Fetching script from Codeberg..."] = "正在从 Codeberg 获取脚本...",
+
+        -- ================= 底部状态栏 =================
+        ["Status: Waiting..."] = "状态: 等待中...",
+        ["Parry: 0 | Dodge: 0 | Block: 0"] = "格挡: 0 | 闪避: 0 | 防御: 0",
+
+        -- ================= 战斗菜单 (Combat) =================
+        ["AUTO PARRY"] = "自动格挡",
+        ["Auto Parry"] = "自动格挡",
+        ["Automatically parry incoming attacks"] = "自动格挡来袭攻击",
+        ["Animation Sync"] = "动画同步",
+        ["Required for Auto Parry - matches animation IDs"] = "自动格挡所需 - 匹配动画 ID",
+        ["Parry Facing"] = "格挡面向",
+        ["Face the enemy when parrying"] = "格挡时面向敌人",
+        ["Grapple-Aware Combat"] = "擒抱感知战斗",
+        ["Dodge on grapple animations"] = "在擒抱动画时闪避",
+        ["Auto Punish"] = "自动惩罚",
+        ["M1/M2 after successful parry"] = "成功格挡后 M1/M2",
+        ["Face Lock"] = "锁定面向",
+        ["Keep facing enemy during combat (smooth)"] = "战斗中始终面向敌人 (平滑)",
+        
+        ["Look At Target"] = "看向目标",
+        ["Instantly look at attacking enemy"] = "立即看向攻击的敌人",
+        ["Facing Check"] = "面向检查",
+        ["Turn toward enemy before parrying if not facing"] = "如果未面向敌人，格挡前转向",
+        ["Hold Through Combo"] = "连击保持",
+        ["Extend block +0.35s on fast M1 chains"] = "快速 M1 连击时延长格挡 +0.35秒",
+        ["Block M1 Until Parry"] = "格挡 M1 直到格挡窗口",
+        ["Block M1s until parry window"] = "格挡 M1 直到格挡窗口",
+        
+        ["FALLBACK SAFETY BLOCK"] = "后备安全格挡",
+        ["Fallback Safety Block"] = "后备安全格挡",
+        ["Auto-block (F) if parry timing is missed"] = "如果错过格挡时机，自动格挡 (F)",
+        ["Fallback Block Duration: 0.45s"] = "后备格挡持续时间: 0.45秒",
+
+        -- ================= 玩家菜单 (Player) =================
+        ["MOVEMENT"] = "移动",
+        ["NoClip"] = "穿墙",
+        ["Walk through walls"] = "穿过墙壁",
+        ["Auto Sprint"] = "自动冲刺",
+        ["Hold Left Shift to sprint"] = "按住左 Shift 键冲刺",
+        ["Enable WalkSpeed"] = "启用行走速度",
+        ["Apply custom walk speed"] = "应用自定义行走速度",
+        ["Speed"] = "速度",
+        ["Infinite Jump"] = "无限跳跃",
+        ["No jump cooldown (toggle)"] = "无跳跃冷却 (切换)",
+        ["Enable JumpPower"] = "启用跳跃力度",
+        ["Apply custom jump power"] = "应用自定义跳跃力度",
+        ["Power"] = "力度",
+        
+        ["TARGET"] = "目标",
+        ["Target"] = "目标",
+        ["Select..."] = "选择...",
+        ["Follow Target"] = "跟随目标",
+        ["Follow selected player"] = "跟随选中的玩家",
+        ["Spectate Target"] = "观战目标",
+        ["Set camera to target"] = "将视角设为目标",
+        ["TELEPORT TO TARGET"] = "传送到目标",
+
+        -- ================= 自定义菜单 (Custom) =================
+        ["LOCAL ONLY — not FE. Free: preset colors. Premium: full RGB, name, apply all."] = "仅本地生效 — 非 FE。免费版: 预设颜色。高级版: 完整 RGB、名称、全部应用。",
+        ["PRESET COLORS (FREE)"] = "预设颜色 (免费)",
+        ["WHAT TO EDIT"] = "编辑目标",
+        ["Target: HAIR"] = "目标: 头发",
+        ["Target: SHIRT"] = "目标: 衬衫",
+        ["Target: PANTS"] = "目标: 裤子",
+        ["FULL RGB (PREMIUM)"] = "完整 RGB (高级)",
+        ["R (0-255)"] = "R (0-255)"
+    }
+
+    local function translateText(text)
+        if not text or type(text) ~= "string" then return text end
+        
+        if Translations[text] then
+            return Translations[text]
+        end
+        
+        for en, cn in pairs(Translations) do
+            if text:find(en) then
+                return text:gsub(en, cn)
+            end
+        end
+        
+        return text
+    end
+
+    local function setupTranslationEngine()
+        local success, err = pcall(function()
+            local oldIndex = getrawmetatable(game).__newindex
+            setreadonly(getrawmetatable(game), false)
+            
+            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
+                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
+                    v = translateText(tostring(v))
+                end
+                return oldIndex(t, k, v)
+            end)
+            
+            setreadonly(getrawmetatable(game), true)
+        end)
+        
+        if not success then
+            warn("元表劫持失败:", err)
+           
+            local translated = {}
+            local function scanAndTranslate()
+                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+                    if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                        pcall(function()
+                            local text = gui.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    gui.Text = translatedText
+                                    translated[gui] = true
+                                end
+                            end
+                        end)
+                    end
+                end
+                
+                local player = game:GetService("Players").LocalPlayer
+                if player and player:FindFirstChild("PlayerGui") then
+                    for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
+                        if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                            pcall(function()
+                                local text = gui.Text
+                                if text and text ~= "" then
+                                    local translatedText = translateText(text)
+                                    if translatedText ~= text then
+                                        gui.Text = translatedText
+                                        translated[gui] = true
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+            
+            local function setupDescendantListener(parent)
+                parent.DescendantAdded:Connect(function(descendant)
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                        task.wait(0.1)
+                        pcall(function()
+                            local text = descendant.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    descendant.Text = translatedText
+                                end
+                            end
+                        end)
+                    end
+                end)
+            end
+            
+            pcall(setupDescendantListener, game:GetService("CoreGui"))
+            local player = game:GetService("Players").LocalPlayer
+            if player and player:FindFirstChild("PlayerGui") then
+                pcall(setupDescendantListener, player.PlayerGui)
+            end
+            
+            while true do
+                scanAndTranslate()
+                task.wait(3)
+            end
+        end
+    end
+
+    task.wait(2)
+    setupTranslationEngine()
+
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E6%B7%B7%E6%B7%86%E5%AD%A6%E4%B9%B1.txt"))()
+    end)
+
+    if not success then
+        warn("加载失败:", err)
+    end
+end
+```
+
+使用提示：
+把原版脚本复制粘贴到 （这里填没有汉化的英文脚本） 这一行所在的位置，然后删除这行中文占位符，保存并执行即可。翻译引擎会在2秒后启动，接着运行你的脚本，UI上的英文就会被自动替换成中文了。
