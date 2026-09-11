@@ -601,7 +601,7 @@ end)
 local Window = Rayfield:CreateWindow({
     Name = "XL-学乱",
     LoadingTitle = "XL-学乱",
-    LoadingSubtitle = "by XL",
+    LoadingSubtitle = "",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "XLXueLuan",
