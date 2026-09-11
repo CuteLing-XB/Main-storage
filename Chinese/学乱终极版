@@ -1,0 +1,1151 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local VirtualInput = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
+
+_G.AtlasConnections = _G.AtlasConnections or {}
+_G.KillAura = false
+_G.AutoAttack = false
+_G.AutoEvasive = false
+_G.AuraRange = 15
+_G.AutoAttackRange = 15
+_G.InfiniteStamina = false
+_G.LowHPSprintBypass = false
+_G.InfiniteDashes = false
+_G.NoSlowdown = false
+_G.OweHubAutoDodgeRear = false
+_G.OweHubMaxRangeDodge = 20
+_G.OweHubDodgeAngle = 60
+_G.PlayerESP = false
+_G.PlayerChams = false
+_G.ESPRange = 150
+_G.ChamsFillTransparency = 0.5
+_G.Fullbright = false
+_G.HitboxExpander = false
+_G.HitboxView = false
+_G.HitboxSize = 8
+_G.FreezeEnemies = false
+_G.FlyEnabled = false
+_G.FlySpeed = 50
+_G.SpeedEnabled = false
+_G.SpeedValue = 50
+_G.AutoRhythm = false
+_G.ESPBoxColor = Color3.fromRGB(0, 122, 255)
+
+local function AddConnection(conn)
+    table.insert(_G.AtlasConnections, conn)
+    return conn
+end
+
+local function GetCharRoot()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+end
+
+local function GetNearestPlayer(range)
+    local root = GetCharRoot()
+    if not root then return nil end
+    local nearest, nearestDist = nil, range or math.huge
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (root.Position - hrp.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearest = player
+                end
+            end
+        end
+    end
+    return nearest, nearestDist
+end
+
+local mappedAnimations = {}
+local knownAttackIds = {}
+
+local function IsAttackAnimation(animName)
+    animName = animName:lower()
+    local patterns = {"m1","m2","punch","kick","slash","strike","jab","hook","uppercut","slam","sweep","elbow","knee","tackle","throw","swing","attack","hit","dash","startup","ehit"}
+    for _, p in ipairs(patterns) do
+        if animName:find(p) then return true end
+    end
+    return false
+end
+
+local function TryMapAnimation(anim)
+    if not anim or not anim:IsA("Animation") then return end
+    if anim.AnimationId == "" then return end
+    local id = anim.AnimationId:match("(%d+)") or anim.AnimationId
+    if mappedAnimations[id] then return end
+    if IsAttackAnimation(anim.Name) then
+        mappedAnimations[id] = anim.Name
+        knownAttackIds[id] = true
+    end
+end
+
+local animQueue = {}
+local animProcessing = false
+
+local function ProcessAnimQueue()
+    if animProcessing then return end
+    animProcessing = true
+    task.spawn(function()
+        while #animQueue > 0 do
+            local anim = table.remove(animQueue, 1)
+            TryMapAnimation(anim)
+            task.wait()
+        end
+        animProcessing = false
+    end)
+end
+
+AddConnection(ReplicatedStorage.DescendantAdded:Connect(function(obj)
+    if obj:IsA("Animation") then
+        table.insert(animQueue, obj)
+        ProcessAnimQueue()
+    end
+end))
+
+task.spawn(function()
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("Animation") then
+            table.insert(animQueue, obj)
+        end
+        if #animQueue >= 50 then
+            ProcessAnimQueue()
+            task.wait(0.1)
+        end
+    end
+    ProcessAnimQueue()
+end)
+
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
+local ServerRemote = nil
+if Remotes then
+    ServerRemote = Remotes:FindFirstChild("Server")
+    if not ServerRemote then
+        ServerRemote = Remotes:WaitForChild("Server", 15)
+    end
+end
+
+local CombatUtils = nil
+task.spawn(function()
+    pcall(function()
+        CombatUtils = require(ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("CombatUtils", 5))
+    end)
+end)
+
+local styleConfigs = {
+    default = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.3},
+    basic = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.525},
+    boxing = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.43},
+    boxer = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.43},
+    bulky = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.3},
+    dirty = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.3},
+    hakari = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.59},
+    karate = {M1HitboxDelay = 0.24, M2HitboxDelay = 0.4875},
+    kure = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.3},
+    muaythai = {M1HitboxDelay = 0.3, M2HitboxDelay = 0.6},
+    skygaolang = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.35},
+    taekwondo = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.46},
+    wild = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.525},
+    wingchun = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.525},
+    wrestling = {M1HitboxDelay = 0.32, M2HitboxDelay = 0.525},
+    capoeira = {M1HitboxDelay = 0.33, M2HitboxDelay = 0.45},
+    slugger = {M1HitboxDelay = 0.2, M2HitboxDelay = 0.82},
+}
+
+local function GetStyleConfig(style)
+    style = style and style:lower() or "default"
+    if style == "sluigger" then style = "slugger" end
+    return styleConfigs[style] or styleConfigs["default"]
+end
+
+local M1Counter = 0
+local function ExecuteCombatAction(action, ...)
+    if not ServerRemote then return end
+    if action == "M1" then
+        M1Counter += 1
+        ServerRemote:FireServer({Type = "Combat", Action = "M1", Func = "ServerCheck"}, M1Counter)
+    elseif action == "M2" then
+        ServerRemote:FireServer({Type = "Combat", Action = "M2", Func = "ServerCheck"})
+    elseif action == "Evasive" then
+        ServerRemote:FireServer({Type = "Combat", Action = "Evasive", Func = "Evasive"})
+    end
+end
+
+local evasiveModule = nil
+task.spawn(function()
+    pcall(function()
+        evasiveModule = require(ReplicatedStorage:WaitForChild("CombatSystemClient", 8):WaitForChild("Combat", 8):WaitForChild("Base", 8):WaitForChild("Evasive", 8))
+    end)
+end)
+
+local function PerformEvasive(target)
+    local root = GetCharRoot()
+    if not root then return end
+    local dir = -root.CFrame.LookVector
+    if target then
+        local tr = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        if tr then
+            local diff = root.Position - tr.Position
+            if diff.Magnitude > 0.01 then dir = Vector3.new(diff.X, 0, diff.Z).Unit end
+        end
+    end
+    if evasiveModule and evasiveModule.Evasive then
+        pcall(function() evasiveModule.Evasive() end)
+    else
+        ExecuteCombatAction("Evasive")
+        local a = root:FindFirstChild("EvasiveDashAttachment")
+        if a then a:Destroy() end
+        local lv = root:FindFirstChild("EvasiveDashLinearVelocity")
+        if lv then lv:Destroy() end
+        local att = Instance.new("Attachment", root)
+        att.Name = "EvasiveDashAttachment"
+        local vel = Instance.new("LinearVelocity", root)
+        vel.Name = "EvasiveDashLinearVelocity"
+        vel.MaxForce = 100000
+        vel.VectorVelocity = dir * 65
+        vel.Attachment0 = att
+        vel.RelativeTo = Enum.ActuatorRelativeTo.World
+        game:GetService("Debris"):AddItem(att, 0.22)
+        game:GetService("Debris"):AddItem(vel, 0.22)
+    end
+end
+
+local function HandleAutoEvasive(attacker, animation)
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local targetChar = attacker.Character
+    if not targetChar then return end
+    local animId = animation.Animation.AnimationId
+    local id = animId:match("(%d+)") or animId
+    local animName = mappedAnimations[id] or animation.Animation.Name or ""
+    if not IsAttackAnimation(animName) and not knownAttackIds[id] then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not targetRoot then return end
+    if (myRoot.Position - targetRoot.Position).Magnitude > 25 then return end
+    local style = attacker:GetAttribute("CombatStyle") or "default"
+    local config = GetStyleConfig(style)
+    local isM2 = animName:lower():find("m2")
+    local delay = isM2 and config.M2HitboxDelay or config.M1HitboxDelay
+    task.spawn(function()
+        task.wait(math.max(0, delay - 0.15))
+        if not animation.IsPlaying then return end
+        if not myChar.Parent or not targetChar.Parent then return end
+        local r1 = myChar:FindFirstChild("HumanoidRootPart")
+        local r2 = targetChar:FindFirstChild("HumanoidRootPart")
+        if not r1 or not r2 then return end
+        local shouldDodge = _G.AutoEvasive
+        if _G.OweHubAutoDodgeRear then
+            local dir = (r2.Position - r1.Position).Unit
+            local angle = math.deg(math.acos(math.clamp(r1.CFrame.LookVector:Dot(dir), -1, 1)))
+            if angle > (_G.OweHubDodgeAngle or 60) and (r1.Position - r2.Position).Magnitude <= (_G.OweHubMaxRangeDodge or 20) then
+                shouldDodge = true
+            end
+        end
+        if shouldDodge then PerformEvasive(targetRoot) end
+    end)
+end
+
+local flyBodyVelocity, flyBodyGyro, flyConn
+
+local function StopFly()
+    if flyConn then flyConn:Disconnect(); flyConn = nil end
+    if flyBodyVelocity then flyBodyVelocity:Destroy(); flyBodyVelocity = nil end
+    if flyBodyGyro then flyBodyGyro:Destroy(); flyBodyGyro = nil end
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end
+end
+
+local function StartFly()
+    StopFly()
+    if not _G.FlyEnabled then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    flyBodyVelocity = Instance.new("BodyVelocity")
+    flyBodyVelocity.MaxForce = Vector3.new(1, 1, 1) * 9e9
+    flyBodyVelocity.Velocity = Vector3.zero
+    flyBodyVelocity.Parent = hrp
+
+    flyBodyGyro = Instance.new("BodyGyro")
+    flyBodyGyro.MaxTorque = Vector3.new(1, 1, 1) * 9e9
+    flyBodyGyro.CFrame = hrp.CFrame
+    flyBodyGyro.Parent = hrp
+
+    hum.PlatformStand = true
+    local camera = workspace.CurrentCamera
+
+    flyConn = RunService.RenderStepped:Connect(function()
+        local c = LocalPlayer.Character
+        local r = c and c:FindFirstChild("HumanoidRootPart")
+        local h = c and c:FindFirstChildOfClass("Humanoid")
+        if not r or not h or not _G.FlyEnabled then StopFly() return end
+        h.PlatformStand = true
+
+        local dir = Vector3.zero
+
+        if UserInputService.KeyboardEnabled then
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0, 1, 0) end
+        end
+
+        if UserInputService.TouchEnabled then
+            local moveDir = h.MoveDirection
+            if moveDir.Magnitude > 0.01 then
+                local lookDir = camera.CFrame.LookVector
+                local rightDir = camera.CFrame.RightVector
+                local flatLook = Vector3.new(lookDir.X, 0, lookDir.Z)
+                local flatRight = Vector3.new(rightDir.X, 0, rightDir.Z)
+                if flatLook.Magnitude > 0.01 then flatLook = flatLook.Unit end
+                if flatRight.Magnitude > 0.01 then flatRight = flatRight.Unit end
+                dir += flatLook * -moveDir.Z + flatRight * moveDir.X
+            end
+        end
+
+        if dir.Magnitude > 0 then dir = dir.Unit end
+        flyBodyVelocity.Velocity = dir * _G.FlySpeed
+        flyBodyGyro.CFrame = camera.CFrame
+    end)
+    AddConnection(flyConn)
+end
+
+local speedConn, oldWalkSpeed, speedHooked = nil, 16, false
+
+local function StopSpeed()
+    if speedConn then speedConn:Disconnect(); speedConn = nil end
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = oldWalkSpeed end
+    end
+end
+
+local function HookWalkSpeed()
+    if speedHooked then return end
+    speedHooked = true
+    pcall(function()
+        local mt = getrawmetatable(game)
+        local oldNewIndex = mt.__newindex
+        setreadonly(mt, false)
+        mt.__newindex = newcclosure(function(self, key, value)
+            if key == "WalkSpeed" and typeof(self) == "Instance" and self:IsA("Humanoid") and self.Parent == LocalPlayer.Character then
+                if _G.NoSlowdown then
+                    local isSprinting = self.Parent:GetAttribute("Sprinting") == true
+                    local sprintSpeed = 22
+                    if CombatUtils and CombatUtils.GetSprintSpeedForCharacter then
+                        pcall(function() sprintSpeed = CombatUtils.GetSprintSpeedForCharacter(self.Parent) end)
+                    end
+                    local minSpeed = isSprinting and sprintSpeed or 12
+                    if value < minSpeed then value = minSpeed end
+                end
+                if _G.SpeedEnabled then value = _G.SpeedValue end
+            end
+            return oldNewIndex(self, key, value)
+        end)
+        setreadonly(mt, true)
+    end)
+end
+
+local function StartSpeed()
+    StopSpeed()
+    if not _G.SpeedEnabled then return end
+    pcall(HookWalkSpeed)
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = _G.SpeedValue end
+    end
+    speedConn = RunService.Heartbeat:Connect(function()
+        local c = LocalPlayer.Character
+        local h = c and c:FindFirstChildOfClass("Humanoid")
+        if h then
+            if _G.SpeedEnabled then h.WalkSpeed = _G.SpeedValue else h.WalkSpeed = oldWalkSpeed end
+        end
+    end)
+    AddConnection(speedConn)
+end
+
+local espConns = {}
+
+local function ClearESP(player)
+    if not player or not player.Character then return end
+    local char = player.Character
+    local folder = char:FindFirstChild("ESPHolder")
+    if folder then folder:Destroy() end
+    local hl = char:FindFirstChild("ESPHighlight")
+    if hl then hl:Destroy() end
+end
+
+local function ApplyESP(player)
+    if player == LocalPlayer then return end
+    ClearESP(player)
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local head = char:FindFirstChild("Head")
+    if not hrp or not head then return end
+
+    if _G.PlayerChams then
+        local h = Instance.new("Highlight")
+        h.Name = "ESPHighlight"
+        h.FillColor = _G.ESPBoxColor
+        h.OutlineColor = Color3.fromRGB(255, 255, 255)
+        h.FillTransparency = _G.ChamsFillTransparency
+        h.OutlineTransparency = 0
+        h.Parent = char
+    end
+
+    if _G.PlayerESP then
+        local folder = Instance.new("Folder")
+        folder.Name = "ESPHolder"
+        folder.Parent = char
+
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "ESPLabel"
+        bb.Adornee = head
+        bb.AlwaysOnTop = true
+        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.Size = UDim2.new(0, 160, 0, 60)
+        bb.MaxDistance = _G.ESPRange
+        bb.ResetOnSpawn = false
+        bb.Parent = folder
+
+        local nameL = Instance.new("TextLabel")
+        nameL.Size = UDim2.new(1, 0, 0.4, 0)
+        nameL.BackgroundTransparency = 1
+        nameL.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameL.TextStrokeTransparency = 0.4
+        nameL.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        nameL.Font = Enum.Font.GothamBold
+        nameL.TextSize = 13
+        nameL.Text = player.DisplayName
+        nameL.Parent = bb
+
+        local distL = Instance.new("TextLabel")
+        distL.Size = UDim2.new(1, 0, 0.35, 0)
+        distL.Position = UDim2.new(0, 0, 0.4, 0)
+        distL.BackgroundTransparency = 1
+        distL.TextColor3 = _G.ESPBoxColor
+        distL.TextStrokeTransparency = 0.4
+        distL.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        distL.Font = Enum.Font.GothamMedium
+        distL.TextSize = 11
+        distL.Text = "-- 米"
+        distL.Parent = bb
+
+        local hbBg = Instance.new("Frame")
+        hbBg.Size = UDim2.new(0, 120, 0, 3)
+        hbBg.Position = UDim2.new(0.5, -60, 0, 44)
+        hbBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        hbBg.BorderSizePixel = 0
+        hbBg.Parent = bb
+
+        local hb = Instance.new("Frame")
+        hb.Size = UDim2.new(1, 0, 1, 0)
+        hb.BackgroundColor3 = Color3.fromRGB(52, 199, 89)
+        hb.BorderSizePixel = 0
+        hb.Parent = hbBg
+
+        local conn
+        conn = RunService.Heartbeat:Connect(function()
+            if not _G.PlayerESP or not char.Parent or not folder.Parent then
+                conn:Disconnect()
+                return
+            end
+            local r = GetCharRoot()
+            if not r then return end
+            local dist = math.floor((r.Position - hrp.Position).Magnitude)
+            if dist > _G.ESPRange then bb.Enabled = false return end
+            bb.Enabled = true
+            distL.Text = dist .. " 米"
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then hb.Size = UDim2.new(math.clamp(hum.Health / hum.MaxHealth, 0, 1), 0, 1, 0) end
+        end)
+        table.insert(espConns, conn)
+    end
+end
+
+local function UpdateAllESP()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then ApplyESP(p) end
+    end
+end
+
+local function WatchPlayer(player)
+    if player == LocalPlayer then return end
+    local function OnChar(char)
+        char:WaitForChild("HumanoidRootPart", 5)
+        task.wait(0.2)
+        ApplyESP(player)
+        local hum = char:WaitForChild("Humanoid", 10)
+        local animator = hum and hum:WaitForChild("Animator", 10)
+        if animator then
+            local conn = animator.AnimationPlayed:Connect(function(anim)
+                if _G.AutoEvasive or _G.OweHubAutoDodgeRear then HandleAutoEvasive(player, anim) end
+            end)
+            AddConnection(conn)
+        end
+    end
+    AddConnection(player.CharacterAdded:Connect(OnChar))
+    if player.Character then task.spawn(OnChar, player.Character) end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do WatchPlayer(p) end
+AddConnection(Players.PlayerAdded:Connect(WatchPlayer))
+AddConnection(Players.PlayerRemoving:Connect(function(p)
+    espConns = {}
+    ClearESP(p)
+end))
+
+AddConnection(LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    if _G.FlyEnabled then StartFly() end
+    if _G.SpeedEnabled then StartSpeed() end
+end))
+
+local combatLoopRunning = true
+task.spawn(function()
+    while combatLoopRunning do
+        task.wait(0.1)
+        if _G.KillAura or _G.AutoAttack then
+            local range = math.max(_G.KillAura and _G.AuraRange or 0, _G.AutoAttack and _G.AutoAttackRange or 0)
+            if range > 0 then
+                local target = GetNearestPlayer(range)
+                local char = LocalPlayer.Character
+                if target and char then
+                    local style = LocalPlayer:GetAttribute("CombatStyle") or char:GetAttribute("CombatStyle") or "Basic"
+                    local isBoxing = style:lower() == "boxing" or style:lower() == "boxer"
+                    local targetBlocking = target.Character and target.Character:GetAttribute("Blocking")
+                    local m2Cd = char:GetAttribute("M2Cooldown")
+                    if targetBlocking and isBoxing and not m2Cd then
+                        ExecuteCombatAction("M2")
+                    else
+                        ExecuteCombatAction("M1")
+                    end
+                end
+            end
+        end
+    end
+end)
+
+local effectLoopRunning = true
+task.spawn(function()
+    while effectLoopRunning do
+        task.wait(0.25)
+        if _G.InfiniteStamina then
+            local char = LocalPlayer.Character
+            if char and char:GetAttribute("Stamina") ~= 100 then
+                pcall(function() char:SetAttribute("Stamina", 100) end)
+            end
+        end
+        if _G.LowHPSprintBypass then
+            pcall(function()
+                for _, m in ipairs(getloadedmodules()) do
+                    if m.Name == "MovementServiceClient" then
+                        local mt = getmetatable((require(m)))
+                        if mt and mt.__index and mt.__index.StartSprint then
+                            local _, val = debug.getupvalue(mt.__index.StartSprint, 5)
+                            if val ~= -99999 then debug.setupvalue(mt.__index.StartSprint, 5, -99999) end
+                        end
+                        break
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+local hitboxLoopRunning = true
+task.spawn(function()
+    while hitboxLoopRunning do
+        task.wait(1)
+        if _G.HitboxExpander then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp and hrp.Size.X ~= _G.HitboxSize then
+                        pcall(function()
+                            hrp.Size = Vector3.new(_G.HitboxSize, _G.HitboxSize, _G.HitboxSize)
+                            hrp.Transparency = 0.65
+                            hrp.BrickColor = BrickColor.new("Neon blue")
+                            hrp.Material = Enum.Material.ForceField
+                            hrp.CanCollide = false
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end)
+
+local Window = Rayfield:CreateWindow({
+    Name = "XL-学乱",
+    LoadingTitle = "XL-学乱",
+    LoadingSubtitle = "by XL",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "XLXueLuan",
+        FileName = "Config"
+    },
+    KeySystem = false
+})
+
+pcall(function()
+    local CombatTab = Window:CreateTab("战斗", "sword")
+    CombatTab:CreateSection("防御功能")
+    CombatTab:CreateToggle({
+        Name = "自动闪避",
+        CurrentValue = false,
+        Flag = "AutoEvasive",
+        Callback = function(val) _G.AutoEvasive = val end
+    })
+    CombatTab:CreateSection("攻击功能")
+    CombatTab:CreateToggle({
+        Name = "杀戮光环",
+        CurrentValue = false,
+        Flag = "KillAura",
+        Callback = function(val) _G.KillAura = val end
+    })
+    CombatTab:CreateSlider({
+        Name = "杀戮光环范围",
+        Range = {5, 25},
+        Increment = 1,
+        Suffix = "米",
+        CurrentValue = 15,
+        Flag = "KillAuraRange",
+        Callback = function(val) _G.AuraRange = val end
+    })
+    CombatTab:CreateToggle({
+        Name = "自动攻击",
+        CurrentValue = false,
+        Flag = "AutoAttack",
+        Callback = function(val) _G.AutoAttack = val end
+    })
+    CombatTab:CreateSlider({
+        Name = "自动攻击范围",
+        Range = {5, 25},
+        Increment = 1,
+        Suffix = "米",
+        CurrentValue = 15,
+        Flag = "AutoAttackRange",
+        Callback = function(val) _G.AutoAttackRange = val end
+    })
+    CombatTab:CreateToggle({
+        Name = "冻结敌人",
+        CurrentValue = false,
+        Flag = "FreezeEnemies",
+        Callback = function(val)
+            _G.FreezeEnemies = val
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then pcall(function() hrp.Anchored = val end) end
+                end
+            end
+        end
+    })
+    CombatTab:CreateSection("闪避自定义")
+    CombatTab:CreateToggle({
+        Name = "自动躲避背后攻击",
+        CurrentValue = false,
+        Flag = "AutoDodgeRear",
+        Callback = function(val) _G.OweHubAutoDodgeRear = val end
+    })
+    CombatTab:CreateSlider({
+        Name = "躲避范围",
+        Range = {5, 40},
+        Increment = 1,
+        Suffix = "米",
+        CurrentValue = 20,
+        Flag = "DodgeRange",
+        Callback = function(val) _G.OweHubMaxRangeDodge = val end
+    })
+    CombatTab:CreateSlider({
+        Name = "躲避角度",
+        Range = {30, 135},
+        Increment = 1,
+        Suffix = "°",
+        CurrentValue = 60,
+        Flag = "DodgeAngle",
+        Callback = function(val) _G.OweHubDodgeAngle = val end
+    })
+end)
+
+pcall(function()
+    local MoveTab = Window:CreateTab("移动", "zap")
+    MoveTab:CreateSection("移动绕过")
+    MoveTab:CreateToggle({
+        Name = "无限体力",
+        CurrentValue = false,
+        Flag = "InfiniteStamina",
+        Callback = function(val) _G.InfiniteStamina = val end
+    })
+    MoveTab:CreateToggle({
+        Name = "低血量冲刺绕过",
+        CurrentValue = false,
+        Flag = "LowHPSprint",
+        Callback = function(val) _G.LowHPSprintBypass = val end
+    })
+    MoveTab:CreateToggle({
+        Name = "无限冲刺",
+        CurrentValue = false,
+        Flag = "InfiniteDashes",
+        Callback = function(val) _G.InfiniteDashes = val end
+    })
+    MoveTab:CreateToggle({
+        Name = "无减速",
+        CurrentValue = false,
+        Flag = "NoSlowdown",
+        Callback = function(val) _G.NoSlowdown = val end
+    })
+    MoveTab:CreateSection("飞行")
+    MoveTab:CreateToggle({
+        Name = "启用飞行",
+        CurrentValue = false,
+        Flag = "FlyEnabled",
+        Callback = function(val)
+            _G.FlyEnabled = val
+            if val then StartFly() else StopFly() end
+        end
+    })
+    MoveTab:CreateSlider({
+        Name = "飞行速度",
+        Range = {10, 250},
+        Increment = 5,
+        Suffix = "格/秒",
+        CurrentValue = 50,
+        Flag = "FlySpeed",
+        Callback = function(val) _G.FlySpeed = val end
+    })
+    MoveTab:CreateSection("速度修改")
+    MoveTab:CreateToggle({
+        Name = "启用加速",
+        CurrentValue = false,
+        Flag = "SpeedEnabled",
+        Callback = function(val)
+            _G.SpeedEnabled = val
+            if val then StartSpeed() else StopSpeed() end
+        end
+    })
+    MoveTab:CreateSlider({
+        Name = "速度数值",
+        Range = {16, 250},
+        Increment = 1,
+        CurrentValue = 50,
+        Flag = "SpeedValue",
+        Callback = function(val) _G.SpeedValue = val end
+    })
+end)
+
+pcall(function()
+    local VisualTab = Window:CreateTab("视觉", "eye")
+    VisualTab:CreateSection("透视功能")
+    VisualTab:CreateToggle({
+        Name = "玩家透视方框",
+        CurrentValue = false,
+        Flag = "PlayerESP",
+        Callback = function(val)
+            _G.PlayerESP = val
+            if not val then
+                for _, p in ipairs(Players:GetPlayers()) do ClearESP(p) end
+            else
+                UpdateAllESP()
+            end
+        end
+    })
+    VisualTab:CreateToggle({
+        Name = "玩家高亮",
+        CurrentValue = false,
+        Flag = "PlayerChams",
+        Callback = function(val)
+            _G.PlayerChams = val
+            if not val then
+                for _, p in ipairs(Players:GetPlayers()) do ClearESP(p) end
+            else
+                UpdateAllESP()
+            end
+        end
+    })
+    VisualTab:CreateSlider({
+        Name = "高亮透明度",
+        Range = {0, 1},
+        Increment = 0.1,
+        CurrentValue = 0.5,
+        Flag = "ChamsTransparency",
+        Callback = function(val)
+            _G.ChamsFillTransparency = val
+            for _, p in ipairs(Players:GetPlayers()) do
+                local h = p.Character and p.Character:FindFirstChild("ESPHighlight")
+                if h then h.FillTransparency = val end
+            end
+        end
+    })
+    VisualTab:CreateSlider({
+        Name = "透视距离",
+        Range = {20, 500},
+        Increment = 10,
+        Suffix = "米",
+        CurrentValue = 150,
+        Flag = "ESPRange",
+        Callback = function(val) _G.ESPRange = val end
+    })
+    VisualTab:CreateColorPicker({
+        Name = "透视框颜色",
+        Color = Color3.fromRGB(0, 122, 255),
+        Flag = "ESPColor",
+        Callback = function(color) _G.ESPBoxColor = color end
+    })
+    VisualTab:CreateSection("碰撞箱修改")
+    VisualTab:CreateToggle({
+        Name = "扩大碰撞箱",
+        CurrentValue = false,
+        Flag = "HitboxExpander",
+        Callback = function(val)
+            _G.HitboxExpander = val
+            if not val then
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character then
+                        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            pcall(function()
+                                hrp.Size = Vector3.new(2, 2, 1)
+                                hrp.Transparency = 1
+                                hrp.CanCollide = true
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    })
+    VisualTab:CreateSlider({
+        Name = "碰撞箱大小",
+        Range = {2, 15},
+        Increment = 1,
+        CurrentValue = 8,
+        Flag = "HitboxSize",
+        Callback = function(val) _G.HitboxSize = val end
+    })
+    VisualTab:CreateToggle({
+        Name = "显示碰撞箱可视化",
+        CurrentValue = false,
+        Flag = "HitboxView",
+        Callback = function(val) _G.HitboxView = val end
+    })
+    VisualTab:CreateSection("环境修改")
+    local savedLighting = {
+        Ambient = Lighting.Ambient,
+        OutdoorAmbient = Lighting.OutdoorAmbient,
+        GlobalShadows = Lighting.GlobalShadows,
+        ClockTime = Lighting.ClockTime,
+        FogEnd = Lighting.FogEnd
+    }
+    VisualTab:CreateToggle({
+        Name = "全亮无雾",
+        CurrentValue = false,
+        Flag = "Fullbright",
+        Callback = function(val)
+            _G.Fullbright = val
+            if val then
+                Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+                Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+                Lighting.GlobalShadows = false
+                Lighting.ClockTime = 14
+                Lighting.FogEnd = 9e9
+            else
+                Lighting.Ambient = savedLighting.Ambient
+                Lighting.OutdoorAmbient = savedLighting.OutdoorAmbient
+                Lighting.GlobalShadows = savedLighting.GlobalShadows
+                Lighting.ClockTime = savedLighting.ClockTime
+                Lighting.FogEnd = savedLighting.FogEnd
+            end
+        end
+    })
+end)
+
+pcall(function()
+    local InstrumentTab = Window:CreateTab("乐器", "music")
+    InstrumentTab:CreateSection("自动演奏")
+    InstrumentTab:CreateToggle({
+        Name = "自动演奏乐器",
+        CurrentValue = false,
+        Flag = "AutoRhythm",
+        Callback = function(val)
+            _G.AutoRhythm = val
+            if val then
+                task.spawn(function()
+                    local keyBinds = {
+                        {Enum.KeyCode.Q, Enum.KeyCode.A, Enum.KeyCode.One, Enum.KeyCode.Z, Enum.KeyCode.LeftShift, Enum.KeyCode.Space},
+                        {Enum.KeyCode.W, Enum.KeyCode.S, Enum.KeyCode.Two, Enum.KeyCode.X},
+                        {Enum.KeyCode.E, Enum.KeyCode.D, Enum.KeyCode.Three, Enum.KeyCode.C},
+                        {Enum.KeyCode.R, Enum.KeyCode.F, Enum.KeyCode.Four, Enum.KeyCode.N},
+                        {Enum.KeyCode.T, Enum.KeyCode.G, Enum.KeyCode.Five, Enum.KeyCode.M},
+                    }
+                    local pressed = {}
+                    while _G.AutoRhythm do
+                        local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                        if pg then
+                            local gui = pg:FindFirstChild("RhythmServiceUI") or pg:FindFirstChild("RhythmServiceUIBillboard") or pg:FindFirstChild("PianoScreenGui")
+                            if gui and gui.Enabled then
+                                local lanes = {}
+                                for _, v in ipairs(gui:GetDescendants()) do
+                                    if v:IsA("GuiObject") and v.Visible and v.Name:lower():find("lane") then
+                                        table.insert(lanes, v)
+                                    end
+                                end
+                                table.sort(lanes, function(a, b) return a.AbsolutePosition.X < b.AbsolutePosition.X end)
+                                if #lanes >= 2 then
+                                    for _, v in ipairs(gui:GetDescendants()) do
+                                        if v:IsA("GuiObject") and v.Visible then
+                                            local nn = v.Name:lower()
+                                            if nn:find("note") or nn:find("circle") then
+                                                local closest, minDist = nil, math.huge
+                                                for i, lane in ipairs(lanes) do
+                                                    local d = math.abs(v.AbsolutePosition.X - lane.AbsolutePosition.X)
+                                                    if d < minDist then minDist = d; closest = i end
+                                                end
+                                                if closest and minDist < 40 then
+                                                    local lane = lanes[closest]
+                                                    local head = v:FindFirstChild("Head")
+                                                    local noteY = head and head.AbsolutePosition.Y or v.AbsolutePosition.Y
+                                                    local diff = noteY - lane.AbsolutePosition.Y
+                                                    if diff >= -45 and diff <= 20 and not pressed[v] then
+                                                        pressed[v] = true
+                                                        local hint = lane:FindFirstChild("KeyHint")
+                                                        local key = nil
+                                                        if hint and hint:IsA("TextLabel") and #hint.Text == 1 then
+                                                            pcall(function() key = Enum.KeyCode[hint.Text:upper()] end)
+                                                        end
+                                                        if not key then key = (keyBinds[closest] or keyBinds[1])[1] end
+                                                        if key then
+                                                            pcall(function()
+                                                                VirtualInput:SendKeyEvent(true, key, false, game)
+                                                                task.wait(0.03)
+                                                                VirtualInput:SendKeyEvent(false, key, false, game)
+                                                            end)
+                                                        end
+                                                        task.delay(0.1, function() pressed[v] = nil end)
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        task.wait(0.02)
+                    end
+                end)
+            end
+        end
+    })
+end)
+
+local areaPositions = {}
+pcall(function()
+    local areaHitboxes = workspace:FindFirstChild("AreaHitboxes")
+    if areaHitboxes then
+        local seen = {}
+        for _, v in ipairs(areaHitboxes:GetDescendants()) do
+            if v:IsA("BasePart") and not seen[v.Name] then
+                seen[v.Name] = true
+                areaPositions[v.Name] = v.Position
+            end
+        end
+    end
+end)
+
+local areaNames = {}
+for name in pairs(areaPositions) do
+    table.insert(areaNames, name)
+end
+table.sort(areaNames)
+
+local selectedArea = areaNames[1] or ""
+local tpPlayerName = ""
+local waypointName = ""
+local savedWaypoints = {}
+local returnPoint = nil
+
+local function SafeTeleport(pos)
+    local root = GetCharRoot()
+    if not root then return end
+    local targetCF = CFrame.new(pos)
+    root.CFrame = targetCF
+    local wasAnchored = root.Anchored
+    root.Anchored = true
+    task.delay(0.45, function()
+        if root and root.Parent then
+            root.CFrame = targetCF
+            root.Anchored = wasAnchored
+        end
+    end)
+end
+
+pcall(function()
+    local TPTab = Window:CreateTab("传送", "map-pin")
+    TPTab:CreateSection("地图区域")
+    if #areaNames > 0 then
+        TPTab:CreateDropdown({
+            Name = "选择区域",
+            Options = areaNames,
+            CurrentOption = selectedArea,
+            Flag = "SelectedArea",
+            Callback = function(option) selectedArea = option end
+        })
+    end
+    TPTab:CreateButton({
+        Name = "传送到所选区域",
+        Callback = function()
+            if areaPositions[selectedArea] then SafeTeleport(areaPositions[selectedArea]) end
+        end
+    })
+    local quickSpots = {"Nishikata High Entrance", "Courtyard", "Cafeteria", "Rooftop", "Basketball Court", "Parking Lot", "Dojo Room", "Music Room", "Infirmary", "Principal Office"}
+    TPTab:CreateSection("快速跳转")
+    for _, name in ipairs(quickSpots) do
+        if areaPositions[name] then
+            TPTab:CreateButton({
+                Name = name,
+                Callback = function() SafeTeleport(areaPositions[name]) end
+            })
+        end
+    end
+    TPTab:CreateSection("传送到玩家")
+    TPTab:CreateInput({
+        Name = "玩家名字",
+        PlaceholderText = "输入部分名字即可",
+        RemoveTextAfterFocusLost = false,
+        Flag = "TPPlayerName",
+        Callback = function(text) tpPlayerName = text end
+    })
+    TPTab:CreateButton({
+        Name = "传送到该玩家",
+        Callback = function()
+            local target = nil
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and (p.Name:lower():find(tpPlayerName:lower(), 1, true) or p.DisplayName:lower():find(tpPlayerName:lower(), 1, true)) then
+                    target = p; break
+                end
+            end
+            if target and target.Character then
+                local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then SafeTeleport(hrp.Position + Vector3.new(0, 0, 3)) end
+            end
+        end
+    })
+    TPTab:CreateButton({
+        Name = "传送到最近玩家",
+        Callback = function()
+            local target = GetNearestPlayer(9999)
+            if target and target.Character then
+                local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then SafeTeleport(hrp.Position + Vector3.new(0, 0, 3)) end
+            end
+        end
+    })
+    TPTab:CreateSection("自定义路点")
+    TPTab:CreateInput({
+        Name = "路点名称",
+        PlaceholderText = "例如：我的位置",
+        RemoveTextAfterFocusLost = false,
+        Flag = "WaypointName",
+        Callback = function(text) waypointName = text end
+    })
+    TPTab:CreateButton({
+        Name = "保存当前位置",
+        Callback = function()
+            local root = GetCharRoot()
+            if not root then return end
+            local name = waypointName ~= "" and waypointName or ("路点 " .. tostring(#savedWaypoints + 1))
+            savedWaypoints[name] = root.Position
+            Rayfield:Notify({Title = "路点已保存", Content = name, Duration = 3})
+        end
+    })
+    TPTab:CreateButton({
+        Name = "传送到路点",
+        Callback = function()
+            if savedWaypoints[waypointName] then SafeTeleport(savedWaypoints[waypointName]) end
+        end
+    })
+    TPTab:CreateButton({
+        Name = "标记返回点",
+        Callback = function()
+            local root = GetCharRoot()
+            if root then
+                returnPoint = root.Position
+                Rayfield:Notify({Title = "返回点已标记", Content = "可以随时返回", Duration = 3})
+            end
+        end
+    })
+    TPTab:CreateButton({
+        Name = "返回标记点",
+        Callback = function()
+            if returnPoint then SafeTeleport(returnPoint) end
+        end
+    })
+end)
+
+pcall(function()
+    local SettingsTab = Window:CreateTab("设置", "settings")
+    SettingsTab:CreateSection("通用设置")
+    SettingsTab:CreateSlider({
+        Name = "飞行速度",
+        Range = {10, 250},
+        Increment = 5,
+        CurrentValue = 50,
+        Flag = "SettingsFlySpeed",
+        Callback = function(val) _G.FlySpeed = val end
+    })
+    SettingsTab:CreateSlider({
+        Name = "速度数值",
+        Range = {16, 250},
+        Increment = 1,
+        CurrentValue = 50,
+        Flag = "SettingsSpeedValue",
+        Callback = function(val) _G.SpeedValue = val end
+    })
+    SettingsTab:CreateButton({
+        Name = "卸载脚本并清理",
+        Callback = function()
+            _G.FlyEnabled = false
+            _G.SpeedEnabled = false
+            _G.KillAura = false
+            _G.AutoAttack = false
+            _G.AutoEvasive = false
+            StopFly()
+            StopSpeed()
+            for _, conn in ipairs(_G.AtlasConnections) do
+                pcall(function() conn:Disconnect() end)
+            end
+            _G.AtlasConnections = {}
+            for _, p in ipairs(Players:GetPlayers()) do ClearESP(p) end
+            Rayfield:Destroy()
+        end
+    })
+end)
+
+Rayfield:Notify({
+    Title = "XL-学乱",
+    Content = "加载完成",
+    Duration = 5
+})
