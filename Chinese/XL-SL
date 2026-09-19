@@ -156,7 +156,7 @@ do
     setupTranslationEngine()
 
     local success, err = pcall(function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B191.txt"))()
+        loadstring(game:HttpGet("https://sm0k3.sm0k3.workers.dev/Gakuran"))()
 
     end)
 
