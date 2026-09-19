@@ -1,0 +1,166 @@
+do
+    local Translations = {
+      ["COMBAT"]="战斗",
+      ["Parry, dash, block, kill aura & auto swings"]="格挡、冲刺、防御、杀戮光环和自动挥砍",
+      ["Auto M2"]="自动重击",
+      ["03 STANCE"]="03 姿态",
+      ["Auto Equip On Spawn"]="出生自动装备",
+      ["Enter / Leave Stance"]="进入 / 退出姿态",
+      ["04 EXTRAS"]="04 额外功能",
+      ["Show Hitboxes"]="显示碰撞箱",
+      ["Parry Logger"]="格挡记录器",
+      ["No Stun"]="无硬直",
+      ["No Ragdoll"]="无布娃娃",
+      ["SMOKE GAKURAN"]="烟雾学园",
+      ["01 DEFENSE"]="01 防御",
+      ["Auto Parry"]="自动格挡",
+      ["Auto Dash Heavies"]="自动冲刺重击",
+      ["Auto Block"]="自动防御",
+      ["02 OFFENSE"]="02 攻击",
+      ["Kill Aura"]="杀戮光环",
+      ["Walk To Target"]="自动走向目标",
+      ["Auto M1"]="自动轻击",
+      ["MOVEMENT"]="移动",
+      ["Fly, speed, jump & noclip"]="飞行、加速、跳跃和穿墙",
+      ["01 MOVEMENT"]="01 移动",
+      ["Fly"]="飞行",
+      ["Speed Hack"]="加速",
+      ["Infinite Jump"]="无限跳跃",
+      ["Noclip"]="穿墙",
+      ["VISUALS"]="视觉",
+      ["ESP, highlights & face lock"]="透视、高亮和锁定视角",
+      ["01 ESP"]="01 透视",
+      ["Player ESP"]="玩家透视",
+      ["Tracers"]="追踪线",
+      ["Highlight ESP"]="高亮透视",
+      ["02 CAMERA"]="02 相机",
+      ["Face Lock"]="锁定视角",
+      ["FILES"]="文件",
+      ["Save & load your switches"]="保存并加载你的开关设置",
+      ["01 SETTINGS"]="01 设置",
+      ["Save Settings"]="保存设置",
+      ["Load Settings"]="加载设置",
+      ["Auto Load On Start: OFF"]="启动时自动加载：关闭",
+      ["TOOLS"]="工具",
+      ["Rejoin, server hop, AFK & panic"]="重新加入、切换服务器、挂机和紧急退出",
+      ["01 SERVER"]="01 服务器",
+      ["Anti-AFK"]="防挂机",
+      ["Rejoin"]="重新加入",
+      ["Server Hop"]="切换服务器",
+      ["02 PANIC"]="02 紧急",
+      ["TURN OFF EVERYTHING"]="关闭所有功能",
+      ["Unload SMOKE"]="卸载SMOKE",
+    }
+
+    local function translateText(text)
+        if not text or type(text) ~= "string" then return text end
+        
+        if Translations[text] then
+            return Translations[text]
+        end
+        
+        for en, cn in pairs(Translations) do
+            if text:find(en) then
+                return text:gsub(en, cn)
+            end
+        end
+        
+        return text
+    end
+
+    local function setupTranslationEngine()
+        local success, err = pcall(function()
+            local oldIndex = getrawmetatable(game).__newindex
+            setreadonly(getrawmetatable(game), false)
+            
+            getrawmetatable(game).__newindex = newcclosure(function(t, k, v)
+                if (t:IsA("TextLabel") or t:IsA("TextButton") or t:IsA("TextBox")) and k == "Text" then
+                    v = translateText(tostring(v))
+                end
+                return oldIndex(t, k, v)
+            end)
+            
+            setreadonly(getrawmetatable(game), true)
+        end)
+        
+        if not success then
+            warn("元表劫持失败:", err)
+           
+            local translated = {}
+            local function scanAndTranslate()
+                for _, gui in ipairs(game:GetService("CoreGui"):GetDescendants()) do
+                    if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                        pcall(function()
+                            local text = gui.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    gui.Text = translatedText
+                                    translated[gui] = true
+                                end
+                            end
+                        end)
+                    end
+                end
+                
+                local player = game:GetService("Players").LocalPlayer
+                if player and player:FindFirstChild("PlayerGui") then
+                    for _, gui in ipairs(player.PlayerGui:GetDescendants()) do
+                        if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("TextBox")) and not translated[gui] then
+                            pcall(function()
+                                local text = gui.Text
+                                if text and text ~= "" then
+                                    local translatedText = translateText(text)
+                                    if translatedText ~= text then
+                                        gui.Text = translatedText
+                                        translated[gui] = true
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+            
+            local function setupDescendantListener(parent)
+                parent.DescendantAdded:Connect(function(descendant)
+                    if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                        task.wait(0.1)
+                        pcall(function()
+                            local text = descendant.Text
+                            if text and text ~= "" then
+                                local translatedText = translateText(text)
+                                if translatedText ~= text then
+                                    descendant.Text = translatedText
+                                end
+                            end
+                        end)
+                    end
+                end)
+            end
+            
+            pcall(setupDescendantListener, game:GetService("CoreGui"))
+            local player = game:GetService("Players").LocalPlayer
+            if player and player:FindFirstChild("PlayerGui") then
+                pcall(setupDescendantListener, player.PlayerGui)
+            end
+            
+            while true do
+                scanAndTranslate()
+                task.wait(3)
+            end
+        end
+    end
+
+    task.wait(2)
+    setupTranslationEngine()
+
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/CuteLing-XB/Main-storage/refs/heads/main/Chinese/%E5%AD%A6%E4%B9%B191.txt"))()
+
+    end)
+
+    if not success then
+        warn("加载失败:", err)
+    end
+end
