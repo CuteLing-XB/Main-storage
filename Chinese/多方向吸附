@@ -501,7 +501,7 @@ createSafeInstance("TextLabel", {
     Size = UDim2.new(1, -76, 1, 0),
     Position = UDim2.fromOffset(10, 0),
     BackgroundTransparency = 1,
-    Text = "ZKAY - 小林在此感谢所有尊贵的用户",
+    Text = "ZKAY - 吸附",
     Font = Enum.Font.GothamBold,
     TextSize = 13,
     TextColor3 = Colors.GoldAccent,
