@@ -1,49 +1,38 @@
--- ====================================================
--- 1. 竞态检查：等待游戏 DataModel 完全加载完毕
--- ====================================================
 if not game:IsLoaded() then
     repeat task.wait() until game:IsLoaded()
 end
-
 if getgenv().ZKAYMagnetExecuted then return end
 getgenv().ZKAYMagnetExecuted = true
 
--- ====================================================
--- 2. cloneref 包装与服务隔离
--- ====================================================
 local safeCloneref = (cloneref or function(obj) return obj end)
-
-local Players = safeCloneref(game:GetService("Players"))
-local RunService = safeCloneref(game:GetService("RunService"))
-local CoreGui = safeCloneref(game:GetService("CoreGui"))
+local Players      = safeCloneref(game:GetService("Players"))
+local RunService   = safeCloneref(game:GetService("RunService"))
+local CoreGui      = safeCloneref(game:GetService("CoreGui"))
 local TweenService = safeCloneref(game:GetService("TweenService"))
-local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+local Stats        = safeCloneref(game:GetService("Stats"))
+local UIS          = safeCloneref(game:GetService("UserInputService"))
+local LocalPlayer  = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
 
--- ====================================================
--- 3. 环境诊断与 API 探测
--- ====================================================
+local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
+
 local ExecutorEnv = {
-    ProtectGui = protect_gui or (syn and syn.protect_gui) or nil,
-    GetHui = gethui or get_hidden_gui or nil,
+    ProtectGui  = protect_gui or (syn and syn.protect_gui) or nil,
+    GetHui      = gethui or get_hidden_gui or nil,
     CheckCaller = checkcaller or nil,
     NewCClosure = newcclosure or function(f) return f end,
 }
 
--- ====================================================
--- 4. 随机字符串生成器（消除静态节点特征名称）
--- ====================================================
 local function getRandomString(length)
     length = length or math.random(12, 16)
     local charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
     local result = {}
     for i = 1, length do
-        local randIndex = math.random(1, #charset)
-        table.insert(result, string.sub(charset, randIndex, randIndex))
+        local idx = math.random(1, #charset)
+        table.insert(result, string.sub(charset, idx, idx))
     end
     return table.concat(result)
 end
 
--- 通用安全实例创建器（自动随机化名称）
 local function createSafeInstance(className, properties)
     local inst = Instance.new(className)
     inst.Name = getRandomString()
@@ -55,74 +44,75 @@ local function createSafeInstance(className, properties)
     return inst
 end
 
--- ====================================================
--- 5. 主配色与状态变量
--- ====================================================
 local Colors = {
-    Background = Color3.fromRGB(22, 22, 26),
-    Panel = Color3.fromRGB(32, 32, 38),
-    GoldAccent = Color3.fromRGB(245, 185, 30),
-    GoldDark = Color3.fromRGB(160, 115, 15),
-    RedAccent = Color3.fromRGB(255, 50, 50),
-    RedDark = Color3.fromRGB(150, 20, 20),
-    Stroke = Color3.fromRGB(212, 175, 55),
+    Background  = Color3.fromRGB(22, 22, 26),
+    Panel       = Color3.fromRGB(32, 32, 38),
+    GoldAccent  = Color3.fromRGB(245, 185, 30),
+    GoldDark    = Color3.fromRGB(160, 115, 15),
+    RedAccent   = Color3.fromRGB(255, 50, 50),
     TextPrimary = Color3.fromRGB(255, 255, 255),
-    TextDim = Color3.fromRGB(180, 180, 190),
-    Disabled = Color3.fromRGB(120, 50, 50),
+    TextDim     = Color3.fromRGB(180, 180, 190),
 }
 
 local state = {
     enabled = false,
     targetPlayer = nil,
-    direction = "Behind", -- "Head", "Below", "Left", "Right", "Behind"
-    distance = 4.0,       -- 浮点数，支持精细微调
+    direction = "Behind",
+    distance = 4.5,
+    predictTime = 0.06,
+    pingPredictMul = 0.5,
+    maxDistance = 80,
+    smoothSpeed = 30,
+    checkObstacle = true,
+    forceGroundUp = true,
+    groundClamp = true,
+    lockHumanoid = true,
+    disableCollide = true,
+    attackPredictX = 0.02,
+    meleeMode = true,
+    finalSnapDist = 4.0,
+    faceTarget = true,
+    attackArcLimit = 60,
+    animAttackBoost = 0.03,
 }
 
 local animatedGradients = {}
 local eventConnections = {}
 
--- UI 工具函数
 local function addCorner(parent, radius)
-    local corner = createSafeInstance("UICorner", {
-        CornerRadius = UDim.new(0, radius or 6),
-        Parent = parent
+    return createSafeInstance("UICorner", {
+        CornerRadius = UDim.new(0, radius or 8),
+        Parent = parent,
     })
-    return corner
 end
 
--- 生成平滑闭合、无断点的跑马灯 ColorSequence
 local function makeSeamlessColorSequence(activeColor)
-    local dimColor = Color3.new(activeColor.R * 0.12, activeColor.G * 0.12, activeColor.B * 0.12)
+    local d = Color3.new(activeColor.R * 0.12, activeColor.G * 0.12, activeColor.B * 0.12)
     return ColorSequence.new({
-        ColorSequenceKeypoint.new(0.0, dimColor),
-        ColorSequenceKeypoint.new(0.35, dimColor),
+        ColorSequenceKeypoint.new(0.0, d),
+        ColorSequenceKeypoint.new(0.35, d),
         ColorSequenceKeypoint.new(0.50, activeColor),
-        ColorSequenceKeypoint.new(0.65, dimColor),
-        ColorSequenceKeypoint.new(1.0, dimColor)
+        ColorSequenceKeypoint.new(0.65, d),
+        ColorSequenceKeypoint.new(1.0, d),
     })
 end
 
--- 创建无缝连续平滑跑马灯边框
 local function addMarqueeStroke(parent, color, thickness)
     local stroke = createSafeInstance("UIStroke", {
         Color = Color3.fromRGB(255, 255, 255),
         Thickness = thickness or 1.2,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        Parent = parent
+        Parent = parent,
     })
-
-    local activeColor = color or Colors.GoldAccent
     local gradient = createSafeInstance("UIGradient", {
-        Color = makeSeamlessColorSequence(activeColor),
+        Color = makeSeamlessColorSequence(color or Colors.GoldAccent),
         Transparency = NumberSequence.new(0),
-        Parent = stroke
+        Parent = stroke,
     })
-
     table.insert(animatedGradients, { Gradient = gradient, Stroke = stroke })
     return stroke, gradient
 end
 
--- 动态改变跑马灯光束颜色
 local function updateMarqueeColor(stroke, newColor)
     for _, item in ipairs(animatedGradients) do
         if item.Stroke == stroke then
@@ -132,208 +122,494 @@ local function updateMarqueeColor(stroke, newColor)
     end
 end
 
-----------------------------------------------------
--- 独立吸附解算逻辑 (过滤目标倒地/趴下的旋转影响)
-----------------------------------------------------
-local function getTargetYawCFrame(targetRoot)
-    local targetPos = targetRoot.Position
-    local lookVector = targetRoot.CFrame.LookVector
-    local flatLook = Vector3.new(lookVector.X, 0, lookVector.Z)
-    if flatLook.Magnitude < 0.001 then
-        flatLook = -Vector3.zAxis
-    else
-        flatLook = flatLook.Unit
+local cachedPing, lastPingTime = 0.05, 0
+local function getPing()
+    local now = os.clock()
+    if now - lastPingTime > 0.5 then
+        local ok, val = pcall(function()
+            return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+        end)
+        cachedPing = (ok and val and val / 1000) or 0.05
+        lastPingTime = now
     end
-    return CFrame.lookAt(targetPos, targetPos + flatLook)
+    return cachedPing
 end
 
-local function calculateMagnetCFrame(targetRoot)
-    local targetPos = targetRoot.Position
-    local yawCFrame = getTargetYawCFrame(targetRoot)
+local velocityTracker = { samples = {}, maxSamples = 8, maxAge = 0.25 }
+
+local function resetVelocityTracker()
+    velocityTracker.samples = {}
+end
+
+local function trackTargetVelocity(targetRoot)
+    local now = os.clock()
+    table.insert(velocityTracker.samples, { t = now, pos = targetRoot.Position })
+    while #velocityTracker.samples > velocityTracker.maxSamples do
+        table.remove(velocityTracker.samples, 1)
+    end
+    while #velocityTracker.samples > 1
+        and (now - velocityTracker.samples[1].t) > velocityTracker.maxAge do
+        table.remove(velocityTracker.samples, 1)
+    end
+end
+
+local function getSmoothedVelocity(fallback)
+    local s = velocityTracker.samples
+    if #s < 2 then return fallback or Vector3.zero end
+    local first, last = s[1], s[#s]
+    local dt = last.t - first.t
+    if dt < 0.001 then return fallback or Vector3.zero end
+    return (last.pos - first.pos) / dt
+end
+
+local function getAdaptivePredictTime(extra)
+    local base = state.predictTime + (extra or 0)
+    return math.clamp(base + getPing() * state.pingPredictMul, 0, 0.35)
+end
+
+local function isPlayerValid(p)
+    if not p or not p.Parent then return false end
+    local char = p.Character
+    if not char or not char.Parent then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    local hs = hum:GetState()
+    if hs == Enum.HumanoidStateType.Dead or hs == Enum.HumanoidStateType.Physics then
+        return false
+    end
+    if not char:FindFirstChild("HumanoidRootPart") then return false end
+    return true
+end
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+rayParams.IgnoreWater = true
+
+local function buildRayFilter()
+    local list = {}
+    if LocalPlayer.Character then table.insert(list, LocalPlayer.Character) end
+    local tp = state.targetPlayer
+    if tp and tp.Character then table.insert(list, tp.Character) end
+    rayParams.FilterDescendantsInstances = list
+    return rayParams
+end
+
+local function isPosBlocked(fromPos, toPos)
+    buildRayFilter()
+    return workspace:Raycast(fromPos, toPos - fromPos, rayParams) ~= nil
+end
+
+local function getGroundY(pos)
+    buildRayFilter()
+    local hit = workspace:Raycast(pos + Vector3.new(0, 2, 0), Vector3.new(0, -80, 0), rayParams)
+    return hit and hit.Position.Y or nil
+end
+
+local function isTargetInAttackArc(myRoot, targetRoot)
+    if not state.faceTarget then return true end
+    local toTarget = targetRoot.Position - myRoot.Position
+    toTarget = Vector3.new(toTarget.X, 0, toTarget.Z)
+    if toTarget.Magnitude < 0.01 then return true end
+    toTarget = toTarget.Unit
+    local myLook = myRoot.CFrame.LookVector
+    myLook = Vector3.new(myLook.X, 0, myLook.Z)
+    if myLook.Magnitude < 0.01 then return true end
+    myLook = myLook.Unit
+    local dot = math.clamp(myLook:Dot(toTarget), -1, 1)
+    local angle = math.deg(math.acos(dot))
+    return angle <= state.attackArcLimit
+end
+
+local function calculateMagnetCFrame(targetRoot, extraPredict)
+    local rawPos = targetRoot.Position
+    local targetVel = getSmoothedVelocity(targetRoot.AssemblyLinearVelocity)
+    if targetVel.Magnitude < 0.5 then
+        targetVel = targetRoot.AssemblyLinearVelocity
+    end
+
+    local predictT = getAdaptivePredictTime(extraPredict)
+    local targetPos = rawPos
+    if predictT > 0 then
+        local vFlat = Vector3.new(targetVel.X, 0, targetVel.Z)
+        local p = rawPos + vFlat * predictT
+        targetPos = Vector3.new(p.X, rawPos.Y, p.Z)
+    end
+
+    local look = targetRoot.CFrame.LookVector
+    local flatLook = Vector3.new(look.X, 0, look.Z)
+    flatLook = (flatLook.Magnitude < 0.001) and -Vector3.zAxis or flatLook.Unit
+    local yawCF = CFrame.lookAt(targetPos, targetPos + flatLook)
+
     local myPos = targetPos
     local dist = state.distance
-
     if state.direction == "Behind" then
-        myPos = (yawCFrame * CFrame.new(0, 0, dist)).Position
+        myPos = (yawCF * CFrame.new(0, 0, dist)).Position
     elseif state.direction == "Head" then
-        myPos = (yawCFrame * CFrame.new(0, dist, 0)).Position
+        myPos = (yawCF * CFrame.new(0, dist, 0)).Position
     elseif state.direction == "Below" then
-        myPos = (yawCFrame * CFrame.new(0, -dist, 0)).Position
+        myPos = (yawCF * CFrame.new(0, -dist, 0)).Position
     elseif state.direction == "Left" then
-        myPos = (yawCFrame * CFrame.new(-dist, 0, 0)).Position
+        myPos = (yawCF * CFrame.new(-dist, 0, 0)).Position
     elseif state.direction == "Right" then
-        myPos = (yawCFrame * CFrame.new(dist, 0, 0)).Position
+        myPos = (yawCF * CFrame.new(dist, 0, 0)).Position
+    end
+
+    if state.checkObstacle and (myPos - targetPos).Magnitude > 0.01 then
+        if isPosBlocked(targetPos, myPos) then
+            local dir = (myPos - targetPos).Unit
+            myPos = targetPos + dir * math.max(dist * 0.5, 1)
+        end
+    end
+
+    if state.groundClamp then
+        local groundY = getGroundY(myPos)
+        if groundY and myPos.Y < groundY - 0.5 then
+            myPos = Vector3.new(myPos.X, groundY + 1.5, myPos.Z)
+        end
+    end
+
+    if state.meleeMode and state.faceTarget then
+        local flatTarget = Vector3.new(targetPos.X, myPos.Y, targetPos.Z)
+        local diff = flatTarget - myPos
+        if diff.Magnitude > 0.01 then
+            return CFrame.lookAt(myPos, flatTarget, Vector3.new(0, 1, 0))
+        else
+            return CFrame.lookAt(myPos, myPos + flatLook, Vector3.new(0, 1, 0))
+        end
+    end
+
+    if state.forceGroundUp then
+        local flatTarget = Vector3.new(targetPos.X, myPos.Y, targetPos.Z)
+        local diff = flatTarget - myPos
+        if diff.Magnitude < 0.01 then
+            return CFrame.lookAt(myPos, myPos + flatLook, Vector3.new(0, 1, 0))
+        end
+        return CFrame.lookAt(myPos, flatTarget, Vector3.new(0, 1, 0))
     end
 
     if (myPos - targetPos).Magnitude > 0.001 then
         return CFrame.lookAt(myPos, targetPos)
     else
-        return yawCFrame
+        return yawCF
     end
 end
 
-----------------------------------------------------
--- GUI 构建 (安全父级保护挂载 & 手机紧凑型适配)
-----------------------------------------------------
-local screenGui = createSafeInstance("ScreenGui", {
-    ResetOnSpawn = false
-})
+local savedCanCollide = {}
 
--- 优先使用执行器隐蔽 GUI 节点或隔离挂载
+local function applyHumanoidLock(lock)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    if state.lockHumanoid then
+        pcall(function()
+            hum.AutoRotate = not lock
+            if not isMobile then
+                hum.PlatformStand = lock
+            end
+        end)
+    end
+
+    if state.disableCollide then
+        if lock then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    savedCanCollide[part] = part.CanCollide
+                    part.CanCollide = false
+                end
+            end
+        else
+            for part, oldVal in pairs(savedCanCollide) do
+                if part and part.Parent then
+                    pcall(function() part.CanCollide = oldVal end)
+                end
+            end
+            savedCanCollide = {}
+        end
+    end
+end
+
+local function preAttackSync(forceSnap)
+    if not state.enabled or not state.targetPlayer then return end
+    if not isPlayerValid(state.targetPlayer) then return end
+    local myChar = LocalPlayer.Character
+    local tc = state.targetPlayer.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local tRoot = tc and tc:FindFirstChild("HumanoidRootPart")
+    if not myRoot or not tRoot then return end
+
+    trackTargetVelocity(tRoot)
+
+    local nowDist = (myRoot.Position - tRoot.Position).Magnitude
+    if not forceSnap and nowDist < state.finalSnapDist * 0.9 then
+        return
+    end
+
+    local origDist = state.distance
+    if forceSnap and nowDist > state.finalSnapDist then
+        state.distance = math.min(state.distance, state.finalSnapDist)
+    end
+
+    local targetCF = calculateMagnetCFrame(tRoot, state.attackPredictX)
+    state.distance = origDist
+
+    if not isTargetInAttackArc(myRoot, tRoot) then
+        local lookPos = Vector3.new(tRoot.Position.X, myRoot.Position.Y, tRoot.Position.Z)
+        if (lookPos - myRoot.Position).Magnitude > 0.01 then
+            targetCF = CFrame.lookAt(targetCF.Position, lookPos, Vector3.new(0, 1, 0))
+        end
+    end
+
+    myRoot.CFrame = targetCF
+    myRoot.AssemblyLinearVelocity = Vector3.zero
+    myRoot.AssemblyAngularVelocity = Vector3.zero
+end
+
+local ATTACK_ANIM_PATTERNS = {
+    "m1", "m2", "punch", "kick", "slash", "strike", "jab", "hook",
+    "uppercut", "slam", "sweep", "elbow", "knee", "attack", "hit",
+    "swing", "combo", "melee",
+}
+
+local function isAttackAnimName(name)
+    if type(name) ~= "string" or name == "" then return false end
+    local lower = name:lower()
+    for _, p in ipairs(ATTACK_ANIM_PATTERNS) do
+        if string.find(lower, p, 1, true) then return true end
+    end
+    return false
+end
+
+local hookedAnimators = setmetatable({}, { __mode = "k" })
+
+local function watchMyAnimator(char)
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local animator = hum:WaitForChild("Animator", 10)
+    if not animator then return end
+    if hookedAnimators[animator] then return end
+    hookedAnimators[animator] = true
+
+    local conn = animator.AnimationPlayed:Connect(function(track)
+        if not state.enabled or not state.targetPlayer then return end
+        local animName = ""
+        pcall(function()
+            if track.Animation then animName = track.Animation.Name end
+        end)
+        if isAttackAnimName(animName) then
+            task.defer(function()
+                pcall(preAttackSync, true)
+            end)
+        end
+    end)
+    table.insert(eventConnections, conn)
+end
+
+if LocalPlayer.Character then
+    task.spawn(watchMyAnimator, LocalPlayer.Character)
+end
+table.insert(eventConnections, LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.2)
+    watchMyAnimator(char)
+end))
+
+local function isAttackRemoteName(name)
+    if type(name) ~= "string" then return false end
+    local lower = name:lower()
+    for _, kw in ipairs(ATTACK_ANIM_PATTERNS) do
+        if string.find(lower, kw, 1, true) then return true end
+    end
+    return false
+end
+
+pcall(function()
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if method == "FireServer" or method == "InvokeServer" then
+            if state.enabled and state.targetPlayer then
+                local args = {...}
+                local data = args[1]
+                local shouldSync = false
+
+                if type(data) == "table" then
+                    if data.Type == "Combat" and (data.Action == "M1" or data.Action == "M2") then
+                        shouldSync = true
+                    end
+                end
+
+                if not shouldSync then
+                    local ok, name = pcall(function() return self.Name end)
+                    if ok and isAttackRemoteName(name) then
+                        shouldSync = true
+                    end
+                end
+
+                if shouldSync then
+                    pcall(preAttackSync, true)
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+end)
+
+table.insert(eventConnections, UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if not state.enabled or not state.targetPlayer then return end
+    local ut = input.UserInputType
+    if ut ~= Enum.UserInputType.MouseButton1 and ut ~= Enum.UserInputType.Touch then return end
+    pcall(preAttackSync, true)
+end))
+
+local screenGui = createSafeInstance("ScreenGui", { ResetOnSpawn = false })
 if ExecutorEnv.GetHui then
     screenGui.Parent = ExecutorEnv.GetHui()
 elseif ExecutorEnv.ProtectGui then
     ExecutorEnv.ProtectGui(screenGui)
     screenGui.Parent = CoreGui
 else
-    local success = pcall(function()
-        screenGui.Parent = CoreGui
-    end)
-    if not success then
+    if not pcall(function() screenGui.Parent = CoreGui end) then
         screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui", 5)
     end
 end
 
--- 1. 主UI窗口 (220 x 240)
+local MAIN_W, MAIN_H = 280, 320
+local HEADER_H = 36
+
 local mainFrame = createSafeInstance("Frame", {
-    Size = UDim2.new(0, 220, 0, 240),
-    Position = UDim2.fromScale(0.35, 0.3),
+    Size = UDim2.new(0, MAIN_W, 0, MAIN_H),
+    Position = UDim2.fromScale(0.32, 0.22),
     BackgroundColor3 = Colors.Background,
     Active = true,
     Draggable = true,
     ClipsDescendants = true,
-    Parent = screenGui
+    Parent = screenGui,
 })
-addCorner(mainFrame, 10)
-local mainStroke = addMarqueeStroke(mainFrame, Colors.GoldAccent, 1.2)
+addCorner(mainFrame, 12)
+addMarqueeStroke(mainFrame, Colors.GoldAccent, 1.4)
 
--- 标题容器栏
 local headerFrame = createSafeInstance("Frame", {
-    Size = UDim2.new(1, 0, 0, 28),
+    Size = UDim2.new(1, 0, 0, HEADER_H),
     BackgroundTransparency = 1,
-    Parent = mainFrame
+    Parent = mainFrame,
 })
 
--- 主界面标题
-local titleLabel = createSafeInstance("TextLabel", {
-    Size = UDim2.new(1, -56, 1, 0),
-    Position = UDim2.fromOffset(8, 0),
+createSafeInstance("TextLabel", {
+    Size = UDim2.new(1, -76, 1, 0),
+    Position = UDim2.fromOffset(10, 0),
     BackgroundTransparency = 1,
-    Text = "ZKAY - 吸附",
+    Text = "ZKAY - 小林在此感谢所有尊贵的用户",
     Font = Enum.Font.GothamBold,
-    TextSize = 12,
+    TextSize = 13,
     TextColor3 = Colors.GoldAccent,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Parent = headerFrame
+    Parent = headerFrame,
 })
 
--- 设置按钮 ⚙
 local settingsBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(0, 20, 0, 20),
-    Position = UDim2.new(1, -48, 0, 4),
+    Size = UDim2.new(0, 30, 0, 30),
+    Position = UDim2.new(1, -66, 0, 3),
     BackgroundTransparency = 1,
     Text = "⚙",
     Font = Enum.Font.GothamBold,
-    TextSize = 12,
+    TextSize = 16,
     TextColor3 = Colors.GoldAccent,
-    Parent = headerFrame
+    Parent = headerFrame,
 })
 
--- 缩小/展开按钮 —
 local minimizeBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(0, 20, 0, 20),
-    Position = UDim2.new(1, -24, 0, 4),
+    Size = UDim2.new(0, 30, 0, 30),
+    Position = UDim2.new(1, -34, 0, 3),
     BackgroundTransparency = 1,
     Text = "—",
     Font = Enum.Font.GothamBold,
-    TextSize = 11,
+    TextSize = 16,
     TextColor3 = Colors.TextDim,
-    Parent = headerFrame
+    Parent = headerFrame,
 })
 
--- 内容展示区容器
 local contentContainer = createSafeInstance("Frame", {
-    Size = UDim2.new(1, 0, 1, -28),
-    Position = UDim2.fromOffset(0, 28),
+    Size = UDim2.new(1, 0, 1, -HEADER_H),
+    Position = UDim2.fromOffset(0, HEADER_H),
     BackgroundTransparency = 1,
-    Parent = mainFrame
+    Parent = mainFrame,
 })
 
--- 开关按钮
 local toggleBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(1, -16, 0, 30),
-    Position = UDim2.fromOffset(8, 2),
+    Size = UDim2.new(1, -20, 0, 44),
+    Position = UDim2.fromOffset(10, 4),
     BackgroundColor3 = Colors.GoldDark,
     Font = Enum.Font.GothamBold,
     Text = "吸附状态: 暂停",
     TextColor3 = Colors.TextPrimary,
-    TextSize = 11,
+    TextSize = 14,
     AutoButtonColor = false,
-    Parent = contentContainer
+    Parent = contentContainer,
 })
-addCorner(toggleBtn, 6)
-local toggleStroke = addMarqueeStroke(toggleBtn, Colors.GoldAccent, 1)
+addCorner(toggleBtn, 8)
+local toggleStroke = addMarqueeStroke(toggleBtn, Colors.GoldAccent, 1.2)
 
--- 目标选择栏
 local targetFrame = createSafeInstance("Frame", {
-    Size = UDim2.new(1, -16, 0, 28),
-    Position = UDim2.fromOffset(8, 38),
+    Size = UDim2.new(1, -20, 0, 40),
+    Position = UDim2.fromOffset(10, 54),
     BackgroundColor3 = Colors.Panel,
-    Parent = contentContainer
+    Parent = contentContainer,
 })
-addCorner(targetFrame, 5)
-addMarqueeStroke(targetFrame, Colors.GoldAccent, 1)
+addCorner(targetFrame, 8)
+addMarqueeStroke(targetFrame, Colors.GoldAccent, 1.2)
 
 local targetText = createSafeInstance("TextLabel", {
-    Size = UDim2.new(0.62, -6, 1, 0),
-    Position = UDim2.fromOffset(6, 0),
+    Size = UDim2.new(0.6, -8, 1, 0),
+    Position = UDim2.fromOffset(8, 0),
     BackgroundTransparency = 1,
     Text = "目标: 无",
     Font = Enum.Font.Gotham,
-    TextSize = 10,
+    TextSize = 12,
     TextColor3 = Colors.TextDim,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextTruncate = Enum.TextTruncate.AtEnd,
-    Parent = targetFrame
+    Parent = targetFrame,
 })
 
 local selectBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(0.38, 0, 1, 0),
-    Position = UDim2.new(0.62, 0, 0, 0),
+    Size = UDim2.new(0.4, 0, 1, 0),
+    Position = UDim2.new(0.6, 0, 0, 0),
     BackgroundColor3 = Colors.GoldDark,
     Font = Enum.Font.GothamBold,
     Text = "选择玩家",
     TextColor3 = Colors.TextPrimary,
-    TextSize = 10,
-    Parent = targetFrame
+    TextSize = 13,
+    Parent = targetFrame,
 })
-addCorner(selectBtn, 5)
-addMarqueeStroke(selectBtn, Colors.GoldAccent, 1)
+addCorner(selectBtn, 8)
+addMarqueeStroke(selectBtn, Colors.GoldAccent, 1.2)
 
--- 方向选择区域
-local dirLabel = createSafeInstance("TextLabel", {
-    Position = UDim2.fromOffset(8, 72),
-    Size = UDim2.new(1, -16, 0, 16),
+createSafeInstance("TextLabel", {
+    Position = UDim2.fromOffset(10, 100),
+    Size = UDim2.new(1, -20, 0, 22),
     BackgroundTransparency = 1,
     Text = "吸附方向设置",
     Font = Enum.Font.GothamMedium,
-    TextSize = 10,
+    TextSize = 12,
     TextColor3 = Colors.GoldAccent,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Parent = contentContainer
+    Parent = contentContainer,
 })
 
 local dirGrid = createSafeInstance("Frame", {
-    Position = UDim2.fromOffset(8, 92),
-    Size = UDim2.new(1, -16, 0, 72),
+    Position = UDim2.fromOffset(10, 126),
+    Size = UDim2.new(1, -20, 0, 114),
     BackgroundTransparency = 1,
-    Parent = contentContainer
+    Parent = contentContainer,
 })
 
-local layout = createSafeInstance("UIGridLayout", {
-    CellSize = UDim2.new(0.31, 0, 0, 30),
-    CellPadding = UDim2.new(0.035, 0, 0.1, 0),
-    Parent = dirGrid
+createSafeInstance("UIGridLayout", {
+    CellSize = UDim2.new(0.31, 0, 0, 34),
+    CellPadding = UDim2.new(0.035, 0, 0.08, 0),
+    Parent = dirGrid,
 })
 
 local directions = {
@@ -352,78 +628,73 @@ for _, dirData in ipairs(directions) do
         Font = Enum.Font.GothamMedium,
         Text = dirData.Name,
         TextColor3 = Colors.TextPrimary,
-        TextSize = 10,
-        Parent = dirGrid
+        TextSize = 13,
+        Parent = dirGrid,
     })
-    addCorner(btn, 5)
-    
-    local stroke = addMarqueeStroke(btn, isSelected and Colors.RedAccent or Colors.GoldAccent, 1)
-
+    addCorner(btn, 8)
+    local stroke = addMarqueeStroke(btn, isSelected and Colors.RedAccent or Colors.GoldAccent, 1.2)
     btn.MouseButton1Click:Connect(function()
         state.direction = dirData.Mode
-        for _, bData in pairs(dirBtns) do
-            local isSel = (bData.Mode == state.direction)
-            updateMarqueeColor(bData.Stroke, isSel and Colors.RedAccent or Colors.GoldAccent)
+        for _, b in pairs(dirBtns) do
+            updateMarqueeColor(b.Stroke, (b.Mode == state.direction) and Colors.RedAccent or Colors.GoldAccent)
         end
     end)
     table.insert(dirBtns, { Btn = btn, Mode = dirData.Mode, Stroke = stroke })
 end
 
--- 距离步进设置
 local distFrame = createSafeInstance("Frame", {
-    Size = UDim2.new(1, -16, 0, 26),
-    Position = UDim2.fromOffset(8, 172),
+    Size = UDim2.new(1, -20, 0, 40),
+    Position = UDim2.fromOffset(10, 246),
     BackgroundColor3 = Colors.Panel,
-    Parent = contentContainer
+    Parent = contentContainer,
 })
-addCorner(distFrame, 5)
-addMarqueeStroke(distFrame, Colors.GoldAccent, 1)
+addCorner(distFrame, 8)
+addMarqueeStroke(distFrame, Colors.GoldAccent, 1.2)
 
 local distText = createSafeInstance("TextLabel", {
-    Size = UDim2.new(0.5, -6, 1, 0),
-    Position = UDim2.fromOffset(6, 0),
+    Size = UDim2.new(0.5, -8, 1, 0),
+    Position = UDim2.fromOffset(8, 0),
     BackgroundTransparency = 1,
     Text = string.format("吸附距离: %.1fm", state.distance),
     Font = Enum.Font.Gotham,
-    TextSize = 10,
+    TextSize = 12,
     TextColor3 = Colors.TextDim,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Parent = distFrame
+    Parent = distFrame,
 })
 
 local minusBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(0.2, 0, 0.8, 0),
-    Position = UDim2.new(0.55, 0, 0.1, 0),
+    Size = UDim2.new(0.22, 0, 0.75, 0),
+    Position = UDim2.new(0.52, 0, 0.125, 0),
     BackgroundColor3 = Colors.Background,
     Text = "-",
     TextColor3 = Colors.GoldAccent,
     Font = Enum.Font.GothamBold,
-    Parent = distFrame
+    TextSize = 18,
+    Parent = distFrame,
 })
-addCorner(minusBtn, 3)
-addMarqueeStroke(minusBtn, Colors.GoldAccent, 1)
+addCorner(minusBtn, 6)
+addMarqueeStroke(minusBtn, Colors.GoldAccent, 1.2)
 
 local plusBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(0.2, 0, 0.8, 0),
-    Position = UDim2.new(0.78, 0, 0.1, 0),
+    Size = UDim2.new(0.22, 0, 0.75, 0),
+    Position = UDim2.new(0.76, 0, 0.125, 0),
     BackgroundColor3 = Colors.Background,
     Text = "+",
     TextColor3 = Colors.GoldAccent,
     Font = Enum.Font.GothamBold,
-    Parent = distFrame
+    TextSize = 18,
+    Parent = distFrame,
 })
-addCorner(plusBtn, 3)
-addMarqueeStroke(plusBtn, Colors.GoldAccent, 1)
+addCorner(plusBtn, 6)
+addMarqueeStroke(plusBtn, Colors.GoldAccent, 1.2)
 
--- 长按加减控制逻辑
 local function bindAutoHold(button, delta)
     local holding = false
-
     local function changeValue()
         state.distance = math.clamp(state.distance + delta, 0.1, 50.0)
         distText.Text = string.format("吸附距离: %.1fm", state.distance)
     end
-
     button.MouseButton1Down:Connect(function()
         holding = true
         changeValue()
@@ -433,142 +704,125 @@ local function bindAutoHold(button, delta)
             task.wait(0.05)
         end
     end)
-
     local function stopHold()
         holding = false
     end
-
     button.MouseButton1Up:Connect(stopHold)
     button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
             stopHold()
         end
     end)
 end
-
 bindAutoHold(minusBtn, -0.1)
 bindAutoHold(plusBtn, 0.1)
 
-----------------------------------------------------
--- 缩小与展开动画逻辑 (主窗口)
-----------------------------------------------------
 local isMinimized = false
-local fullSize = UDim2.new(0, 220, 0, 240)
-local minSize = UDim2.new(0, 220, 0, 28)
+local fullSize = UDim2.new(0, MAIN_W, 0, MAIN_H)
+local minSize = UDim2.new(0, MAIN_W, 0, HEADER_H)
 local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 
 minimizeBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     minimizeBtn.Text = isMinimized and "▢" or "—"
-    
     if isMinimized then
         contentContainer.Visible = false
         TweenService:Create(mainFrame, tweenInfo, { Size = minSize }):Play()
     else
-        local tween = TweenService:Create(mainFrame, tweenInfo, { Size = fullSize })
-        tween:Play()
-        tween.Completed:Connect(function()
-            if not isMinimized then
-                contentContainer.Visible = true
-            end
+        local tw = TweenService:Create(mainFrame, tweenInfo, { Size = fullSize })
+        tw:Play()
+        tw.Completed:Connect(function()
+            if not isMinimized then contentContainer.Visible = true end
         end)
     end
 end)
 
-----------------------------------------------------
--- 2. 独立小悬浮窗 (玩家选择列表，缩小为 160 x 200)
-----------------------------------------------------
+local LIST_W, LIST_H = 220, 280
 local listFrame = createSafeInstance("Frame", {
-    Size = UDim2.new(0, 160, 0, 200),
-    Position = UDim2.fromScale(0.55, 0.3),
+    Size = UDim2.new(0, LIST_W, 0, LIST_H),
+    Position = UDim2.fromScale(0.58, 0.22),
     BackgroundColor3 = Colors.Background,
     Visible = false,
     Active = true,
     Draggable = true,
     ClipsDescendants = true,
-    Parent = screenGui
+    Parent = screenGui,
 })
-addCorner(listFrame, 8)
-addMarqueeStroke(listFrame, Colors.GoldAccent, 1.2)
+addCorner(listFrame, 10)
+addMarqueeStroke(listFrame, Colors.GoldAccent, 1.4)
 
--- 玩家列表头部容器
 local listHeader = createSafeInstance("Frame", {
-    Size = UDim2.new(1, 0, 0, 26),
+    Size = UDim2.new(1, 0, 0, 34),
     BackgroundTransparency = 1,
-    Parent = listFrame
+    Parent = listFrame,
 })
 
-local listTitle = createSafeInstance("TextLabel", {
-    Size = UDim2.new(1, -50, 1, 0),
-    Position = UDim2.fromOffset(6, 0),
+createSafeInstance("TextLabel", {
+    Size = UDim2.new(1, -70, 1, 0),
+    Position = UDim2.fromOffset(10, 0),
     BackgroundTransparency = 1,
     Text = "选择玩家目标",
     Font = Enum.Font.GothamBold,
-    TextSize = 10,
+    TextSize = 13,
     TextColor3 = Colors.GoldAccent,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Parent = listHeader
+    Parent = listHeader,
 })
 
--- 玩家列表折叠按钮 —
 local listMinBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(0, 18, 0, 18),
-    Position = UDim2.new(1, -40, 0, 4),
+    Size = UDim2.new(0, 28, 0, 28),
+    Position = UDim2.new(1, -60, 0, 3),
     BackgroundTransparency = 1,
     Text = "—",
     TextColor3 = Colors.TextDim,
     Font = Enum.Font.GothamBold,
-    TextSize = 10,
-    Parent = listHeader
+    TextSize = 16,
+    Parent = listHeader,
 })
 
--- 玩家列表关闭按钮 ✕
 local closeListBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(0, 18, 0, 18),
-    Position = UDim2.new(1, -20, 0, 4),
+    Size = UDim2.new(0, 28, 0, 28),
+    Position = UDim2.new(1, -30, 0, 3),
     BackgroundTransparency = 1,
     Text = "✕",
     TextColor3 = Colors.TextDim,
     Font = Enum.Font.GothamBold,
-    TextSize = 10,
-    Parent = listHeader
+    TextSize = 14,
+    Parent = listHeader,
 })
 
 local scrollFrame = createSafeInstance("ScrollingFrame", {
-    Size = UDim2.new(1, -10, 1, -30),
-    Position = UDim2.fromOffset(5, 26),
+    Size = UDim2.new(1, -12, 1, -40),
+    Position = UDim2.fromOffset(6, 36),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
-    ScrollBarThickness = 2,
+    ScrollBarThickness = 3,
     ScrollBarImageColor3 = Colors.GoldAccent,
-    Parent = listFrame
+    Parent = listFrame,
 })
 
 local listLayout = createSafeInstance("UIListLayout", {
     SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 4),
-    Parent = scrollFrame
+    Padding = UDim.new(0, 6),
+    Parent = scrollFrame,
 })
 
--- 玩家列表窗口折叠动画逻辑
 local isListMinimized = false
-local listFullSize = UDim2.new(0, 160, 0, 200)
-local listMinSize = UDim2.new(0, 160, 0, 26)
+local listFullSize = UDim2.new(0, LIST_W, 0, LIST_H)
+local listMinSize = UDim2.new(0, LIST_W, 0, 34)
 
 listMinBtn.MouseButton1Click:Connect(function()
     isListMinimized = not isListMinimized
     listMinBtn.Text = isListMinimized and "▢" or "—"
-    
     if isListMinimized then
         scrollFrame.Visible = false
         TweenService:Create(listFrame, tweenInfo, { Size = listMinSize }):Play()
     else
-        local tween = TweenService:Create(listFrame, tweenInfo, { Size = listFullSize })
-        tween:Play()
-        tween.Completed:Connect(function()
-            if not isListMinimized then
-                scrollFrame.Visible = true
-            end
+        local tw = TweenService:Create(listFrame, tweenInfo, { Size = listFullSize })
+        tw:Play()
+        tw.Completed:Connect(function()
+            if not isListMinimized then scrollFrame.Visible = true end
         end)
     end
 end)
@@ -577,28 +831,26 @@ local function updatePlayerList()
     for _, child in ipairs(scrollFrame:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
-
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
             local isTarget = (state.targetPlayer == p)
+            local aliveTag = isPlayerValid(p) and "" or " [死亡]"
             local pBtn = createSafeInstance("TextButton", {
-                Size = UDim2.new(1, -4, 0, 24),
+                Size = UDim2.new(1, -4, 0, 34),
                 BackgroundColor3 = Colors.Panel,
                 Font = Enum.Font.Gotham,
-                Text = p.DisplayName .. " (@" .. p.Name .. ")",
-                TextColor3 = Colors.TextPrimary,
-                TextSize = 10,
+                Text = p.DisplayName .. " (@" .. p.Name .. ")" .. aliveTag,
+                TextColor3 = isTarget and Colors.GoldAccent or Colors.TextPrimary,
+                TextSize = 12,
                 TextTruncate = Enum.TextTruncate.AtEnd,
-                Parent = scrollFrame
+                Parent = scrollFrame,
             })
-            addCorner(pBtn, 4)
-            
-            local pStroke = addMarqueeStroke(pBtn, isTarget and Colors.RedAccent or Colors.GoldAccent, 1)
-
+            addCorner(pBtn, 6)
+            addMarqueeStroke(pBtn, isTarget and Colors.RedAccent or Colors.GoldAccent, 1.2)
             pBtn.MouseButton1Click:Connect(function()
                 state.targetPlayer = p
                 targetText.Text = "目标: " .. p.DisplayName
-                -- 点击后保持列表页面打开，不清空悬浮窗
+                resetVelocityTracker()
                 updatePlayerList()
             end)
         end
@@ -610,7 +862,6 @@ selectBtn.MouseButton1Click:Connect(function()
     updatePlayerList()
     listFrame.Visible = not listFrame.Visible
 end)
-
 closeListBtn.MouseButton1Click:Connect(function()
     listFrame.Visible = false
 end)
@@ -620,107 +871,115 @@ table.insert(eventConnections, Players.PlayerRemoving:Connect(function(p)
     if state.targetPlayer == p then
         state.targetPlayer = nil
         targetText.Text = "目标: 无"
+        resetVelocityTracker()
     end
     updatePlayerList()
 end))
 
-----------------------------------------------------
--- 3. 设置面板 (含有卸载UI按钮)
-----------------------------------------------------
+local SET_W, SET_H = 220, 150
 local settingsFrame = createSafeInstance("Frame", {
-    Size = UDim2.new(0, 160, 0, 95),
-    Position = UDim2.fromScale(0.35, 0.3),
+    Size = UDim2.new(0, SET_W, 0, SET_H),
+    Position = UDim2.fromScale(0.32, 0.22),
     BackgroundColor3 = Colors.Background,
     Visible = false,
     Active = true,
     Draggable = true,
-    Parent = screenGui
+    Parent = screenGui,
 })
-addCorner(settingsFrame, 8)
-addMarqueeStroke(settingsFrame, Colors.GoldAccent, 1.2)
+addCorner(settingsFrame, 10)
+addMarqueeStroke(settingsFrame, Colors.GoldAccent, 1.4)
 
-local settingsTitle = createSafeInstance("TextLabel", {
-    Size = UDim2.new(1, -26, 0, 24),
-    Position = UDim2.fromOffset(6, 0),
+createSafeInstance("TextLabel", {
+    Size = UDim2.new(1, -40, 0, 30),
+    Position = UDim2.fromOffset(10, 0),
     BackgroundTransparency = 1,
     Text = "系统设置",
     Font = Enum.Font.GothamBold,
-    TextSize = 10,
+    TextSize = 13,
     TextColor3 = Colors.GoldAccent,
     TextXAlignment = Enum.TextXAlignment.Left,
-    Parent = settingsFrame
+    Parent = settingsFrame,
 })
 
 local closeSettingsBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(0, 18, 0, 18),
-    Position = UDim2.new(1, -20, 0, 3),
+    Size = UDim2.new(0, 28, 0, 28),
+    Position = UDim2.new(1, -32, 0, 3),
     BackgroundTransparency = 1,
     Text = "✕",
     TextColor3 = Colors.TextDim,
     Font = Enum.Font.GothamBold,
-    TextSize = 10,
-    Parent = settingsFrame
+    TextSize = 14,
+    Parent = settingsFrame,
 })
 
+local meleeBtn = createSafeInstance("TextButton", {
+    Size = UDim2.new(1, -24, 0, 38),
+    Position = UDim2.fromOffset(12, 38),
+    BackgroundColor3 = Colors.Panel,
+    Font = Enum.Font.GothamBold,
+    Text = state.meleeMode and "格斗模式: 开启" or "格斗模式: 关闭",
+    TextColor3 = Colors.GoldAccent,
+    TextSize = 12,
+    Parent = settingsFrame,
+})
+addCorner(meleeBtn, 6)
+addMarqueeStroke(meleeBtn, Colors.GoldAccent, 1.2)
+meleeBtn.MouseButton1Click:Connect(function()
+    state.meleeMode = not state.meleeMode
+    meleeBtn.Text = state.meleeMode and "格斗模式: 开启" or "格斗模式: 关闭"
+end)
+
 local unloadBtn = createSafeInstance("TextButton", {
-    Size = UDim2.new(1, -20, 0, 32),
-    Position = UDim2.fromOffset(10, 42),
+    Size = UDim2.new(1, -24, 0, 42),
+    Position = UDim2.fromOffset(12, 84),
     BackgroundColor3 = Colors.Panel,
     Font = Enum.Font.GothamBold,
     Text = "卸载 UI 脚本",
     TextColor3 = Colors.RedAccent,
-    TextSize = 11,
-    Parent = settingsFrame
+    TextSize = 13,
+    Parent = settingsFrame,
 })
-addCorner(unloadBtn, 5)
-local unloadStroke = addMarqueeStroke(unloadBtn, Colors.RedAccent, 1)
+addCorner(unloadBtn, 6)
+addMarqueeStroke(unloadBtn, Colors.RedAccent, 1.2)
 
 settingsBtn.MouseButton1Click:Connect(function()
     settingsFrame.Visible = not settingsFrame.Visible
 end)
-
 closeSettingsBtn.MouseButton1Click:Connect(function()
     settingsFrame.Visible = false
 end)
 
--- 卸载逻辑处理
 local function unloadScript()
     state.enabled = false
+    applyHumanoidLock(false)
     for _, conn in ipairs(eventConnections) do
-        if conn and conn.Connected then
-            conn:Disconnect()
-        end
+        if conn and conn.Connected then conn:Disconnect() end
     end
     screenGui:Destroy()
     getgenv().ZKAYMagnetExecuted = nil
 end
-
 unloadBtn.MouseButton1Click:Connect(unloadScript)
 
-----------------------------------------------------
--- 吸附控制逻辑
-----------------------------------------------------
 local function setMagnetState(enabled)
     state.enabled = enabled
     if enabled then
         toggleBtn.Text = "吸附状态: 开启"
         updateMarqueeColor(toggleStroke, Colors.RedAccent)
+        task.defer(function() applyHumanoidLock(true) end)
     else
         toggleBtn.Text = "吸附状态: 暂停"
         updateMarqueeColor(toggleStroke, Colors.GoldAccent)
+        applyHumanoidLock(false)
     end
 end
-
 toggleBtn.MouseButton1Click:Connect(function()
     setMagnetState(not state.enabled)
 end)
 
--- 平滑匀速顺时针跑马灯动画驱动
 local currentAngle = 0
 local ROTATION_SPEED = 140
-
-table.insert(eventConnections, RunService.RenderStepped:Connect(function(deltaTime)
-    currentAngle = (currentAngle + deltaTime * ROTATION_SPEED) % 360
+table.insert(eventConnections, RunService.RenderStepped:Connect(function(dt)
+    currentAngle = (currentAngle + dt * ROTATION_SPEED) % 360
     for i = #animatedGradients, 1, -1 do
         local item = animatedGradients[i]
         if item and item.Gradient and item.Gradient.Parent then
@@ -731,23 +990,48 @@ table.insert(eventConnections, RunService.RenderStepped:Connect(function(deltaTi
     end
 end))
 
-table.insert(eventConnections, RunService.Heartbeat:Connect(function()
+table.insert(eventConnections, RunService.Heartbeat:Connect(function(dt)
     if not state.enabled or not state.targetPlayer then return end
+    if not isPlayerValid(LocalPlayer) then return end
+    if not isPlayerValid(state.targetPlayer) then return end
 
     local myChar = LocalPlayer.Character
     local targetChar = state.targetPlayer.Character
-
-    if not myChar or not targetChar then return end
-
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
     if not myRoot or not targetRoot then return end
 
-    -- 执行贴合解算
-    local calculatedCFrame = calculateMagnetCFrame(targetRoot)
-    myRoot.CFrame = calculatedCFrame
+    trackTargetVelocity(targetRoot)
+
+    local distToTarget = (myRoot.Position - targetRoot.Position).Magnitude
+    if distToTarget > state.maxDistance then return end
+
+    local targetCF = calculateMagnetCFrame(targetRoot, 0)
+
+    if state.meleeMode and state.faceTarget then
+        if not isTargetInAttackArc(myRoot, targetRoot) then
+            local lookPos = Vector3.new(targetRoot.Position.X, myRoot.Position.Y, targetRoot.Position.Z)
+            if (lookPos - myRoot.Position).Magnitude > 0.01 then
+                targetCF = CFrame.lookAt(targetCF.Position, lookPos, Vector3.new(0, 1, 0))
+            end
+        end
+    end
+
+    if distToTarget < 0.8 then
+        myRoot.CFrame = targetCF
+    else
+        local alpha = math.clamp(dt * state.smoothSpeed, 0, 1)
+        myRoot.CFrame = myRoot.CFrame:Lerp(targetCF, alpha)
+    end
     myRoot.AssemblyLinearVelocity = Vector3.zero
     myRoot.AssemblyAngularVelocity = Vector3.zero
 end))
 
+table.insert(eventConnections, LocalPlayer.CharacterAdded:Connect(function()
+    savedCanCollide = {}
+    resetVelocityTracker()
+    if state.enabled then
+        task.wait(0.1)
+        applyHumanoidLock(true)
+    end
+end))
